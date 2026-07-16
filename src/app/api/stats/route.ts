@@ -22,6 +22,7 @@ export async function GET() {
 
   const [
     empresas,
+    operadoras,
     qualificadas,
     contatoIniciado,
     emNegociacao,
@@ -29,8 +30,10 @@ export async function GET() {
     rascunhosPendentes,
     aprovados,
     enviados,
+    aguardandoVoce,
   ] = await Promise.all([
-    count("companies"),
+    count("companies", ["category", "empresa"]),
+    count("companies", ["category", "operadora"]),
     count("companies", ["status", "qualificado"]),
     count("companies", ["status", "contato_iniciado"]),
     count("companies", ["status", "em_negociacao"]),
@@ -38,10 +41,12 @@ export async function GET() {
     count("drafts", ["status", "pendente"]),
     count("drafts", ["status", "aprovado"]),
     count("drafts", ["status", "enviado"]),
+    count("sequences", ["status", "aguardando_ceo"]),
   ]);
 
   return NextResponse.json({
     empresas,
+    operadoras,
     qualificadas,
     contatoIniciado,
     emNegociacao,
@@ -49,5 +54,6 @@ export async function GET() {
     rascunhosPendentes,
     aprovados,
     enviados,
+    aguardandoVoce,
   });
 }

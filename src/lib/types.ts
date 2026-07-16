@@ -17,8 +17,45 @@ export type DraftChannel = "email" | "whatsapp";
 
 export type DraftStatus = "pendente" | "aprovado" | "rejeitado" | "enviado";
 
+// Categoria do parceiro — o mesmo sistema controla as 3 frentes.
+export type PartnerCategory = "operadora" | "empresa" | "escola" | "medico";
+
+export type SequenceChannel = "email" | "whatsapp";
+
+export type SequenceStatus =
+  | "ativa"
+  | "aguardando_ceo"
+  | "pausada_negativa"
+  | "encerrada";
+
+export type ResponseSentiment = "positivo" | "negativo" | "neutro";
+
+export interface Sequence {
+  id: string;
+  company_id: string;
+  channel: SequenceChannel;
+  status: SequenceStatus;
+  step: number;
+  next_action_at: string | null;
+  last_sent_at: string | null;
+  resume_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartnerResponse {
+  id: string;
+  company_id: string;
+  channel: SequenceChannel;
+  sentiment: ResponseSentiment;
+  summary: string | null;
+  raw_text: string | null;
+  created_at: string;
+}
+
 export interface Company {
   id: string;
+  category: PartnerCategory;
   apollo_id: string | null;
   name: string;
   domain: string | null;
@@ -55,6 +92,7 @@ export interface Contact {
   phone: string | null;
   linkedin_url: string | null;
   is_decision_maker: boolean;
+  is_whatsapp: boolean;
   created_at: string;
 }
 
@@ -93,4 +131,18 @@ export const THESIS_LABELS: Record<CommercialThesis, string> = {
   a_descobrir: "A descobrir",
   credenciada: "Operadora credenciada",
   alavanca: "Alavanca (não-credenciada)",
+};
+
+export const CATEGORY_LABELS: Record<PartnerCategory, string> = {
+  operadora: "Operadora de saúde",
+  empresa: "Empresa",
+  escola: "Escola",
+  medico: "Médico prescritor",
+};
+
+export const SEQUENCE_STATUS_LABELS: Record<SequenceStatus, string> = {
+  ativa: "Cutucando",
+  aguardando_ceo: "Aguardando você",
+  pausada_negativa: "Pausada (retoma em 30 dias)",
+  encerrada: "Encerrada",
 };

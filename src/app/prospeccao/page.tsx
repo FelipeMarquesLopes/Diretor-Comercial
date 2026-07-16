@@ -18,7 +18,7 @@ export default function Prospeccao() {
   const [withContacts, setWithContacts] = useState(true);
 
   async function loadCompanies() {
-    const r = await fetch("/api/companies?status=qualificado");
+    const r = await fetch("/api/companies?status=qualificado&category=empresa");
     const d = await r.json();
     if (d.error) setMsg(d.error);
     else setCompanies(d.companies);

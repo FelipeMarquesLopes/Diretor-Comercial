@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { advanceSequenceAfterSend } from "@/lib/outreach";
 import type { DraftStatus } from "@/lib/types";
 
 // PATCH /api/drafts/[id]
@@ -89,6 +90,11 @@ export async function PATCH(
       .from("companies")
       .update({ status: newCompanyStatus })
       .eq("id", draft.company_id);
+  }
+
+  // Ao marcar como enviado, o motor avança e agenda a próxima cutucada.
+  if (payload.action === "enviar" && draft.sequence_id) {
+    await advanceSequenceAfterSend(supabase, draft.sequence_id);
   }
 
   return NextResponse.json({ draft });

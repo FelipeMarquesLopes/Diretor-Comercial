@@ -6,6 +6,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
+  const category = searchParams.get("category");
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -24,6 +25,7 @@ export async function GET(req: Request) {
     .limit(200);
 
   if (status) query = query.eq("status", status);
+  if (category) query = query.eq("category", category);
 
   const { data, error } = await query;
   if (error) {

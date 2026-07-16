@@ -5,6 +5,7 @@ import Link from "next/link";
 
 interface Stats {
   empresas: number;
+  operadoras: number;
   qualificadas: number;
   contatoIniciado: number;
   emNegociacao: number;
@@ -12,18 +13,44 @@ interface Stats {
   rascunhosPendentes: number;
   aprovados: number;
   enviados: number;
+  aguardandoVoce: number;
 }
 
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const [runMsg, setRunMsg] = useState<string | null>(null);
 
-  useEffect(() => {
+  function loadStats() {
     fetch("/api/stats")
       .then((r) => r.json())
       .then((d) => (d.error ? setError(d.error) : setStats(d)))
       .catch((e) => setError(String(e)));
+  }
+
+  useEffect(() => {
+    loadStats();
   }, []);
+
+  async function runFollowup() {
+    setRunning(true);
+    setRunMsg(null);
+    try {
+      const r = await fetch("/api/followup/run", { method: "POST" });
+      const d = await r.json();
+      if (d.error) setRunMsg(`Erro: ${d.error}`);
+      else
+        setRunMsg(
+          `Follow-up rodado: ${d.rascunhos_gerados} novo(s) rascunho(s), ${d.reativadas} sequência(s) retomada(s).`,
+        );
+      loadStats();
+    } catch (e) {
+      setRunMsg(String(e));
+    } finally {
+      setRunning(false);
+    }
+  }
 
   if (error) {
     return (
@@ -53,19 +80,44 @@ export default function Dashboard() {
             highlight
             href="/rascunhos"
           />
+          <Card
+            label="Respostas positivas — você precisa entrar"
+            value={stats.aguardandoVoce}
+            highlight
+          />
           <Card label="Aprovados (prontos p/ disparar)" value={stats.aprovados} />
-          <Card label="Em negociação" value={stats.emNegociacao} />
         </div>
+      </section>
+
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-gray-800">Motor de follow-up</p>
+            <p className="text-xs text-gray-500">
+              Verifica quem está na hora de ser cutucado e prepara os próximos
+              rascunhos. (Quando publicado, roda sozinho todo dia.)
+            </p>
+          </div>
+          <button
+            onClick={runFollowup}
+            disabled={running}
+            className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {running ? "Rodando…" : "Rodar follow-up agora"}
+          </button>
+        </div>
+        {runMsg && <p className="mt-2 text-sm text-gray-600">{runMsg}</p>}
       </section>
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
           Pipeline de empresas
         </h2>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          <Card label="Mapeadas" value={stats.empresas} />
-          <Card label="Qualificadas" value={stats.qualificadas} href="/prospeccao" />
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <Card label="Operadoras" value={stats.operadoras} href="/operadoras" />
+          <Card label="Empresas" value={stats.empresas} href="/prospeccao" />
           <Card label="Contato iniciado" value={stats.contatoIniciado} />
+          <Card label="Em negociação" value={stats.emNegociacao} />
           <Card label="Enviadas" value={stats.enviados} />
           <Card label="Parcerias ativas" value={stats.parcerias} />
         </div>

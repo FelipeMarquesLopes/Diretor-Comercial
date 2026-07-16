@@ -4,9 +4,21 @@ Sistema que automatiza **todo o trabalho operacional que antecede uma
 negociação** — pesquisar, qualificar, contatar, nutrir e agendar. O fechamento
 continua humano (do CEO).
 
-Esta é a **frente de prospecção de empresas** (100+ funcionários), a primeira
-frente do projeto. Regra inegociável: **nenhuma mensagem sai automaticamente** —
-a IA prepara o rascunho e um humano aprova com um clique.
+Regra inegociável: **nenhuma mensagem sai automaticamente** — a IA prepara o
+rascunho e um humano aprova com um clique.
+
+Frentes já no sistema:
+
+- **Operadoras de saúde** — você cadastra o contato na mão; a IA monta os
+  rascunhos e cuida do follow-up.
+- **Empresas** — descoberta automática via Apollo.io (100+ funcionários).
+- **Escolas / médicos** — previstos (mesma mecânica), a habilitar.
+
+**Motor de follow-up** (o "cérebro"): para cada parceiro, o sistema cutuca em
+dois canais até obter resposta — **e-mail de 3 em 3 dias, sem limite**;
+**WhatsApp escalonado (3h → 24h → 48h → 72h)**. Ao chegar resposta, a IA entende
+o tom: **positiva** → chama o CEO; **negativa** → pausa e retoma em 30 dias;
+**sem resposta** → segue cutucando.
 
 ## Stack
 
@@ -36,8 +48,9 @@ npm install
 ### 2. Criar o banco no Supabase
 
 1. Crie um projeto grátis em <https://supabase.com>.
-2. No projeto, abra **SQL Editor** e rode o conteúdo de
-   [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql).
+2. No projeto, abra **SQL Editor** e rode, **nesta ordem**:
+   - [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
+   - [`supabase/migrations/0002_followup_engine.sql`](supabase/migrations/0002_followup_engine.sql)
 
 ### 3. Configurar variáveis de ambiente
 
@@ -99,14 +112,18 @@ src/
 supabase/migrations/0001_init.sql   # schema do banco
 ```
 
-## Próximos passos (fora do MVP desta frente)
+## Próximos passos
 
-- Autenticação (hoje o app é de uso interno único; adicionar Supabase Auth + RLS).
-- Integração real de **Gmail** (criar rascunho) e **WhatsApp Business API** (envio).
-- Enriquecimento: descobrir convênio/operadora junto ao RH e definir a tese
-  comercial (credenciada × alavanca) por empresa.
-- Replicar o modelo para as frentes de **operadoras**, **escolas** e **médicos**.
-- Automação contínua (jobs agendados) para prospecção recorrente.
+- **Conectar o Gmail** — para o clique do CEO realmente disparar o e-mail e para
+  o sistema ler as respostas automaticamente (hoje as respostas são registradas
+  na tela de Operadoras).
+- **WhatsApp Business API** — para envio/leitura automáticos no funil escalonado
+  (exige conta Meta Business, número aprovado e modelos de mensagem).
+- **Publicar (deploy) + job diário** — para o motor de follow-up rodar sozinho
+  todo dia. Hoje há o botão "Rodar follow-up agora" no dashboard para acionar
+  manualmente.
+- **Escolas e médicos** — habilitar as frentes restantes (mesma mecânica).
+- **Autenticação** (Supabase Auth + RLS) quando houver mais de um usuário.
 
 ## Deploy
 
