@@ -1,21 +1,24 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { advanceSequenceAfterSend } from "@/lib/outreach";
+import { isEmailConfigured, sendEmail } from "@/lib/email";
 import type { DraftStatus } from "@/lib/types";
 
 // PATCH /api/drafts/[id]
-// Aprova, rejeita, marca como enviado, ou edita o corpo de um rascunho.
-// Body: { action: "aprovar" | "rejeitar" | "enviar" | "editar",
+// Aprova, rejeita, envia, ou edita o corpo de um rascunho.
+// Body: { action: "aprovar" | "rejeitar" | "enviar" | "enviar_email" | "editar",
 //         subject?, body?, approvedBy? }
 //
-// É AQUI que mora a regra inegociável: nada sai até um humano aprovar.
+// É AQUI que mora a regra inegociável: nada sai até um humano clicar.
+// "enviar_email" dispara de verdade pelo Gmail; "enviar" apenas marca como
+// enviado (para o WhatsApp, enquanto a API oficial não está ligada).
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   let payload: {
-    action?: "aprovar" | "rejeitar" | "enviar" | "editar";
+    action?: "aprovar" | "rejeitar" | "enviar" | "enviar_email" | "editar";
     subject?: string;
     body?: string;
     approvedBy?: string;
@@ -56,6 +59,44 @@ export async function PATCH(
       activity = "Mensagem marcada como enviada.";
       newCompanyStatus = "contato_iniciado";
       break;
+    case "enviar_email": {
+      if (!isEmailConfigured()) {
+        return NextResponse.json(
+          { error: "Gmail ainda não conectado. Configure GMAIL_USER e GMAIL_APP_PASSWORD." },
+          { status: 400 },
+        );
+      }
+      // Busca o destinatário e o conteúdo antes de enviar.
+      const { data: pre } = await supabase
+        .from("drafts")
+        .select("subject, body, contacts(email)")
+        .eq("id", id)
+        .single();
+      const to = (pre?.contacts as { email?: string } | null)?.email;
+      if (!to) {
+        return NextResponse.json(
+          { error: "Este contato não tem e-mail cadastrado." },
+          { status: 400 },
+        );
+      }
+      try {
+        await sendEmail({
+          to,
+          subject: (pre?.subject as string) ?? "",
+          text: (pre?.body as string) ?? "",
+        });
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : "Falha ao enviar e-mail" },
+          { status: 502 },
+        );
+      }
+      update.status = "enviado" as DraftStatus;
+      update.sent_at = new Date().toISOString();
+      activity = `E-mail enviado pelo Gmail para ${to}.`;
+      newCompanyStatus = "contato_iniciado";
+      break;
+    }
     case "editar":
       if (payload.subject !== undefined) update.subject = payload.subject;
       if (payload.body !== undefined) update.body = payload.body;
@@ -92,8 +133,11 @@ export async function PATCH(
       .eq("id", draft.company_id);
   }
 
-  // Ao marcar como enviado, o motor avança e agenda a próxima cutucada.
-  if (payload.action === "enviar" && draft.sequence_id) {
+  // Ao enviar (real ou marcado), o motor avança e agenda a próxima cutucada.
+  if (
+    (payload.action === "enviar" || payload.action === "enviar_email") &&
+    draft.sequence_id
+  ) {
     await advanceSequenceAfterSend(supabase, draft.sequence_id);
   }
 

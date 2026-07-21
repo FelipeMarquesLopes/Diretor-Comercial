@@ -65,6 +65,30 @@ Preencha o `.env.local`:
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API |
 | `ANTHROPIC_API_KEY` | <https://console.anthropic.com> |
 | `APOLLO_API_KEY` | <https://developer.apollo.io> (precisa do **plano Basic**) |
+| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | conta Gmail da operação + "senha de app" (ver abaixo) |
+
+### Conectar o Gmail (para o clique enviar de verdade)
+
+Usamos uma **"senha de app"** do Google — uma senha exclusiva do sistema,
+que não é a senha normal da sua conta (e pode ser revogada a qualquer momento).
+
+1. Entre na conta **Gmail da operação** em <https://myaccount.google.com>.
+2. Vá em **Segurança** e ative a **Verificação em duas etapas** (obrigatório
+   para liberar senhas de app).
+3. Ainda em Segurança, procure **"Senhas de app"** (ou acesse
+   <https://myaccount.google.com/apppasswords>).
+4. Crie uma nova senha de app (nome livre, ex: "Growth AI"). O Google mostra
+   um código de **16 letras** — copie.
+5. No `.env.local`, preencha:
+   - `GMAIL_USER` = o e-mail da operação
+   - `GMAIL_APP_PASSWORD` = as 16 letras (pode manter ou tirar os espaços)
+
+Pronto: ao aprovar um rascunho de e-mail em **Rascunhos**, o botão **"Enviar
+pelo Gmail"** dispara a mensagem a partir da sua conta.
+
+> Observação: o Gmail tem limite de envios por dia e regras contra spam. Para o
+> volume atual (com seu clique a cada envio) é tranquilo; envios em massa
+> exigiriam um serviço de e-mail dedicado no futuro.
 
 > ⚠️ O plano **free** do Apollo **não libera** busca de empresas/pessoas. Sem o
 > plano Basic, a prospecção retorna erro — o resto do app (rascunhos, aprovação)

@@ -76,19 +76,28 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
   const [subject, setSubject] = useState(draft.subject ?? "");
   const [body, setBody] = useState(draft.body);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const dirty = subject !== (draft.subject ?? "") || body !== draft.body;
 
-  async function act(action: "aprovar" | "rejeitar" | "enviar" | "editar") {
+  async function act(
+    action: "aprovar" | "rejeitar" | "enviar" | "enviar_email" | "editar",
+  ) {
     setBusy(true);
+    setErr(null);
     try {
-      await fetch(`/api/drafts/${draft.id}`, {
+      const r = await fetch(`/api/drafts/${draft.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           action === "editar" ? { action, subject, body } : { action },
         ),
       });
-      onChanged();
+      const d = await r.json().catch(() => ({}));
+      if (d.error) {
+        setErr(d.error);
+      } else {
+        onChanged();
+      }
     } finally {
       setBusy(false);
     }
@@ -172,10 +181,25 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
         </div>
       )}
 
-      {draft.status === "aprovado" && (
+      {draft.status === "aprovado" && draft.channel === "email" && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => act("enviar_email")}
+            disabled={busy}
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {busy ? "Enviando…" : "Enviar pelo Gmail"}
+          </button>
+          <span className="text-xs text-gray-500">
+            Este é o seu clique final: o e-mail sai da sua conta do Gmail.
+          </span>
+        </div>
+      )}
+
+      {draft.status === "aprovado" && draft.channel === "whatsapp" && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-gray-500">
-            Aprovado — dispare manualmente e marque como enviado:
+            Aprovado — envie e marque como enviado:
           </span>
           {whatsappLink && (
             <a
@@ -196,6 +220,8 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
           </button>
         </div>
       )}
+
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
     </div>
   );
 }
