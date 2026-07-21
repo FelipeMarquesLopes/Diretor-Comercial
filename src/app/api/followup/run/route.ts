@@ -3,15 +3,24 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { generateDraftForSequence } from "@/lib/outreach";
 import type { Company, Sequence } from "@/lib/types";
 
-// POST /api/followup/run
-// O "motor": roda periodicamente (por enquanto manualmente ou por um job
-// diário quando o sistema estiver publicado) e:
+// /api/followup/run
+// O "motor": roda periodicamente e:
 //   1. Reativa sequências pausadas por resposta negativa cujo prazo de 30
 //      dias já venceu.
 //   2. Gera o próximo rascunho para toda sequência ativa cuja hora chegou.
 //
 // Nada é enviado aqui — só são criados rascunhos aguardando o clique do CEO.
+//
+// Aceita POST (botão manual no dashboard) e GET (robô diário do Vercel Cron).
+export async function GET() {
+  return run();
+}
+
 export async function POST() {
+  return run();
+}
+
+async function run() {
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
     supabase = getServerSupabase();
