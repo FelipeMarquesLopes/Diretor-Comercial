@@ -92,8 +92,10 @@ export async function PATCH(
         );
       }
       update.status = "enviado" as DraftStatus;
+      update.approved_by = payload.approvedBy ?? "CEO";
+      update.approved_at = new Date().toISOString();
       update.sent_at = new Date().toISOString();
-      activity = `E-mail enviado pelo Gmail para ${to}.`;
+      activity = `E-mail aprovado e enviado para ${to}.`;
       newCompanyStatus = "contato_iniciado";
       break;
     }

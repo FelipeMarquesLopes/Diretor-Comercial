@@ -163,14 +163,25 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
               Salvar edição
             </button>
           )}
-          <button
-            onClick={() => act("aprovar")}
-            disabled={busy || dirty}
-            title={dirty ? "Salve a edição antes de aprovar" : ""}
-            className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-          >
-            Aprovar
-          </button>
+          {draft.channel === "email" ? (
+            <button
+              onClick={() => act("enviar_email")}
+              disabled={busy || dirty}
+              title={dirty ? "Salve a edição antes de aprovar" : ""}
+              className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              {busy ? "Enviando…" : "Aprovar e enviar"}
+            </button>
+          ) : (
+            <button
+              onClick={() => act("aprovar")}
+              disabled={busy || dirty}
+              title={dirty ? "Salve a edição antes de aprovar" : ""}
+              className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              Aprovar
+            </button>
+          )}
           <button
             onClick={() => act("rejeitar")}
             disabled={busy}

@@ -171,6 +171,53 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
   const [busy, setBusy] = useState(false);
   const contact = op.contacts?.[0];
 
+  // edição da operadora
+  const [showEdit, setShowEdit] = useState(false);
+  const [eName, setEName] = useState(op.name);
+  const [eContact, setEContact] = useState(contact?.name ?? "");
+  const [eEmail, setEEmail] = useState(contact?.email ?? "");
+  const [ePhone, setEPhone] = useState(contact?.phone ?? "");
+  const [eWhats, setEWhats] = useState(contact?.is_whatsapp ?? false);
+  const [eNotes, setENotes] = useState(op.notes ?? "");
+
+  async function salvarEdicao() {
+    setBusy(true);
+    try {
+      await fetch(`/api/operadoras/${op.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: eName,
+          contactName: eContact,
+          email: eEmail,
+          phone: ePhone,
+          isWhatsapp: eWhats,
+          notes: eNotes,
+        }),
+      });
+      setShowEdit(false);
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function excluir() {
+    if (
+      !confirm(
+        `Excluir a operadora "${op.name}"? Isso apaga também os rascunhos e o histórico dela. Não dá para desfazer.`,
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      await fetch(`/api/operadoras/${op.id}`, { method: "DELETE" });
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function registrarResposta() {
     if (!respText.trim()) return;
     setBusy(true);
@@ -206,10 +253,95 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
             </p>
           )}
         </div>
-        <span className="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">
-          {op.status}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">
+            {op.status}
+          </span>
+          <button
+            onClick={() => setShowEdit((v) => !v)}
+            className="text-xs text-gray-500 underline hover:text-gray-700"
+          >
+            Editar
+          </button>
+          <button
+            onClick={excluir}
+            disabled={busy}
+            className="text-xs text-red-600 underline hover:text-red-700 disabled:opacity-50"
+          >
+            Excluir
+          </button>
+        </div>
       </div>
+
+      {showEdit && (
+        <div className="mt-3 space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="text-xs text-gray-600">
+              Operadora
+              <input
+                value={eName}
+                onChange={(e) => setEName(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs text-gray-600">
+              Pessoa responsável
+              <input
+                value={eContact}
+                onChange={(e) => setEContact(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs text-gray-600">
+              E-mail
+              <input
+                value={eEmail}
+                onChange={(e) => setEEmail(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs text-gray-600">
+              Telefone / WhatsApp
+              <input
+                value={ePhone}
+                onChange={(e) => setEPhone(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={eWhats}
+                onChange={(e) => setEWhats(e.target.checked)}
+              />
+              Este número tem WhatsApp
+            </label>
+            <label className="text-xs text-gray-600 sm:col-span-2">
+              Observações
+              <input
+                value={eNotes}
+                onChange={(e) => setENotes(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={salvarEdicao}
+              disabled={busy}
+              className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              {busy ? "Salvando…" : "Salvar"}
+            </button>
+            <button
+              onClick={() => setShowEdit(false)}
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {op.sequences
