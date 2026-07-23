@@ -1,17 +1,23 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { generateDraftForSequence } from "@/lib/outreach";
+import { checkInbox, isInboxConfigured } from "@/lib/inbox";
 import type { Company, Sequence } from "@/lib/types";
 
+// Este endpoint pode demorar (lê e-mails + IA). Damos mais tempo.
+export const maxDuration = 60;
+
 // /api/followup/run
-// O "motor": roda periodicamente e:
-//   1. Reativa sequências pausadas por resposta negativa cujo prazo de 30
+// O "motor" completo, que roda periodicamente (robô) e:
+//   1. Lê as respostas por e-mail e classifica (positivo/negativo/neutro).
+//   2. Reativa sequências pausadas por resposta negativa cujo prazo de 30
 //      dias já venceu.
-//   2. Gera o próximo rascunho para toda sequência ativa cuja hora chegou.
+//   3. Gera o próximo rascunho de follow-up para toda sequência ativa cuja
+//      hora chegou.
 //
-// Nada é enviado aqui — só são criados rascunhos aguardando o clique do CEO.
+// Nada é ENVIADO aqui — os rascunhos ficam aguardando o clique do CEO.
 //
-// Aceita POST (botão manual no dashboard) e GET (robô diário do Vercel Cron).
+// Aceita POST (botão manual no dashboard) e GET (robô/cron).
 export async function GET() {
   return run();
 }
@@ -32,6 +38,19 @@ async function run() {
   }
 
   const now = new Date().toISOString();
+
+  // 0. Ler as respostas por e-mail (só de contatos cadastrados) e classificar.
+  let respostas = 0;
+  let positivas: string[] = [];
+  if (isInboxConfigured()) {
+    try {
+      const r = await checkInbox(supabase);
+      respostas = r.processadas;
+      positivas = r.positivas;
+    } catch {
+      // se o IMAP falhar numa rodada, segue o resto do motor
+    }
+  }
 
   // 1. Reativar sequências cujo prazo de retomada (30 dias) venceu.
   const { data: toResume } = await supabase
@@ -67,5 +86,10 @@ async function run() {
     if (res.ok) gerados++;
   }
 
-  return NextResponse.json({ reativadas, rascunhos_gerados: gerados });
+  return NextResponse.json({
+    respostas_lidas: respostas,
+    positivas,
+    reativadas,
+    rascunhos_gerados: gerados,
+  });
 }

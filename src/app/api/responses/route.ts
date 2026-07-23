@@ -4,6 +4,29 @@ import { classifyResponse } from "@/lib/anthropic";
 import { resumeAtAfterNegative } from "@/lib/followup";
 import type { ResponseSentiment, SequenceChannel } from "@/lib/types";
 
+// GET /api/responses — respostas recebidas (mais recentes), com o nome da
+// operadora. Usado no dashboard para apontar quem respondeu.
+export async function GET() {
+  let supabase: ReturnType<typeof getServerSupabase>;
+  try {
+    supabase = getServerSupabase();
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Configuração ausente" },
+      { status: 500 },
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("responses")
+    .select("id, sentiment, summary, channel, created_at, companies(name)")
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ responses: data ?? [] });
+}
+
 // POST /api/responses
 // Registra uma resposta recebida de um parceiro e deixa a IA entender o tom.
 // Depois ajusta o motor de follow-up:

@@ -16,17 +16,31 @@ interface Stats {
   aguardandoVoce: number;
 }
 
+interface ResponseRow {
+  id: string;
+  sentiment: "positivo" | "negativo" | "neutro";
+  summary: string | null;
+  channel: string;
+  created_at: string;
+  companies: { name: string } | null;
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [runMsg, setRunMsg] = useState<string | null>(null);
+  const [responses, setResponses] = useState<ResponseRow[]>([]);
 
   function loadStats() {
     fetch("/api/stats")
       .then((r) => r.json())
       .then((d) => (d.error ? setError(d.error) : setStats(d)))
       .catch((e) => setError(String(e)));
+    fetch("/api/responses")
+      .then((r) => r.json())
+      .then((d) => setResponses(d.responses ?? []))
+      .catch(() => {});
   }
 
   useEffect(() => {
@@ -42,7 +56,12 @@ export default function Dashboard() {
       if (d.error) setRunMsg(`Erro: ${d.error}`);
       else
         setRunMsg(
-          `Follow-up rodado: ${d.rascunhos_gerados} novo(s) rascunho(s), ${d.reativadas} sequência(s) retomada(s).`,
+          `Pronto: ${d.respostas_lidas ?? 0} resposta(s) lida(s), ` +
+            `${d.rascunhos_gerados} novo(s) rascunho(s) de follow-up, ` +
+            `${d.reativadas} retomada(s).` +
+            (d.positivas?.length
+              ? ` 🟢 Positivas: ${d.positivas.join(", ")}.`
+              : ""),
         );
       loadStats();
     } catch (e) {
@@ -89,13 +108,70 @@ export default function Dashboard() {
         </div>
       </section>
 
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          Respostas recebidas
+        </h2>
+        {responses.length === 0 ? (
+          <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+            Nenhuma resposta ainda. Quando uma operadora responder, ela aparece
+            aqui automaticamente — com o nome e se foi positiva ou negativa.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {responses.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3"
+              >
+                <span
+                  className={`mt-0.5 rounded-full px-2 py-0.5 text-xs font-medium ${
+                    r.sentiment === "positivo"
+                      ? "bg-green-100 text-green-800"
+                      : r.sentiment === "negativo"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {r.sentiment === "positivo"
+                    ? "🟢 Positivo"
+                    : r.sentiment === "negativo"
+                      ? "🔴 Negativo"
+                      : "⚪ Neutro"}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">
+                    {r.companies?.name ?? "Operadora"}
+                    <span className="ml-2 text-xs font-normal text-gray-400">
+                      {r.channel === "whatsapp" ? "WhatsApp" : "E-mail"} ·{" "}
+                      {new Date(r.created_at).toLocaleDateString("pt-BR")}
+                    </span>
+                  </p>
+                  {r.summary && (
+                    <p className="text-xs text-gray-500">{r.summary}</p>
+                  )}
+                  {r.sentiment === "positivo" && (
+                    <p className="text-xs font-medium text-green-700">
+                      👉 Hora de você entrar e assumir a conversa!
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-gray-800">Motor de follow-up</p>
+            <p className="text-sm font-medium text-gray-800">
+              Motor (respostas + follow-up)
+            </p>
             <p className="text-xs text-gray-500">
-              Verifica quem está na hora de ser cutucado e prepara os próximos
-              rascunhos. (Quando publicado, roda sozinho todo dia.)
+              Lê as respostas por e-mail, classifica positivo/negativo e prepara
+              os próximos follow-ups. Roda sozinho (veja o README para deixar
+              online 24/7). Você também pode rodar agora:
             </p>
           </div>
           <button

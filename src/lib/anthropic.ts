@@ -4,6 +4,7 @@
 // clique do CEO. (O WhatsApp, via API oficial, segue o funil aprovado.)
 
 import Anthropic from "@anthropic-ai/sdk";
+import { CLINIC_SERVICES, EMAIL_SIGNATURE } from "./branding";
 import type {
   Company,
   Contact,
@@ -85,6 +86,9 @@ Diretrizes de escrita:
 - Mostre valor concreto e feche com um convite leve para uma conversa de 15-20 min.
 - Não invente dados. Se não souber algo, não afirme.
 - Nunca use linguagem alarmista ou pressão. Nada em CAIXA ALTA gritando.
+- NÃO escreva assinatura, nome, cargo, telefone, CNPJ nem lista de serviços —
+  isso é adicionado automaticamente pelo sistema. Termine com uma frase de
+  fechamento simples (ex: "Fico à disposição.").
 
 FORMATO DE SAÍDA: responda SOMENTE com um objeto JSON válido, sem texto antes \
 ou depois e sem blocos de código. Campos exatos:
@@ -159,9 +163,18 @@ Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
   if (typeof parsed.body !== "string") {
     throw new Error("A IA retornou JSON sem o campo 'body'.");
   }
+
+  let body = parsed.body.trim();
+  if (channel === "email") {
+    // Serviços só na apresentação inicial (primeiro e-mail).
+    if (step === 0) body += `\n\n${CLINIC_SERVICES}`;
+    // Assinatura em TODOS os e-mails.
+    body += `\n\n${EMAIL_SIGNATURE}`;
+  }
+
   return {
     subject: channel === "whatsapp" ? "" : (parsed.subject ?? ""),
-    body: parsed.body,
+    body,
   };
 }
 
@@ -171,9 +184,16 @@ const CLASSIFY_SYSTEM = `Você analisa a resposta de um possível parceiro a uma
 abordagem comercial da MenthalHelp e classifica a INTENÇÃO.
 
 - "positivo": demonstrou interesse, abriu porta, pediu reunião/proposta, ou \
-qualquer sinal verde para avançar a parceria.
-- "negativo": recusou, não tem interesse agora, pediu para não contatar.
-- "neutro": resposta automática, dúvida simples, ou sem sinal claro.
+qualquer sinal verde para avançar a parceria. TAMBÉM é "positivo" quando a \
+pessoa ENCAMINHA/REPASSA o assunto para outro responsável, ou indica outra \
+pessoa/e-mail/setor para tratar — isso é um avanço (chegamos mais perto do \
+decisor certo).
+- "negativo": recusou, não tem interesse, pediu para não contatar/descadastrar.
+- "neutro": resposta automática (ex: "estou de férias"), dúvida simples sem \
+sinal de interesse, ou sem sinal claro.
+
+Se for encaminhamento, no resumo diga para quem/qual setor foi repassado, se \
+essa informação aparecer.
 
 FORMATO: responda SOMENTE com JSON válido:
 {"sentiment": "positivo|negativo|neutro", "summary": "<resumo em 1 frase>"}`;

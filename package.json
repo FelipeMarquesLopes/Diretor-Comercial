@@ -13,6 +13,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
     "@supabase/supabase-js": "^2.45.0",
+    "imapflow": "^1.0.164",
+    "mailparser": "^3.7.1",
     "next": "^15.1.6",
     "nodemailer": "^6.9.16",
     "react": "^19.0.0",
@@ -20,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/mailparser": "^3.4.5",
     "@types/nodemailer": "^6.4.17",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

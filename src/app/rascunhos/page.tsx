@@ -103,6 +103,20 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
     }
   }
 
+  async function excluir() {
+    if (!confirm("Excluir este rascunho de vez? Não dá para desfazer.")) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/drafts/${draft.id}`, { method: "DELETE" });
+      const d = await r.json().catch(() => ({}));
+      if (d.error) setErr(d.error);
+      else onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const statusColor: Record<DraftStatus, string> = {
     pendente: "bg-amber-100 text-amber-800",
     aprovado: "bg-green-100 text-green-800",
@@ -128,11 +142,20 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
             {draft.contacts?.name ? ` · para ${draft.contacts.name}` : ""}
           </p>
         </div>
-        <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor[draft.status]}`}
-        >
-          {draft.status}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor[draft.status]}`}
+          >
+            {draft.status}
+          </span>
+          <button
+            onClick={excluir}
+            disabled={busy}
+            className="text-xs text-red-600 underline hover:text-red-700 disabled:opacity-50"
+          >
+            Excluir
+          </button>
+        </div>
       </div>
 
       {draft.channel === "email" && (

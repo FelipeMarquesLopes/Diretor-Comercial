@@ -14,6 +14,22 @@
 // aparece como "pronto para enviar" e o CEO envia por fora, sem quebrar nada.
 
 import nodemailer from "nodemailer";
+import { EMAIL_FONT_FAMILY, EMAIL_FONT_SIZE } from "./branding";
+
+// Converte o texto do rascunho em HTML com a fonte pedida (Arial 13),
+// preservando as quebras de linha.
+function toHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return (
+    `<div style="font-family:${EMAIL_FONT_FAMILY};font-size:${EMAIL_FONT_SIZE};` +
+    `line-height:1.5;color:#222222;white-space:normal;">` +
+    escaped.replace(/\n/g, "<br>") +
+    `</div>`
+  );
+}
 
 function cfg() {
   const host = process.env.SMTP_HOST ?? "smtp.gmail.com";
@@ -58,6 +74,7 @@ export async function sendEmail(opts: {
     from: `${fromName} <${user}>`,
     to: opts.to,
     subject: opts.subject || "(sem assunto)",
-    text: opts.text,
+    text: opts.text, // fallback em texto puro
+    html: toHtml(opts.text), // versão com a fonte Arial 13
   });
 }
