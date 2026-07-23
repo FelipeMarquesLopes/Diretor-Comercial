@@ -1,34 +1,49 @@
-// Envio de e-mail pela conta do Gmail da operação.
+// Envio de e-mail por SMTP (funciona com qualquer provedor: Titan, Gmail, etc.).
 //
-// Usa a forma mais simples e segura para um sistema: uma "senha de app" do
-// Google (uma senha exclusiva do sistema, que não é a senha da sua conta).
-// Configurada em GMAIL_USER e GMAIL_APP_PASSWORD.
+// Configuração por variáveis de ambiente:
+//   SMTP_HOST      servidor de envio (ex: smtp.titan.email, smtp.gmail.com)
+//   SMTP_PORT      porta (padrão 465, com SSL)
+//   SMTP_USER      o e-mail remetente (ex: felipe@clinicamenthalhelp.com.br)
+//   SMTP_PASSWORD  a senha do e-mail
+//   SMTP_FROM_NAME nome que aparece como remetente (padrão MenthalHelp)
 //
-// Enquanto não estiver configurado, o app continua funcionando — o e-mail
+// Compatibilidade: se SMTP_* não estiver definido, cai para as variáveis
+// antigas GMAIL_USER / GMAIL_APP_PASSWORD (host padrão smtp.gmail.com).
+//
+// Enquanto nada estiver configurado, o app continua funcionando — o e-mail
 // aparece como "pronto para enviar" e o CEO envia por fora, sem quebrar nada.
 
 import nodemailer from "nodemailer";
 
+function cfg() {
+  const host = process.env.SMTP_HOST ?? "smtp.gmail.com";
+  const port = Number(process.env.SMTP_PORT ?? "465");
+  const user = process.env.SMTP_USER ?? process.env.GMAIL_USER;
+  const pass = process.env.SMTP_PASSWORD ?? process.env.GMAIL_APP_PASSWORD;
+  const fromName =
+    process.env.SMTP_FROM_NAME ?? process.env.GMAIL_FROM_NAME ?? "MenthalHelp";
+  return { host, port, user, pass, fromName };
+}
+
 export function isEmailConfigured(): boolean {
-  return Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
+  const { user, pass } = cfg();
+  return Boolean(user && pass);
 }
 
 let transporter: nodemailer.Transporter | null = null;
 function getTransporter(): nodemailer.Transporter {
-  if (!isEmailConfigured()) {
+  const { host, port, user, pass } = cfg();
+  if (!user || !pass) {
     throw new Error(
-      "Gmail não configurado. Defina GMAIL_USER e GMAIL_APP_PASSWORD no " +
-        ".env.local (veja o README, seção 'Conectar o Gmail').",
+      "E-mail não configurado. Defina SMTP_HOST, SMTP_USER e SMTP_PASSWORD " +
+        "(veja o README, seção 'Conectar o e-mail').",
     );
   }
   transporter ??= nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD,
-    },
+    host,
+    port,
+    secure: port === 465, // 465 = SSL; 587 = STARTTLS
+    auth: { user, pass },
   });
   return transporter;
 }
@@ -38,9 +53,9 @@ export async function sendEmail(opts: {
   subject: string;
   text: string;
 }): Promise<void> {
-  const fromName = process.env.GMAIL_FROM_NAME ?? "MenthalHelp";
+  const { user, fromName } = cfg();
   await getTransporter().sendMail({
-    from: `${fromName} <${process.env.GMAIL_USER}>`,
+    from: `${fromName} <${user}>`,
     to: opts.to,
     subject: opts.subject || "(sem assunto)",
     text: opts.text,
