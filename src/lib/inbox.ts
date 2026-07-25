@@ -85,7 +85,22 @@ export async function checkInbox(
           continue;
         }
 
-        const text = (parsed.text || parsed.subject || "").slice(0, 4000);
+        // Lê o corpo: texto puro; se vier vazio, usa o HTML sem as tags;
+        // por último, o assunto. Assim o agente não "vê só o assunto".
+        const htmlStripped = parsed.html
+          ? String(parsed.html)
+              .replace(/<style[\s\S]*?<\/style>/gi, " ")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/&nbsp;/gi, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+          : "";
+        const text = (
+          parsed.text?.trim() ||
+          htmlStripped ||
+          parsed.subject ||
+          ""
+        ).slice(0, 4000);
         let sentiment: "positivo" | "negativo" | "neutro" = "neutro";
         let summary = "";
         try {

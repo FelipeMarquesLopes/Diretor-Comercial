@@ -95,17 +95,12 @@ export default function Dashboard() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
           Ação necessária do CEO
         </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Card
             label="Rascunhos aguardando aprovação"
             value={stats.rascunhosPendentes}
             highlight
             href="/rascunhos"
-          />
-          <Card
-            label="Respostas positivas — você precisa entrar"
-            value={stats.aguardandoVoce}
-            highlight
           />
           <Card label="Aprovados (prontos p/ disparar)" value={stats.aprovados} />
         </div>
