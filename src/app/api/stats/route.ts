@@ -20,6 +20,23 @@ export async function GET() {
     return c ?? 0;
   }
 
+  // Início do dia de HOJE no fuso do Brasil (UTC-3, sem horário de verão).
+  const nowBrt = new Date(Date.now() - 3 * 3600 * 1000);
+  const startTodayISO = new Date(
+    Date.UTC(nowBrt.getUTCFullYear(), nowBrt.getUTCMonth(), nowBrt.getUTCDate(), 3, 0, 0),
+  ).toISOString();
+
+  // Respostas recebidas HOJE (total e por sentimento).
+  async function countRespostasHoje(sentiment?: string) {
+    let q = supabase
+      .from("responses")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", startTodayISO);
+    if (sentiment) q = q.eq("sentiment", sentiment);
+    const { count: c } = await q;
+    return c ?? 0;
+  }
+
   const [
     empresas,
     operadoras,
@@ -31,6 +48,9 @@ export async function GET() {
     aprovados,
     enviados,
     aguardandoVoce,
+    respostasHoje,
+    positivasHoje,
+    negativasHoje,
   ] = await Promise.all([
     count("companies", ["category", "empresa"]),
     count("companies", ["category", "operadora"]),
@@ -42,6 +62,9 @@ export async function GET() {
     count("drafts", ["status", "aprovado"]),
     count("drafts", ["status", "enviado"]),
     count("sequences", ["status", "aguardando_ceo"]),
+    countRespostasHoje(),
+    countRespostasHoje("positivo"),
+    countRespostasHoje("negativo"),
   ]);
 
   return NextResponse.json({
@@ -55,5 +78,8 @@ export async function GET() {
     aprovados,
     enviados,
     aguardandoVoce,
+    respostasHoje,
+    positivasHoje,
+    negativasHoje,
   });
 }

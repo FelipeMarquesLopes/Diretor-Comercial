@@ -14,6 +14,9 @@ interface Stats {
   aprovados: number;
   enviados: number;
   aguardandoVoce: number;
+  respostasHoje: number;
+  positivasHoje: number;
+  negativasHoje: number;
 }
 
 interface ResponseRow {
@@ -112,6 +115,20 @@ export default function Dashboard() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
           Respostas recebidas
         </h2>
+        <div className="mb-4 grid grid-cols-3 gap-3">
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <p className="text-2xl font-bold text-gray-900">{stats.respostasHoje}</p>
+            <p className="text-xs text-gray-500">Respostas hoje</p>
+          </div>
+          <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+            <p className="text-2xl font-bold text-green-700">{stats.positivasHoje}</p>
+            <p className="text-xs text-green-700">🟢 Positivas hoje</p>
+          </div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <p className="text-2xl font-bold text-red-700">{stats.negativasHoje}</p>
+            <p className="text-xs text-red-700">🔴 Negativas hoje</p>
+          </div>
+        </div>
         {responses.length === 0 ? (
           <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
             Nenhuma resposta ainda. Quando uma operadora responder, ela aparece

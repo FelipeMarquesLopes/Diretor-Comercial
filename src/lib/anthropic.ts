@@ -180,17 +180,32 @@ Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
 
 // --- Leitura/classificação de respostas ------------------------------------
 
-const CLASSIFY_SYSTEM = `Você analisa a resposta de um possível parceiro a uma \
-abordagem comercial da MenthalHelp e classifica a INTENÇÃO.
+const CLASSIFY_SYSTEM = `Você é um AGENTE ESPECIALISTA em ler as respostas de \
+operadoras de saúde (e outros parceiros) às abordagens comerciais da \
+MenthalHelp (clínica multidisciplinar, credenciamento). Sua função é separar a \
+QUALIDADE de cada resposta com precisão.
 
-- "positivo": demonstrou interesse, abriu porta, pediu reunião/proposta, ou \
-qualquer sinal verde para avançar a parceria. TAMBÉM é "positivo" quando a \
-pessoa ENCAMINHA/REPASSA o assunto para outro responsável, ou indica outra \
-pessoa/e-mail/setor para tratar — isso é um avanço (chegamos mais perto do \
-decisor certo).
-- "negativo": recusou, não tem interesse, pediu para não contatar/descadastrar.
-- "neutro": resposta automática (ex: "estou de férias"), dúvida simples sem \
-sinal de interesse, ou sem sinal claro.
+Classifique como "positivo" quando a pessoa demonstra QUALQUER interesse ou \
+pede QUALQUER informação para avançar, incluindo (mas não só):
+- pergunta quais TERAPIAS/serviços a clínica oferece;
+- pede IMAGENS/fotos da clínica;
+- pede VALORES/preços/tabela;
+- pede DOCUMENTAÇÃO da clínica (CNPJ, alvará, certificações, contrato etc.);
+- pede QUALQUER informação complementar sobre a clínica;
+- diz que tem INTERESSE e quer avançar no CREDENCIAMENTO;
+- pede reunião/apresentação/proposta;
+- ENCAMINHA/REPASSA para outro responsável ou indica outra pessoa/setor/e-mail \
+para tratar (isso é avanço: chegamos mais perto do decisor certo).
+
+Classifique como "negativo" quando: recusa, diz que não tem interesse, que não \
+credencia no momento, ou pede para não contatar/descadastrar.
+
+Classifique como "neutro" apenas quando: for resposta automática (ex: "estou \
+de férias", "recebemos seu e-mail"), ou não houver nenhum sinal de interesse \
+nem recusa clara.
+
+Na dúvida entre positivo e neutro, se houver QUALQUER pedido de informação \
+sobre a clínica, considere POSITIVO.
 
 Se for encaminhamento, no resumo diga para quem/qual setor foi repassado, se \
 essa informação aparecer.
