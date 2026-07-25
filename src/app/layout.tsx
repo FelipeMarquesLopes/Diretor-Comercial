@@ -1,10 +1,23 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
 
 export const metadata: Metadata = {
   title: "Growth AI — Diretor Comercial Digital",
-  description: "Prospecção de empresas da MenthalHelp",
+  description: "Diretor Comercial Digital da MenthalHelp",
+  manifest: "/manifest.webmanifest",
+  // Ícone do app quando adicionado à tela inicial do iPhone.
+  icons: { apple: "/apple-touch-icon.png", icon: "/icon-192.png" },
+  // Faz abrir em tela cheia (como app) no iPhone.
+  appleWebApp: {
+    capable: true,
+    title: "Growth AI",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0d9488",
 };
 
 export default function RootLayout({

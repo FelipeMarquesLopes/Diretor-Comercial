@@ -49,7 +49,9 @@ export function middleware(req: NextRequest) {
   });
 }
 
-// Aplica a tudo, menos arquivos estáticos.
+// Aplica a tudo, menos arquivos estáticos e os assets do app (ícone/manifesto).
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|apple-touch-icon.png|icon-192.png|icon-512.png|icon.svg).*)",
+  ],
 };
