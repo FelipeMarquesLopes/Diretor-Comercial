@@ -1,0 +1,13 @@
+const mupdf = require("mupdf");
+const fs = require("fs");
+const src = "/root/.claude/uploads/790b0c01-d8aa-5855-9446-4907c5fcad91/04ad41ba-LOGOMENTHALHELPTEANEURO.pdf";
+const buf = fs.readFileSync(src);
+const doc = mupdf.Document.openDocument(buf, "application/pdf");
+const page = doc.loadPage(0);
+const bounds = page.getBounds();
+console.log("page bounds:", bounds);
+const matrix = mupdf.Matrix.scale(6, 6);
+const pix = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, true);
+const png = pix.asPNG();
+fs.writeFileSync("logo_full.png", Buffer.from(png));
+console.log("logo_full.png escrito");

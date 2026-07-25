@@ -29,10 +29,15 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className="min-h-screen antialiased">
         <div className="mx-auto max-w-6xl px-4 py-6">
-          <header className="mb-6">
-            <h1 className="text-2xl font-bold text-brand-700">Growth AI</h1>
-            <p className="text-sm text-gray-500">
-              Diretor Comercial Digital · MenthalHelp · Frente de empresas
+          <header className="mb-6 flex flex-col items-center text-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png"
+              alt="Clínica Multidisciplinar MenthalHelp"
+              className="h-24 w-auto sm:h-28"
+            />
+            <p className="mt-2 text-sm font-semibold tracking-wide text-brand-700">
+              Growth AI · Diretor Comercial Digital
             </p>
           </header>
           <Nav />
