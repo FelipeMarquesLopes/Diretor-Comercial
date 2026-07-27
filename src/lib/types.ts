@@ -53,9 +53,14 @@ export interface PartnerResponse {
   created_at: string;
 }
 
+// Só para operadoras: "nova" (captação) ou "ativa" (relacionamento).
+export type OperatorType = "nova" | "ativa";
+
 export interface Company {
   id: string;
   category: PartnerCategory;
+  operator_type: OperatorType;
+  briefing: string | null;
   apollo_id: string | null;
   name: string;
   domain: string | null;

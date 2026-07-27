@@ -14,8 +14,13 @@ export default function Operadoras() {
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // filtro: novas / ativas / todas
+  const [filtro, setFiltro] = useState<"nova" | "ativa" | "todas">("nova");
+
   // formulário
   const [name, setName] = useState("");
+  const [operatorType, setOperatorType] = useState<"nova" | "ativa">("nova");
+  const [briefing, setBriefing] = useState("");
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -43,6 +48,8 @@ export default function Operadoras() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
+          operatorType,
+          briefing,
           contactName,
           email,
           phone,
@@ -56,10 +63,12 @@ export default function Operadoras() {
       } else {
         setMsg("Operadora cadastrada — rascunhos gerados. Veja em Rascunhos.");
         setName("");
+        setBriefing("");
         setContactName("");
         setEmail("");
         setPhone("");
         setNotes("");
+        setFiltro(operatorType);
         await load();
       }
     } catch (err) {
@@ -79,10 +88,22 @@ export default function Operadoras() {
           Cadastrar operadora de saúde
         </h2>
         <p className="mb-3 text-xs text-gray-500">
-          Preencha os dados da pessoa responsável. A IA já monta o rascunho de
-          e-mail (e de WhatsApp, se houver número). Você aprova em Rascunhos.
+          <b>Nova</b> = captar credenciamento. <b>Ativa</b> = parceira atual
+          (extensão, reajuste, inclusão de endereços). No <b>briefing</b> você
+          diz o que a IA deve enviar — ela monta o e-mail a partir disso.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="text-sm">
+            <span className="text-gray-600">Tipo *</span>
+            <select
+              value={operatorType}
+              onChange={(e) => setOperatorType(e.target.value as "nova" | "ativa")}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+            >
+              <option value="nova">Operadora nova (captação)</option>
+              <option value="ativa">Operadora ativa (relacionamento)</option>
+            </select>
+          </label>
           <label className="text-sm">
             <span className="text-gray-600">Operadora *</span>
             <input
@@ -129,7 +150,23 @@ export default function Operadoras() {
             <span className="text-gray-600">Este número tem WhatsApp</span>
           </label>
           <label className="text-sm sm:col-span-2">
-            <span className="text-gray-600">Observações</span>
+            <span className="text-gray-600">
+              Briefing — o que a IA deve enviar (a "copy")
+            </span>
+            <textarea
+              value={briefing}
+              onChange={(e) => setBriefing(e.target.value)}
+              rows={3}
+              placeholder={
+                operatorType === "ativa"
+                  ? "ex: Somos credenciados só em Guarulhos e Zona Norte. Pedir inclusão das unidades de Bragança e Alphaville, e extensão de Fisioterapia e Musicoterapia para todas. Falar com o analista Fulano."
+                  : "ex: Apresentar a clínica e pedir credenciamento. Destacar TEA/ABA e capacidade de atendimento. Convidar para uma conversa."
+              }
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+            />
+          </label>
+          <label className="text-sm sm:col-span-2">
+            <span className="text-gray-600">Observações internas (opcional)</span>
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -148,16 +185,49 @@ export default function Operadoras() {
       </form>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-          Operadoras cadastradas ({operadoras.length})
-        </h2>
+        <div className="mb-3 flex gap-2">
+          {(
+            [
+              ["nova", "Novas"],
+              ["ativa", "Ativas"],
+              ["todas", "Todas"],
+            ] as const
+          ).map(([key, label]) => {
+            const n =
+              key === "todas"
+                ? operadoras.length
+                : operadoras.filter((o) => (o.operator_type ?? "nova") === key).length;
+            return (
+              <button
+                key={key}
+                onClick={() => setFiltro(key)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                  filtro === key
+                    ? "bg-brand-500 text-white"
+                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {label} ({n})
+              </button>
+            );
+          })}
+        </div>
         <div className="space-y-3">
-          {operadoras.length === 0 && (
-            <p className="text-sm text-gray-500">Nenhuma operadora ainda.</p>
-          )}
-          {operadoras.map((o) => (
-            <OperadoraCard key={o.id} op={o} onChanged={load} />
-          ))}
+          {(() => {
+            const lista =
+              filtro === "todas"
+                ? operadoras
+                : operadoras.filter((o) => (o.operator_type ?? "nova") === filtro);
+            if (lista.length === 0)
+              return (
+                <p className="text-sm text-gray-500">
+                  Nenhuma operadora nesta aba.
+                </p>
+              );
+            return lista.map((o) => (
+              <OperadoraCard key={o.id} op={o} onChanged={load} />
+            ));
+          })()}
         </div>
       </section>
     </div>
@@ -174,6 +244,10 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
   // edição da operadora
   const [showEdit, setShowEdit] = useState(false);
   const [eName, setEName] = useState(op.name);
+  const [eType, setEType] = useState<"nova" | "ativa">(
+    (op.operator_type as "nova" | "ativa") ?? "nova",
+  );
+  const [eBriefing, setEBriefing] = useState(op.briefing ?? "");
   const [eContact, setEContact] = useState(contact?.name ?? "");
   const [eEmail, setEEmail] = useState(contact?.email ?? "");
   const [ePhone, setEPhone] = useState(contact?.phone ?? "");
@@ -188,6 +262,8 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: eName,
+          operatorType: eType,
+          briefing: eBriefing,
           contactName: eContact,
           email: eEmail,
           phone: ePhone,
@@ -243,13 +319,29 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-medium text-gray-900">{op.name}</p>
+          <p className="flex items-center gap-2 font-medium text-gray-900">
+            {op.name}
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                (op.operator_type ?? "nova") === "ativa"
+                  ? "bg-teal-100 text-teal-700"
+                  : "bg-indigo-100 text-indigo-700"
+              }`}
+            >
+              {(op.operator_type ?? "nova") === "ativa" ? "Ativa" : "Nova"}
+            </span>
+          </p>
           {contact && (
             <p className="text-xs text-gray-500">
               {contact.name}
               {contact.email ? ` · ${contact.email}` : ""}
               {contact.phone ? ` · ${contact.phone}` : ""}
               {contact.is_whatsapp ? " (WhatsApp)" : ""}
+            </p>
+          )}
+          {op.briefing && (
+            <p className="mt-1 line-clamp-2 text-xs italic text-gray-400">
+              Briefing: {op.briefing}
             </p>
           )}
         </div>
@@ -277,10 +369,30 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
         <div className="mt-3 space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="text-xs text-gray-600">
+              Tipo
+              <select
+                value={eType}
+                onChange={(e) => setEType(e.target.value as "nova" | "ativa")}
+                className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="nova">Nova (captação)</option>
+                <option value="ativa">Ativa (relacionamento)</option>
+              </select>
+            </label>
+            <label className="text-xs text-gray-600">
               Operadora
               <input
                 value={eName}
                 onChange={(e) => setEName(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs text-gray-600 sm:col-span-2">
+              Briefing — o que a IA deve enviar
+              <textarea
+                value={eBriefing}
+                onChange={(e) => setEBriefing(e.target.value)}
+                rows={3}
                 className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               />
             </label>

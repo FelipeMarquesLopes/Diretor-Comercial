@@ -36,6 +36,8 @@ export async function POST(req: Request) {
     phone?: string;
     isWhatsapp?: boolean;
     notes?: string;
+    operatorType?: string;
+    briefing?: string;
     generateNow?: boolean;
   };
   try {
@@ -63,6 +65,8 @@ export async function POST(req: Request) {
     .from("companies")
     .insert({
       category: "operadora",
+      operator_type: body.operatorType === "ativa" ? "ativa" : "nova",
+      briefing: body.briefing ?? null,
       name: body.name,
       status: "qualificado",
       qualified: true,

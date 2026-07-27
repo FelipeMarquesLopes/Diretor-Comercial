@@ -12,6 +12,8 @@ export async function PATCH(
   let body: {
     name?: string;
     notes?: string;
+    operatorType?: string;
+    briefing?: string;
     contactName?: string;
     email?: string;
     phone?: string;
@@ -37,6 +39,9 @@ export async function PATCH(
   const companyUpdate: Record<string, unknown> = {};
   if (body.name !== undefined) companyUpdate.name = body.name;
   if (body.notes !== undefined) companyUpdate.notes = body.notes;
+  if (body.briefing !== undefined) companyUpdate.briefing = body.briefing;
+  if (body.operatorType !== undefined)
+    companyUpdate.operator_type = body.operatorType === "ativa" ? "ativa" : "nova";
   if (Object.keys(companyUpdate).length > 0) {
     const { error } = await supabase
       .from("companies")

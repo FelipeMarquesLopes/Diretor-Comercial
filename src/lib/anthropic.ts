@@ -45,10 +45,21 @@ const HOOK_BRIEFING: Record<MessageHook, string> = {
 function categoryBriefing(company: Company, hook: MessageHook): string {
   switch (company.category) {
     case "operadora":
+      if (company.operator_type === "ativa") {
+        return (
+          "Alvo: uma OPERADORA de saúde que JÁ É PARCEIRA da MenthalHelp. " +
+          "Escreva ao analista/contato dela para tratar uma SOLICITAÇÃO de " +
+          "relacionamento — normalmente inclusão de endereços/unidades no " +
+          "credenciamento, extensão de procedimentos (ex: Fisioterapia, " +
+          "Musicoterapia) ou reajuste contratual. Faça o pedido de forma " +
+          "objetiva, cordial e clara. NÃO faça apresentação de captação: eles " +
+          "já nos conhecem. Siga exatamente o que o CEO pedir nas instruções."
+        );
+      }
       return (
-        "Alvo: uma OPERADORA de saúde. Objetivo: apresentar a clínica e abrir " +
-        "conversa para CREDENCIAMENTO / parceria — a MenthalHelp quer ser " +
-        "credenciada e atender os beneficiários da operadora. Destaque " +
+        "Alvo: uma OPERADORA de saúde NOVA (ainda não é parceira). Objetivo: " +
+        "apresentar a clínica e abrir conversa para CREDENCIAMENTO — a " +
+        "MenthalHelp quer ser credenciada e atender os beneficiários. Destaque " +
         "qualidade clínica, capacidade (3.000+ pacientes/mês, várias " +
         "unidades) e a expertise em TEA/ABA. Tom institucional e respeitoso."
       );
@@ -147,6 +158,12 @@ export async function generateDraft(opts: {
         "retomando o assunto sem repetir tudo. Nunca soe insistente ou irritado."
       : "";
 
+  // Briefing do CEO: o que ele quer que seja enviado (copy/orientação).
+  const briefingLine = company.briefing?.trim()
+    ? `\n\nINSTRUÇÕES DO CEO (siga à risca — é exatamente o que ele quer ` +
+      `comunicar):\n"""${company.briefing.trim()}"""`
+    : "";
+
   const userPrompt = `Escreva o rascunho.
 
 Canal: ${channel === "email" ? "E-mail" : "WhatsApp"}
@@ -155,7 +172,7 @@ Parceiro: ${company.name}${company.industry ? ` (${company.industry})` : ""}${
   }.
 ${contactLine}
 
-${categoryBriefing(company, hook)}${followUpLine}
+${categoryBriefing(company, hook)}${briefingLine}${followUpLine}
 
 Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
 
