@@ -96,6 +96,7 @@ export interface Contact {
   email: string | null;
   phone: string | null;
   linkedin_url: string | null;
+  email_status: string | null;
   is_decision_maker: boolean;
   is_whatsapp: boolean;
   created_at: string;

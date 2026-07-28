@@ -65,12 +65,20 @@ export async function POST(req: Request) {
     }
     return 2;
   }
+  // Quão "alcançável" é o e-mail deste contato (menor = melhor).
+  function reachRank(c: Contact): number {
+    if (c.email) return 0; // já revelado
+    const s = (c.email_status ?? "").toLowerCase();
+    if (s.includes("verified") || s.includes("likely")) return 1; // revelável
+    if (c.apollo_id && s !== "unavailable") return 2; // vale tentar revelar
+    return 3; // Apollo não tem e-mail
+  }
   const target = [...contacts].sort((a, b) => {
-    const byRank = rankTitle(a.title) - rankTitle(b.title);
-    if (byRank !== 0) return byRank;
-    const aHas = a.email ? 0 : a.apollo_id ? 1 : 2;
-    const bHas = b.email ? 0 : b.apollo_id ? 1 : 2;
-    return aHas - bHas;
+    // 1º prioriza quem tem e-mail alcançável (senão não adianta o cargo);
+    // 2º desempata pelo cargo (RH > liderança > outros).
+    const byReach = reachRank(a) - reachRank(b);
+    if (byReach !== 0) return byReach;
+    return rankTitle(a.title) - rankTitle(b.title);
   })[0];
 
   if (!target) {

@@ -112,6 +112,7 @@ export async function POST(req: Request) {
               email: c.email,
               phone: c.phone,
               linkedin_url: c.linkedinUrl,
+              email_status: c.emailStatus,
             },
             { onConflict: "apollo_id" },
           );

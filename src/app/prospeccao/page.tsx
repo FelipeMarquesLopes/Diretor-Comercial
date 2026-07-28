@@ -6,6 +6,17 @@ import { HOOK_LABELS, STATUS_LABELS } from "@/lib/types";
 
 type CompanyWithContacts = Company & { contacts: Contact[] };
 
+// O Apollo diz, na busca, se tem e-mail para a pessoa e o quão confiável é.
+// "verified"/"likely to engage" = tem e-mail bom para revelar.
+function emailReachable(status: string | null): boolean {
+  const s = (status ?? "").toLowerCase();
+  return s.includes("verified") || s.includes("likely");
+}
+// "unavailable" = o Apollo não tem e-mail nenhum (não vale gastar crédito).
+function emailUnavailable(status: string | null): boolean {
+  return (status ?? "").toLowerCase() === "unavailable";
+}
+
 export default function Prospeccao() {
   const [companies, setCompanies] = useState<CompanyWithContacts[]>([]);
   const [loading, setLoading] = useState(false);
@@ -373,13 +384,19 @@ function CompanyCard({
                   <div className="text-xs text-gray-500">
                     {c.email ? (
                       <span className="text-brand-700">{c.email}</span>
+                    ) : emailReachable(c.email_status) ? (
+                      <span className="text-green-700">
+                        e-mail disponível ✓ (clique em Revelar)
+                      </span>
                     ) : (
-                      <span className="italic text-gray-400">e-mail não revelado</span>
+                      <span className="italic text-gray-400">
+                        Apollo não tem e-mail deste contato
+                      </span>
                     )}
                     {c.phone ? ` · ${c.phone}` : ""}
                   </div>
                 </div>
-                {!c.email && c.apollo_id && (
+                {!c.email && c.apollo_id && !emailUnavailable(c.email_status) && (
                   <button
                     onClick={() => revelar(c.id)}
                     disabled={busy}

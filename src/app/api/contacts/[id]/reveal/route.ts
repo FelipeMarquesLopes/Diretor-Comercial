@@ -50,6 +50,9 @@ export async function POST(
   const update: Record<string, unknown> = {};
   if (revealed.email) update.email = revealed.email;
   if (revealed.phone) update.phone = revealed.phone;
+  // Se o Apollo não devolveu e-mail, marca como indisponível para o painel
+  // não oferecer "Revelar" de novo (não gasta crédito à toa).
+  if (!revealed.email) update.email_status = "unavailable";
 
   if (Object.keys(update).length > 0) {
     await supabase.from("contacts").update(update).eq("id", id);
@@ -58,6 +61,6 @@ export async function POST(
   return NextResponse.json({
     email: revealed.email,
     phone: revealed.phone,
-    revealed: Object.keys(update).length > 0,
+    revealed: Boolean(revealed.email || revealed.phone),
   });
 }

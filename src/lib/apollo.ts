@@ -30,6 +30,10 @@ export interface ApolloContact {
   email: string | null;
   phone: string | null;
   linkedinUrl: string | null;
+  // Status do e-mail no Apollo (antes de revelar): "verified", "likely to
+  // engage", "unverified", "unavailable"... Serve para sabermos ANTES de
+  // gastar crédito se dá para revelar um e-mail deste decisor.
+  emailStatus: string | null;
 }
 
 export interface CompanySearchParams {
@@ -218,11 +222,20 @@ export async function revealPerson(
 ): Promise<{ email: string | null; phone: string | null }> {
   const data = await apolloPost<{ person?: RawPerson }>("/people/match", {
     id: apolloId,
+    // Por padrão o Apollo NÃO devolve e-mail pessoal. Pedimos também o pessoal
+    // como plano B: se não houver e-mail corporativo, ainda conseguimos falar
+    // com o decisor. (Docs Apollo: parâmetro reveal_personal_emails.)
+    reveal_personal_emails: true,
   });
   const p = data.person;
   if (!p) return { email: null, phone: null };
+  // 1º o e-mail corporativo; se vier vazio/bloqueado, tenta um pessoal.
+  const work =
+    p.email && !p.email.includes("not_unlocked") ? p.email : null;
+  const personal =
+    p.personal_emails?.find((e) => e && !e.includes("not_unlocked")) ?? null;
   return {
-    email: p.email && !p.email.includes("not_unlocked") ? p.email : null,
+    email: work ?? personal,
     phone: p.phone_numbers?.[0]?.raw_number ?? null,
   };
 }
@@ -252,6 +265,8 @@ interface RawPerson {
   last_name?: string;
   title?: string;
   email?: string;
+  email_status?: string;
+  personal_emails?: string[];
   linkedin_url?: string;
   phone_numbers?: { raw_number?: string }[];
 }
@@ -286,5 +301,6 @@ function normalizePerson(p: RawPerson): ApolloContact {
       p.email && !p.email.includes("not_unlocked") ? p.email : null,
     phone: p.phone_numbers?.[0]?.raw_number ?? null,
     linkedinUrl: p.linkedin_url ?? null,
+    emailStatus: p.email_status ?? null,
   };
 }
