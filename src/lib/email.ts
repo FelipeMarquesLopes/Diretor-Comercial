@@ -38,7 +38,9 @@ function cfg() {
   const pass = process.env.SMTP_PASSWORD ?? process.env.GMAIL_APP_PASSWORD;
   const fromName =
     process.env.SMTP_FROM_NAME ?? process.env.GMAIL_FROM_NAME ?? "MenthalHelp";
-  return { host, port, user, pass, fromName };
+  // E-mail que entra em CÓPIA em todos os disparos (o CEO acompanha por fora).
+  const cc = process.env.EMAIL_CC ?? "felipe@clinicamenthalhelp.com.br";
+  return { host, port, user, pass, fromName, cc };
 }
 
 export function isEmailConfigured(): boolean {
@@ -69,10 +71,11 @@ export async function sendEmail(opts: {
   subject: string;
   text: string;
 }): Promise<void> {
-  const { user, fromName } = cfg();
+  const { user, fromName, cc } = cfg();
   await getTransporter().sendMail({
     from: `${fromName} <${user}>`,
     to: opts.to,
+    cc: cc && cc !== opts.to ? cc : undefined, // CEO em cópia p/ acompanhar
     subject: opts.subject || "(sem assunto)",
     text: opts.text, // fallback em texto puro
     html: toHtml(opts.text), // versão com a fonte Arial 13
