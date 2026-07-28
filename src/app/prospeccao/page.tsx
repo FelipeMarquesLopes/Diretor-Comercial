@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Company, Contact, MessageHook, DraftChannel } from "@/lib/types";
+import type { Company, Contact, MessageHook } from "@/lib/types";
 import { HOOK_LABELS, STATUS_LABELS } from "@/lib/types";
 
 type CompanyWithContacts = Company & { contacts: Contact[] };
@@ -162,19 +162,26 @@ function CompanyCard({
   onChanged: () => void;
 }) {
   const [hook, setHook] = useState<MessageHook>("nr1");
-  const [channel, setChannel] = useState<DraftChannel>("email");
   const [state, setState] = useState<"idle" | "gerando" | "ok" | "erro">("idle");
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function gerar() {
+  // "Abordar": revela o e-mail (1 crédito) + escreve + entra no follow-up.
+  async function abordar() {
+    if (
+      !confirm(
+        `Abordar "${company.name}"? Isso revela o e-mail do decisor (1 crédito do Apollo), escreve o rascunho e coloca no follow-up. O envio só sai com o seu clique depois.`,
+      )
+    )
+      return;
     setState("gerando");
     setNote(null);
+    setBusy(true);
     try {
-      const r = await fetch("/api/drafts", {
+      const r = await fetch("/api/prospect/abordar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: company.id, hook, channel }),
+        body: JSON.stringify({ companyId: company.id, hook }),
       });
       const d = await r.json();
       if (d.error) {
@@ -182,11 +189,16 @@ function CompanyCard({
         setNote(d.error);
       } else {
         setState("ok");
-        setNote("Rascunho criado — veja na aba Rascunhos.");
+        setNote(
+          `Decisor: ${d.contato} · ${d.email} — rascunho criado. Veja em Rascunhos e dê o clique final.`,
+        );
       }
+      onChanged();
     } catch (e) {
       setState("erro");
       setNote(String(e));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -308,20 +320,13 @@ function CompanyCard({
             </option>
           ))}
         </select>
-        <select
-          value={channel}
-          onChange={(e) => setChannel(e.target.value as DraftChannel)}
-          className="rounded-md border border-gray-300 px-2 py-1 text-sm"
-        >
-          <option value="email">E-mail</option>
-          <option value="whatsapp">WhatsApp</option>
-        </select>
         <button
-          onClick={gerar}
-          disabled={state === "gerando"}
+          onClick={abordar}
+          disabled={busy || state === "gerando"}
           className="rounded-md bg-brand-500 px-3 py-1 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          title="Revela o e-mail do decisor (1 crédito), escreve o e-mail e coloca no follow-up"
         >
-          {state === "gerando" ? "Gerando…" : "Gerar rascunho"}
+          {state === "gerando" ? "Abordando…" : "Abordar (revelar + escrever)"}
         </button>
         {note && (
           <span
