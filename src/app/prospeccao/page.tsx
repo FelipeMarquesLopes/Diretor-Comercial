@@ -75,9 +75,9 @@ export default function Prospeccao() {
         setMsg(`Erro: ${d.error}`);
       } else {
         let m = `Encontradas ${d.found} empresas, ${d.qualified} qualificadas`;
-        if (withContacts) m += ` · ${d.contatosRh ?? 0} contato(s) de RH`;
+        if (withContacts) m += ` · ${d.contatosDecisores ?? 0} decisor(es)`;
         m += ".";
-        if (d.avisoContatos) m += ` ⚠️ RH: ${d.avisoContatos}`;
+        if (d.avisoContatos) m += ` ⚠️ Decisores: ${d.avisoContatos}`;
         setMsg(m);
         await loadCompanies();
       }
@@ -207,7 +207,9 @@ export default function Prospeccao() {
               checked={withContacts}
               onChange={(e) => setWithContacts(e.target.checked)}
             />
-            <span className="text-gray-600">Buscar contatos do RH também (grátis)</span>
+            <span className="text-gray-600">
+              Buscar decisores também — RH, dono, diretor, sócio (grátis)
+            </span>
           </label>
         </div>
         <button
@@ -351,11 +353,11 @@ function CompanyCard({
         </div>
       </div>
 
-      {/* Contatos de RH (decisores) */}
+      {/* Decisores (RH, dono, diretor, sócio) */}
       {company.contacts?.length > 0 && (
         <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 p-2">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Contatos de RH
+            Decisores
           </p>
           <div className="space-y-1.5">
             {company.contacts.map((c) => (

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { searchCompanies, searchHrContacts } from "@/lib/apollo";
+import { searchCompanies, searchDecisionMakers } from "@/lib/apollo";
 import { qualifyCompany } from "@/lib/qualify";
 
 // POST /api/prospect
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
   }
 
   const results: { name: string; qualified: boolean; score: number }[] = [];
-  let contatosRh = 0;
+  let contatosDecisores = 0;
   let avisoContatos: string | null = null;
 
   for (const org of orgs) {
@@ -97,10 +97,11 @@ export async function POST(req: Request) {
       description: `Descoberta via Apollo. ${q.qualified ? "Qualificada" : "Descartada"} (score ${q.score}). ${q.notes}`,
     });
 
-    // Opcionalmente busca contatos do RH para empresas qualificadas.
+    // Opcionalmente busca os DECISORES (RH, dono, diretor, sócio) das empresas
+    // qualificadas.
     if (body.withContacts && q.qualified && org.domain) {
       try {
-        const contacts = await searchHrContacts(org.domain);
+        const contacts = await searchDecisionMakers(org.domain);
         for (const c of contacts) {
           await supabase.from("contacts").upsert(
             {
@@ -114,13 +115,15 @@ export async function POST(req: Request) {
             },
             { onConflict: "apollo_id" },
           );
-          contatosRh++;
+          contatosDecisores++;
         }
       } catch (err) {
         // Guarda o motivo (ex: plano sem acesso à busca de pessoas) para avisar.
         if (!avisoContatos) {
           avisoContatos =
-            err instanceof Error ? err.message.slice(0, 200) : "Erro ao buscar RH";
+            err instanceof Error
+              ? err.message.slice(0, 200)
+              : "Erro ao buscar decisores";
         }
       }
     }
@@ -132,7 +135,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     found: results.length,
     qualified,
-    contatosRh,
+    contatosDecisores,
     avisoContatos,
     results,
   });

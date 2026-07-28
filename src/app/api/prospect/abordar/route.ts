@@ -44,15 +44,41 @@ export async function POST(req: Request) {
   }
 
   const contacts = company.contacts ?? [];
-  // Melhor decisor: já com e-mail, senão um com apollo_id (para revelar).
-  const target =
-    contacts.find((c) => c.email) ??
-    contacts.find((c) => c.apollo_id) ??
-    contacts[0];
+  // Prioriza o melhor decisor para abordar:
+  //   1) RH / Gente / Benefícios (quem cuida de convênios nas empresas)
+  //   2) Dono / sócio / diretor / CEO (decisor da parceria)
+  //   3) qualquer outro
+  // Empate: prefere quem já tem e-mail; senão quem tem apollo_id (revelável).
+  function rankTitle(title: string | null): number {
+    const t = (title ?? "").toLowerCase();
+    if (
+      /\b(rh|recursos humanos|human resources|\bhr\b|people|gente|benef)/.test(t)
+    ) {
+      return 0;
+    }
+    if (
+      /(ceo|founder|owner|president|presidente|propriet|s[óo]cio|diretor|diretora|managing)/.test(
+        t,
+      )
+    ) {
+      return 1;
+    }
+    return 2;
+  }
+  const target = [...contacts].sort((a, b) => {
+    const byRank = rankTitle(a.title) - rankTitle(b.title);
+    if (byRank !== 0) return byRank;
+    const aHas = a.email ? 0 : a.apollo_id ? 1 : 2;
+    const bHas = b.email ? 0 : b.apollo_id ? 1 : 2;
+    return aHas - bHas;
+  })[0];
 
   if (!target) {
     return NextResponse.json(
-      { error: "Esta empresa não tem contato de RH. Rode a busca com 'Buscar RH'." },
+      {
+        error:
+          "Esta empresa não tem nenhum decisor encontrado. Rode a busca marcando 'Buscar decisores'.",
+      },
       { status: 400 },
     );
   }

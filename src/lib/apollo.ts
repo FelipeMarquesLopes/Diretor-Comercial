@@ -146,18 +146,45 @@ export async function searchCompanies(
 }
 
 /**
- * Busca contatos do RH em uma empresa (por domínio da organização).
+ * Busca DECISORES em uma empresa (por domínio): RH, mas também donos e
+ * lideranças (CEO, sócio, diretor, proprietário) — porque muitas empresas não
+ * têm um RH dedicado, e quem decide a parceria é o dono/diretor.
  */
-export async function searchHrContacts(
+export async function searchDecisionMakers(
   organizationDomain: string,
-  perPage = 5,
+  perPage = 10,
 ): Promise<ApolloContact[]> {
   const body = {
     page: 1,
     per_page: perPage,
     q_organization_domains_list: [organizationDomain],
-    person_seniorities: ["director", "manager", "head", "vp", "c_suite"],
+    person_seniorities: [
+      "owner",
+      "founder",
+      "c_suite",
+      "partner",
+      "vp",
+      "director",
+      "head",
+      "manager",
+    ],
     person_titles: [
+      // Donos e lideranças (decisores)
+      "CEO",
+      "Founder",
+      "Owner",
+      "President",
+      "Presidente",
+      "Proprietário",
+      "Sócio",
+      "Sócio-Diretor",
+      "Managing Director",
+      "Diretor",
+      "Diretora",
+      "Diretor Geral",
+      "Diretor Executivo",
+      "Gerente Geral",
+      // RH / Gente / Benefícios (ideal para empresas)
       "Human Resources",
       "HR",
       "People",
