@@ -35,8 +35,10 @@ export function qualifyCompany(
 
   const employees = org.employeeCount ?? 0;
 
-  // Critério eliminatório: 100+ funcionários.
-  if (employees < 100) {
+  // Só reprova se SOUBERMOS que é abaixo de 100. Quando o Apollo não informa o
+  // porte (employees = 0/null), confiamos no filtro da busca — que já pediu
+  // 100+ — e mantemos a empresa qualificada.
+  if (employees > 0 && employees < 100) {
     return {
       score: 0,
       qualified: false,
@@ -55,9 +57,13 @@ export function qualifyCompany(
   } else if (employees >= 200) {
     score += 24;
     reasons.push(`${employees} funcionários`);
-  } else {
+  } else if (employees >= 100) {
     score += 16;
     reasons.push(`${employees} funcionários (100+)`);
+  } else {
+    // porte não informado pelo Apollo — a busca já garante 100+
+    score += 14;
+    reasons.push("Porte não informado (busca já filtra 100+)");
   }
 
   // Setor relevante para saúde mental / afastamento.
