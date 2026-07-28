@@ -31,7 +31,7 @@ export default function Prospeccao() {
   const [minEmployees, setMinEmployees] = useState(100);
   const [maxEmployees, setMaxEmployees] = useState<string>("");
   const [perPage, setPerPage] = useState(25);
-  const [withContacts, setWithContacts] = useState(true);
+  const [onlyWithEmail, setOnlyWithEmail] = useState(true);
 
   async function loadCompanies() {
     const r = await fetch("/api/companies?status=qualificado&category=empresa");
@@ -78,15 +78,18 @@ export default function Prospeccao() {
           minEmployees,
           maxEmployees: maxEmployees.trim() ? Number(maxEmployees) : undefined,
           perPage,
-          withContacts,
+          onlyWithEmail,
         }),
       });
       const d = await r.json();
       if (d.error) {
         setMsg(`Erro: ${d.error}`);
       } else {
-        let m = `Encontradas ${d.found} empresas, ${d.qualified} qualificadas`;
-        if (withContacts) m += ` · ${d.contatosDecisores ?? 0} decisor(es)`;
+        let m = `${d.qualified} empresa(s) com decisor para contatar`;
+        m += ` · ${d.contatosDecisores ?? 0} decisor(es)`;
+        if (onlyWithEmail && d.puladasSemEmail) {
+          m += ` · ${d.puladasSemEmail} descartada(s) por não ter e-mail`;
+        }
         m += ".";
         if (d.avisoContatos) m += ` ⚠️ Decisores: ${d.avisoContatos}`;
         setMsg(m);
@@ -215,11 +218,12 @@ export default function Prospeccao() {
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input
               type="checkbox"
-              checked={withContacts}
-              onChange={(e) => setWithContacts(e.target.checked)}
+              checked={onlyWithEmail}
+              onChange={(e) => setOnlyWithEmail(e.target.checked)}
             />
             <span className="text-gray-600">
-              Buscar decisores também — RH, dono, diretor, sócio (grátis)
+              Só trazer empresas com e-mail de decisor disponível (RH, dono,
+              diretor, sócio) — recomendado
             </span>
           </label>
         </div>
