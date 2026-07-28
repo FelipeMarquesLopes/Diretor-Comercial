@@ -163,6 +163,24 @@ export async function searchHrContacts(
   return people.map(normalizePerson).filter((p) => p.apolloId);
 }
 
+/**
+ * "Revela" (enriquece) uma pessoa pelo ID do Apollo — devolve o e-mail de
+ * trabalho e o telefone, quando disponíveis. Consome 1 crédito do Apollo.
+ */
+export async function revealPerson(
+  apolloId: string,
+): Promise<{ email: string | null; phone: string | null }> {
+  const data = await apolloPost<{ person?: RawPerson }>("/people/match", {
+    id: apolloId,
+  });
+  const p = data.person;
+  if (!p) return { email: null, phone: null };
+  return {
+    email: p.email && !p.email.includes("not_unlocked") ? p.email : null,
+    phone: p.phone_numbers?.[0]?.raw_number ?? null,
+  };
+}
+
 // --- Normalização das respostas cruas do Apollo ----------------------------
 
 interface RawOrg {

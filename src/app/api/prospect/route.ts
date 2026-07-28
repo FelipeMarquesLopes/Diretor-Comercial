@@ -46,6 +46,8 @@ export async function POST(req: Request) {
   }
 
   const results: { name: string; qualified: boolean; score: number }[] = [];
+  let contatosRh = 0;
+  let avisoContatos: string | null = null;
 
   for (const org of orgs) {
     const q = qualifyCompany(org);
@@ -106,9 +108,14 @@ export async function POST(req: Request) {
             },
             { onConflict: "apollo_id" },
           );
+          contatosRh++;
         }
-      } catch {
-        // contatos são best-effort; não falha a prospecção
+      } catch (err) {
+        // Guarda o motivo (ex: plano sem acesso à busca de pessoas) para avisar.
+        if (!avisoContatos) {
+          avisoContatos =
+            err instanceof Error ? err.message.slice(0, 200) : "Erro ao buscar RH";
+        }
       }
     }
 
@@ -119,6 +126,8 @@ export async function POST(req: Request) {
   return NextResponse.json({
     found: results.length,
     qualified,
+    contatosRh,
+    avisoContatos,
     results,
   });
 }
