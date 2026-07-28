@@ -33,12 +33,17 @@ export interface ApolloContact {
 }
 
 export interface CompanySearchParams {
-  // Localizações (ex: ["Sao Paulo, Brazil", "Brazil"])
+  // Localizações (ex: ["Guarulhos, Sao Paulo, Brazil", "Sao Paulo, Brazil"])
   locations?: string[];
-  // Palavras-chave de setor/indústria
+  // Palavras-chave de setor/indústria a INCLUIR
   keywords?: string[];
-  // Faixa mínima de funcionários — default 100+ (critério do brief)
+  // Palavras-chave a EXCLUIR (não trazer)
+  notKeywords?: string[];
+  // Nome específico de empresa (opcional)
+  name?: string;
+  // Faixa de funcionários
   minEmployees?: number;
+  maxEmployees?: number;
   page?: number;
   perPage?: number;
 }
@@ -76,7 +81,7 @@ async function apolloPost<T>(path: string, body: unknown): Promise<T> {
 
 // Converte a faixa mínima de funcionários no formato de range do Apollo.
 // O Apollo espera strings como "101,200", "201,500", etc.
-function employeeRanges(minEmployees: number): string[] {
+function employeeRanges(minEmployees: number, maxEmployees?: number): string[] {
   const ranges = [
     "1,10",
     "11,20",
@@ -91,8 +96,10 @@ function employeeRanges(minEmployees: number): string[] {
     "10001,1000000",
   ];
   return ranges.filter((r) => {
-    const upper = parseInt(r.split(",")[1], 10);
-    return upper >= minEmployees;
+    const [lower, upper] = r.split(",").map((n) => parseInt(n, 10));
+    if (upper < minEmployees) return false; // faixa toda abaixo do mínimo
+    if (maxEmployees && lower > maxEmployees) return false; // toda acima do máximo
+    return true;
   });
 }
 
@@ -105,7 +112,10 @@ export async function searchCompanies(
   const {
     locations = ["Brazil"],
     keywords = [],
+    notKeywords = [],
+    name,
     minEmployees = 100,
+    maxEmployees,
     page = 1,
     perPage = 25,
   } = params;
@@ -113,11 +123,17 @@ export async function searchCompanies(
   const body: Record<string, unknown> = {
     page,
     per_page: perPage,
-    organization_num_employees_ranges: employeeRanges(minEmployees),
+    organization_num_employees_ranges: employeeRanges(minEmployees, maxEmployees),
     organization_locations: locations,
   };
   if (keywords.length > 0) {
     body.q_organization_keyword_tags = keywords;
+  }
+  if (notKeywords.length > 0) {
+    body.q_organization_not_keyword_tags = notKeywords;
+  }
+  if (name && name.trim()) {
+    body.q_organization_name = name.trim();
   }
 
   const data = await apolloPost<{

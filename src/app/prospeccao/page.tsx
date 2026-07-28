@@ -13,9 +13,13 @@ export default function Prospeccao() {
 
   // formulário de busca
   const [keywords, setKeywords] = useState("");
+  const [notKeywords, setNotKeywords] = useState("");
+  const [nome, setNome] = useState("");
   const [estado, setEstado] = useState("Sao Paulo");
-  const [cidade, setCidade] = useState("");
+  const [cidades, setCidades] = useState("");
   const [minEmployees, setMinEmployees] = useState(100);
+  const [maxEmployees, setMaxEmployees] = useState<string>("");
+  const [perPage, setPerPage] = useState(25);
   const [withContacts, setWithContacts] = useState(true);
 
   async function loadCompanies() {
@@ -33,10 +37,18 @@ export default function Prospeccao() {
     e.preventDefault();
     setLoading(true);
     setMsg(null);
-    // monta a localização a partir de cidade + estado (+ Brazil)
-    const local = [cidade.trim(), estado.trim(), "Brazil"]
-      .filter(Boolean)
-      .join(", ");
+    // monta as localizações: uma por cidade (+ estado + Brazil); se não houver
+    // cidade, usa só o estado.
+    const cidadeList = cidades
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    const locations =
+      cidadeList.length > 0
+        ? cidadeList.map((c) =>
+            [c, estado.trim(), "Brazil"].filter(Boolean).join(", "),
+          )
+        : [[estado.trim(), "Brazil"].filter(Boolean).join(", ")];
     try {
       const r = await fetch("/api/prospect", {
         method: "POST",
@@ -46,8 +58,15 @@ export default function Prospeccao() {
             .split(",")
             .map((k) => k.trim())
             .filter(Boolean),
-          locations: [local],
+          notKeywords: notKeywords
+            .split(",")
+            .map((k) => k.trim())
+            .filter(Boolean),
+          name: nome.trim() || undefined,
+          locations,
           minEmployees,
+          maxEmployees: maxEmployees.trim() ? Number(maxEmployees) : undefined,
+          perPage,
           withContacts,
         }),
       });
@@ -75,16 +94,49 @@ export default function Prospeccao() {
         onSubmit={runProspect}
         className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
       >
-        <h2 className="mb-3 font-semibold text-gray-800">
+        <h2 className="mb-1 font-semibold text-gray-800">
           Buscar empresas no Apollo
         </h2>
+        <p className="mb-3 text-xs text-gray-500">
+          Quanto mais detalhes, melhores os resultados. Atalhos:
+        </p>
+        {/* Atalhos de preenchimento rápido */}
+        <div className="mb-3 flex flex-wrap gap-2">
+          {(
+            [
+              ["🏭 Indústrias", "manufacturing, indústria, metalurgia, fábrica"],
+              ["🚚 Transporte/Logística", "transporte, logística, distribuição"],
+              ["🏫 Escolas/Colégios", "escola, colégio, educação, ensino"],
+              ["🛒 Varejo", "varejo, supermercado, comércio"],
+              ["🏥 Saúde", "hospital, clínica, saúde"],
+            ] as const
+          ).map(([label, kw]) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setKeywords(kw)}
+              className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-100"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">
-            <span className="text-gray-600">Setores / palavras-chave (vírgula)</span>
+            <span className="text-gray-600">Setores / palavras-chave — INCLUIR (vírgula)</span>
             <input
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
-              placeholder="ex: manufacturing, logistics, metalurgia"
+              placeholder="ex: metalurgia, indústria, transporte"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+            />
+          </label>
+          <label className="text-sm sm:col-span-2">
+            <span className="text-gray-600">Palavras-chave a EXCLUIR (vírgula)</span>
+            <input
+              value={notKeywords}
+              onChange={(e) => setNotKeywords(e.target.value)}
+              placeholder="ex: escola, consultoria (não trazer esses)"
               className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
             />
           </label>
@@ -98,16 +150,16 @@ export default function Prospeccao() {
             />
           </label>
           <label className="text-sm">
-            <span className="text-gray-600">Município / cidade</span>
+            <span className="text-gray-600">Cidades (uma ou várias, vírgula)</span>
             <input
-              value={cidade}
-              onChange={(e) => setCidade(e.target.value)}
-              placeholder="ex: Guarulhos (deixe vazio p/ o estado todo)"
+              value={cidades}
+              onChange={(e) => setCidades(e.target.value)}
+              placeholder="ex: Guarulhos, Bragança Paulista (vazio = estado todo)"
               className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
             />
           </label>
           <label className="text-sm">
-            <span className="text-gray-600">Mínimo de funcionários</span>
+            <span className="text-gray-600">Funcionários — mínimo</span>
             <input
               type="number"
               value={minEmployees}
@@ -116,13 +168,46 @@ export default function Prospeccao() {
               className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
             />
           </label>
-          <label className="flex items-center gap-2 text-sm sm:mt-6">
+          <label className="text-sm">
+            <span className="text-gray-600">Funcionários — máximo (opcional)</span>
+            <input
+              type="number"
+              value={maxEmployees}
+              onChange={(e) => setMaxEmployees(e.target.value)}
+              min={1}
+              placeholder="ex: 2000 (vazio = sem limite)"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="text-gray-600">Nome específico (opcional)</span>
+            <input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="ex: Ambev"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="text-gray-600">Quantos resultados por busca</span>
+            <select
+              value={perPage}
+              onChange={(e) => setPerPage(Number(e.target.value))}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input
               type="checkbox"
               checked={withContacts}
               onChange={(e) => setWithContacts(e.target.checked)}
             />
-            <span className="text-gray-600">Buscar contatos do RH também</span>
+            <span className="text-gray-600">Buscar contatos do RH também (grátis)</span>
           </label>
         </div>
         <button

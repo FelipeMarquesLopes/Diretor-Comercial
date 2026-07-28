@@ -10,7 +10,10 @@ export async function POST(req: Request) {
   let body: {
     locations?: string[];
     keywords?: string[];
+    notKeywords?: string[];
+    name?: string;
     minEmployees?: number;
+    maxEmployees?: number;
     perPage?: number;
     withContacts?: boolean;
   };
@@ -35,7 +38,10 @@ export async function POST(req: Request) {
     orgs = await searchCompanies({
       locations: body.locations,
       keywords: body.keywords,
+      notKeywords: body.notKeywords,
+      name: body.name,
       minEmployees: body.minEmployees ?? 100,
+      maxEmployees: body.maxEmployees,
       perPage: body.perPage ?? 25,
     });
   } catch (err) {
