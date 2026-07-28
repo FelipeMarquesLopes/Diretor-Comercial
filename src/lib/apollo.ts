@@ -140,6 +140,7 @@ export async function searchHrContacts(
     page: 1,
     per_page: perPage,
     q_organization_domains_list: [organizationDomain],
+    person_seniorities: ["director", "manager", "head", "vp", "c_suite"],
     person_titles: [
       "Human Resources",
       "HR",
@@ -148,14 +149,16 @@ export async function searchHrContacts(
       "Gente e Gestão",
       "Diretor de RH",
       "Gerente de RH",
-      "Health",
+      "Diretor de Recursos Humanos",
+      "Gerente de Recursos Humanos",
       "Benefits",
       "Benefícios",
     ],
   };
 
+  // Endpoint NOVO de busca de pessoas (o /mixed_people/search foi descontinuado).
   const data = await apolloPost<{ people?: RawPerson[]; contacts?: RawPerson[] }>(
-    "/mixed_people/search",
+    "/mixed_people/api_search",
     body,
   );
 
