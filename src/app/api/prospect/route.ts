@@ -3,13 +3,6 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { searchCompanies, searchDecisionMakers } from "@/lib/apollo";
 import { qualifyCompany } from "@/lib/qualify";
 
-// Um decisor é "contatável" quando o Apollo tem um e-mail para ele (verified,
-// likely, unverified...). Só "unavailable"/vazio é que não dá para revelar.
-function isContactable(emailStatus: string | null): boolean {
-  const s = (emailStatus ?? "").toLowerCase();
-  return s !== "" && s !== "unavailable";
-}
-
 // POST /api/prospect
 // Busca empresas no Apollo, qualifica, e persiste no banco (com decisores).
 // Body: { locations?, keywords?, minEmployees?, perPage?, withContacts?,
@@ -24,9 +17,13 @@ export async function POST(req: Request) {
     maxEmployees?: number;
     perPage?: number;
     withContacts?: boolean;
-    // Quando true (padrão), só salva empresas que TÊM e-mail de decisor para
-    // contatar — as sem e-mail são descartadas para não poluir a lista.
-    onlyWithEmail?: boolean;
+    // Quando true (padrão), só salva empresas que TÊM um decisor encontrado
+    // (nome + cargo, com quem dá para revelar o e-mail depois). As sem nenhum
+    // decisor são descartadas para não poluir a lista.
+    // OBS: o Apollo só CONFIRMA o e-mail ao revelar (1 crédito), então não dá
+    // para saber de graça se o e-mail existe — por isso filtramos por "tem
+    // decisor", e a revelação acontece no clique de "Abordar".
+    onlyWithContact?: boolean;
   };
   try {
     body = await req.json();
@@ -34,9 +31,9 @@ export async function POST(req: Request) {
     body = {};
   }
 
-  // "Só com e-mail" exige buscar os decisores (é de graça no Apollo).
-  const onlyWithEmail = body.onlyWithEmail !== false;
-  const withContacts = body.withContacts !== false || onlyWithEmail;
+  // "Só com decisor" exige buscar os decisores (é de graça no Apollo).
+  const onlyWithContact = body.onlyWithContact !== false;
+  const withContacts = body.withContacts !== false || onlyWithContact;
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -68,7 +65,7 @@ export async function POST(req: Request) {
 
   const results: { name: string; qualified: boolean; score: number }[] = [];
   let contatosDecisores = 0;
-  let puladasSemEmail = 0;
+  let puladasSemDecisor = 0;
   let avisoContatos: string | null = null;
   // Diagnóstico (para entender POR QUE uma empresa é descartada):
   let qualificadasSemDominio = 0; // Apollo não deu domínio -> não dá p/ buscar
@@ -97,12 +94,13 @@ export async function POST(req: Request) {
     }
     if (decisores.length > 0) empresasComDecisor++;
     decisoresEncontrados += decisores.length;
-    const temEmail = decisores.some((c) => isContactable(c.emailStatus));
+    const temDecisor = decisores.length > 0;
 
-    // 2) Filtro: se pedimos "só com e-mail" e a empresa qualificada não tem
-    //    NENHUM decisor com e-mail, nem salva — não polui a lista.
-    if (onlyWithEmail && q.qualified && !temEmail) {
-      puladasSemEmail++;
+    // 2) Filtro: se pedimos "só com decisor" e a empresa qualificada não tem
+    //    NENHUM decisor encontrado, nem salva — não polui a lista. (O e-mail
+    //    é confirmado depois, no "Abordar", que revela 1 crédito.)
+    if (onlyWithContact && q.qualified && !temDecisor) {
+      puladasSemDecisor++;
       continue;
     }
 
@@ -172,8 +170,8 @@ export async function POST(req: Request) {
     found: results.length,
     qualified,
     contatosDecisores,
-    puladasSemEmail,
-    onlyWithEmail,
+    puladasSemDecisor,
+    onlyWithContact,
     // Diagnóstico:
     qualificadasSemDominio,
     empresasComDecisor,

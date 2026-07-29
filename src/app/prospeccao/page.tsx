@@ -6,13 +6,8 @@ import { HOOK_LABELS, STATUS_LABELS } from "@/lib/types";
 
 type CompanyWithContacts = Company & { contacts: Contact[] };
 
-// O Apollo diz, na busca, se tem e-mail para a pessoa e o quão confiável é.
-// "verified"/"likely to engage" = tem e-mail bom para revelar.
-function emailReachable(status: string | null): boolean {
-  const s = (status ?? "").toLowerCase();
-  return s.includes("verified") || s.includes("likely");
-}
-// "unavailable" = o Apollo não tem e-mail nenhum (não vale gastar crédito).
+// Marcamos "unavailable" só DEPOIS de tentar revelar sem sucesso — aí sim o
+// Apollo não tem e-mail e não vale mais gastar crédito com este contato.
 function emailUnavailable(status: string | null): boolean {
   return (status ?? "").toLowerCase() === "unavailable";
 }
@@ -31,7 +26,7 @@ export default function Prospeccao() {
   const [minEmployees, setMinEmployees] = useState(100);
   const [maxEmployees, setMaxEmployees] = useState<string>("");
   const [perPage, setPerPage] = useState(25);
-  const [onlyWithEmail, setOnlyWithEmail] = useState(true);
+  const [onlyWithContact, setOnlyWithContact] = useState(true);
 
   async function loadCompanies() {
     const r = await fetch("/api/companies?status=qualificado&category=empresa");
@@ -78,7 +73,7 @@ export default function Prospeccao() {
           minEmployees,
           maxEmployees: maxEmployees.trim() ? Number(maxEmployees) : undefined,
           perPage,
-          onlyWithEmail,
+          onlyWithContact,
         }),
       });
       const d = await r.json();
@@ -87,8 +82,8 @@ export default function Prospeccao() {
       } else {
         let m = `${d.qualified} empresa(s) com decisor para contatar`;
         m += ` · ${d.contatosDecisores ?? 0} decisor(es)`;
-        if (onlyWithEmail && d.puladasSemEmail) {
-          m += ` · ${d.puladasSemEmail} descartada(s) por não ter e-mail`;
+        if (onlyWithContact && d.puladasSemDecisor) {
+          m += ` · ${d.puladasSemDecisor} descartada(s) sem decisor`;
         }
         m += ".";
         // Diagnóstico quando ninguém passou: mostra ONDE o funil vazou.
@@ -226,12 +221,12 @@ export default function Prospeccao() {
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input
               type="checkbox"
-              checked={onlyWithEmail}
-              onChange={(e) => setOnlyWithEmail(e.target.checked)}
+              checked={onlyWithContact}
+              onChange={(e) => setOnlyWithContact(e.target.checked)}
             />
             <span className="text-gray-600">
-              Só trazer empresas com e-mail de decisor disponível (RH, dono,
-              diretor, sócio) — recomendado
+              Só trazer empresas com decisor encontrado — RH, dono, diretor,
+              sócio (o e-mail é revelado ao Abordar) — recomendado
             </span>
           </label>
         </div>
@@ -396,13 +391,13 @@ function CompanyCard({
                   <div className="text-xs text-gray-500">
                     {c.email ? (
                       <span className="text-brand-700">{c.email}</span>
-                    ) : emailReachable(c.email_status) ? (
-                      <span className="text-green-700">
-                        e-mail disponível ✓ (clique em Revelar)
+                    ) : emailUnavailable(c.email_status) ? (
+                      <span className="italic text-gray-400">
+                        sem e-mail no Apollo (já tentamos revelar)
                       </span>
                     ) : (
-                      <span className="italic text-gray-400">
-                        Apollo não tem e-mail deste contato
+                      <span className="italic text-gray-500">
+                        e-mail revelado ao Abordar (1 crédito)
                       </span>
                     )}
                     {c.phone ? ` · ${c.phone}` : ""}
