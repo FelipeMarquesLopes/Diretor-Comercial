@@ -70,9 +70,15 @@ export async function POST(req: Request) {
   let contatosDecisores = 0;
   let puladasSemEmail = 0;
   let avisoContatos: string | null = null;
+  // Diagnóstico (para entender POR QUE uma empresa é descartada):
+  let qualificadasSemDominio = 0; // Apollo não deu domínio -> não dá p/ buscar
+  let empresasComDecisor = 0; // acharam ao menos 1 decisor
+  let decisoresEncontrados = 0; // total de decisores achados (antes do filtro)
 
   for (const org of orgs) {
     const q = qualifyCompany(org);
+
+    if (q.qualified && !org.domain) qualificadasSemDominio++;
 
     // 1) Busca os DECISORES (RH, dono, diretor, sócio) — de graça no Apollo,
     //    já traz o STATUS do e-mail de cada um (sem revelar/gastar crédito).
@@ -89,6 +95,8 @@ export async function POST(req: Request) {
         }
       }
     }
+    if (decisores.length > 0) empresasComDecisor++;
+    decisoresEncontrados += decisores.length;
     const temEmail = decisores.some((c) => isContactable(c.emailStatus));
 
     // 2) Filtro: se pedimos "só com e-mail" e a empresa qualificada não tem
@@ -160,11 +168,16 @@ export async function POST(req: Request) {
 
   const qualified = results.filter((r) => r.qualified).length;
   return NextResponse.json({
+    encontradasNoApollo: orgs.length,
     found: results.length,
     qualified,
     contatosDecisores,
     puladasSemEmail,
     onlyWithEmail,
+    // Diagnóstico:
+    qualificadasSemDominio,
+    empresasComDecisor,
+    decisoresEncontrados,
     avisoContatos,
     results,
   });

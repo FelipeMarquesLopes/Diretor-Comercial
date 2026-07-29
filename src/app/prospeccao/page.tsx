@@ -91,6 +91,14 @@ export default function Prospeccao() {
           m += ` · ${d.puladasSemEmail} descartada(s) por não ter e-mail`;
         }
         m += ".";
+        // Diagnóstico quando ninguém passou: mostra ONDE o funil vazou.
+        if ((d.qualified ?? 0) === 0) {
+          m +=
+            ` [diagnóstico: ${d.encontradasNoApollo ?? 0} achadas no Apollo · ` +
+            `${d.qualificadasSemDominio ?? 0} sem domínio · ` +
+            `${d.empresasComDecisor ?? 0} com decisor · ` +
+            `${d.decisoresEncontrados ?? 0} decisores no total]`;
+        }
         if (d.avisoContatos) m += ` ⚠️ Decisores: ${d.avisoContatos}`;
         setMsg(m);
         await loadCompanies();
