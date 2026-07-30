@@ -270,6 +270,8 @@ function CompanyCard({
   const [state, setState] = useState<"idle" | "gerando" | "ok" | "erro">("idle");
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cnpj, setCnpj] = useState("");
+  const [showCnpj, setShowCnpj] = useState(false);
 
   // "Abordar": revela o e-mail (1 crédito) + escreve + entra no follow-up.
   async function abordar() {
@@ -330,6 +332,43 @@ function CompanyCard({
       if (d.error) setNote(`Erro ao revelar: ${d.error}`);
       else if (!d.revealed) setNote("O Apollo não tinha e-mail/telefone deste contato.");
       onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Reforço grátis: puxa o e-mail registrado no CNPJ (Receita), sem Apollo.
+  async function puxarCnpj() {
+    if (!cnpj.trim()) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await fetch(`/api/companies/${company.id}/cnpj-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cnpj }),
+      });
+      const d = await r.json();
+      if (d.error) {
+        setState("erro");
+        setNote(d.error);
+      } else if (!d.email) {
+        setState("erro");
+        setNote(
+          `${d.razaoSocial ?? "Empresa"} (${[d.municipio, d.uf].filter(Boolean).join("/")}) — ${d.aviso ?? "sem e-mail na Receita."}`,
+        );
+      } else {
+        setState("ok");
+        setNote(
+          `E-mail do CNPJ: ${d.email} — ${d.razaoSocial ?? ""} adicionado como contato. Já dá para Abordar.`,
+        );
+        setCnpj("");
+        setShowCnpj(false);
+      }
+      onChanged();
+    } catch (e) {
+      setState("erro");
+      setNote(String(e));
     } finally {
       setBusy(false);
     }
@@ -418,6 +457,51 @@ function CompanyCard({
           </div>
         </div>
       )}
+
+      {/* Reforço grátis: e-mail do CNPJ (Receita), quando o Apollo não tem */}
+      <div className="mt-3">
+        {!showCnpj ? (
+          <button
+            onClick={() => setShowCnpj(true)}
+            disabled={busy}
+            className="text-xs text-gray-500 underline hover:text-gray-700 disabled:opacity-50"
+          >
+            + Puxar e-mail do CNPJ (Receita, grátis)
+          </button>
+        ) : (
+          <div className="rounded-md border border-gray-100 bg-gray-50 p-2">
+            <p className="mb-1 text-xs text-gray-500">
+              Cole o CNPJ desta empresa (acha no Google/site). Puxamos o e-mail
+              registrado na Receita — sem gastar crédito do Apollo.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={cnpj}
+                onChange={(e) => setCnpj(e.target.value)}
+                placeholder="00.000.000/0000-00"
+                className="w-48 rounded-md border border-gray-300 px-2 py-1 text-sm"
+              />
+              <button
+                onClick={puxarCnpj}
+                disabled={busy || !cnpj.trim()}
+                className="rounded-md border border-brand-300 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+              >
+                {busy ? "Consultando…" : "Puxar e-mail"}
+              </button>
+              <button
+                onClick={() => {
+                  setShowCnpj(false);
+                  setCnpj("");
+                }}
+                disabled={busy}
+                className="text-xs text-gray-400 underline hover:text-gray-600"
+              >
+                cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <select
