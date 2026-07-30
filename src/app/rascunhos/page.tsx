@@ -139,8 +139,36 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
           <p className="text-xs text-gray-500">
             {draft.channel === "email" ? "E-mail" : "WhatsApp"} ·{" "}
             {HOOK_LABELS[draft.hook]}
-            {draft.contacts?.name ? ` · para ${draft.contacts.name}` : ""}
           </p>
+          {/* Destinatário — para o CEO ver PRA QUEM vai antes de disparar */}
+          {draft.channel === "email" ? (
+            draft.contacts?.email ? (
+              <p className="mt-1 text-sm">
+                <span className="text-gray-500">Para: </span>
+                <span className="font-medium text-brand-700">
+                  {draft.contacts.email}
+                </span>
+                {draft.contacts?.name && (
+                  <span className="text-xs text-gray-500">
+                    {" "}
+                    ({draft.contacts.name}
+                    {draft.contacts.title ? ` · ${draft.contacts.title}` : ""})
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p className="mt-1 text-sm font-medium text-red-600">
+                ⚠️ Sem e-mail do destinatário — revele pelo &quot;Abordar&quot;
+                (empresa) ou cadastre o e-mail (operadora) antes de enviar.
+              </p>
+            )
+          ) : (
+            <p className="mt-1 text-xs text-gray-500">
+              {draft.contacts?.name
+                ? `Para: ${draft.contacts.name}`
+                : "Destinatário no WhatsApp"}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span
