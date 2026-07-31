@@ -17,8 +17,15 @@ export function middleware(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
 
   // 1. Robô de follow-up com o segredo do cron passa direto.
+  //    Aceita o segredo de duas formas (o que for mais fácil no cron):
+  //      a) header  Authorization: Bearer <CRON_SECRET>
+  //      b) na URL  /api/followup/run?key=<CRON_SECRET>
   if (pathname === "/api/followup/run" && process.env.CRON_SECRET) {
-    if (authHeader === `Bearer ${process.env.CRON_SECRET}`) {
+    const keyParam = req.nextUrl.searchParams.get("key");
+    if (
+      authHeader === `Bearer ${process.env.CRON_SECRET}` ||
+      keyParam === process.env.CRON_SECRET
+    ) {
       return NextResponse.next();
     }
   }
