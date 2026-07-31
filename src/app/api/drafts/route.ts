@@ -20,7 +20,9 @@ export async function GET(req: Request) {
   }
   let query = supabase
     .from("drafts")
-    .select("*, companies(name, industry, city, state), contacts(name, title, email)")
+    .select(
+      "*, companies(name, industry, city, state), contacts(name, title, email), sequences(next_action_at, status, resume_at)",
+    )
     .order("created_at", { ascending: false })
     .limit(200);
 

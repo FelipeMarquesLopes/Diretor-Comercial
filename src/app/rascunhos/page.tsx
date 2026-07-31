@@ -7,7 +7,36 @@ import { HOOK_LABELS } from "@/lib/types";
 type DraftRow = Draft & {
   companies: { name: string; industry: string | null; city: string | null } | null;
   contacts: { name: string; title: string | null; email: string | null } | null;
+  sequences: {
+    next_action_at: string | null;
+    status: string;
+    resume_at: string | null;
+  } | null;
 };
+
+// Data + hora no formato brasileiro (fuso de São Paulo). Ex: 31/07/2026 14:20
+function fmtDataHora(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// Só a data (sem hora). Ex: 03/08/2026
+function fmtData(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
 
 const FILTERS: { key: DraftStatus | "todos"; label: string }[] = [
   { key: "pendente", label: "Pendentes" },
@@ -169,6 +198,47 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
                 : "Destinatário no WhatsApp"}
             </p>
           )}
+
+          {/* Assunto — para distinguir (nova operadora, relacionamento, etc.).
+              No pendente o assunto já aparece editável abaixo. */}
+          {draft.channel === "email" &&
+            draft.subject &&
+            draft.status !== "pendente" && (
+              <p className="mt-1 text-sm">
+                <span className="text-gray-500">Assunto: </span>
+                <span className="font-medium text-gray-800">
+                  {draft.subject}
+                </span>
+              </p>
+            )}
+
+          {/* Data + hora do envio */}
+          {draft.sent_at && (
+            <p className="mt-1 text-xs font-medium text-blue-700">
+              📤 Enviado em {fmtDataHora(draft.sent_at)}
+            </p>
+          )}
+
+          {/* Próximo envio / situação da sequência de follow-up */}
+          {draft.sequences?.status === "aguardando_ceo" && (
+            <p className="mt-0.5 text-xs font-medium text-green-700">
+              ✅ Teve resposta — aguardando você (follow-up automático pausado)
+            </p>
+          )}
+          {draft.sequences?.status === "pausada_negativa" &&
+            draft.sequences.resume_at && (
+              <p className="mt-0.5 text-xs text-gray-500">
+                ⏸ Pausado (resposta negativa) — retoma em{" "}
+                {fmtData(draft.sequences.resume_at)}
+              </p>
+            )}
+          {draft.sequences?.status === "ativa" &&
+            draft.sequences.next_action_at && (
+              <p className="mt-0.5 text-xs font-medium text-amber-700">
+                🔁 Próximo envio (se ninguém responder):{" "}
+                {fmtData(draft.sequences.next_action_at)}
+              </p>
+            )}
         </div>
         <div className="flex items-center gap-2">
           <span
