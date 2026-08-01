@@ -14,6 +14,7 @@ export async function PATCH(
     notes?: string;
     operatorType?: string;
     briefing?: string;
+    ccEmails?: string;
     contactName?: string;
     email?: string;
     phone?: string;
@@ -40,6 +41,8 @@ export async function PATCH(
   if (body.name !== undefined) companyUpdate.name = body.name;
   if (body.notes !== undefined) companyUpdate.notes = body.notes;
   if (body.briefing !== undefined) companyUpdate.briefing = body.briefing;
+  if (body.ccEmails !== undefined)
+    companyUpdate.cc_emails = body.ccEmails.trim() || null;
   if (body.operatorType !== undefined)
     companyUpdate.operator_type = body.operatorType === "ativa" ? "ativa" : "nova";
   if (Object.keys(companyUpdate).length > 0) {

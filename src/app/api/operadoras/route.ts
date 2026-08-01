@@ -38,6 +38,7 @@ export async function POST(req: Request) {
     notes?: string;
     operatorType?: string;
     briefing?: string;
+    ccEmails?: string;
     generateNow?: boolean;
   };
   try {
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
       category: "operadora",
       operator_type: body.operatorType === "ativa" ? "ativa" : "nova",
       briefing: body.briefing ?? null,
+      cc_emails: body.ccEmails?.trim() || null,
       name: body.name,
       status: "qualificado",
       qualified: true,

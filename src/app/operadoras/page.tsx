@@ -23,6 +23,7 @@ export default function Operadoras() {
   const [briefing, setBriefing] = useState("");
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
+  const [ccEmails, setCcEmails] = useState("");
   const [phone, setPhone] = useState("");
   const [isWhatsapp, setIsWhatsapp] = useState(true);
   const [notes, setNotes] = useState("");
@@ -52,6 +53,7 @@ export default function Operadoras() {
           briefing,
           contactName,
           email,
+          ccEmails,
           phone,
           isWhatsapp,
           notes,
@@ -66,6 +68,7 @@ export default function Operadoras() {
         setBriefing("");
         setContactName("");
         setEmail("");
+        setCcEmails("");
         setPhone("");
         setNotes("");
         setFiltro(operatorType);
@@ -124,13 +127,27 @@ export default function Operadoras() {
             />
           </label>
           <label className="text-sm">
-            <span className="text-gray-600">E-mail</span>
+            <span className="text-gray-600">E-mail (destinatário principal)</span>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
             />
+          </label>
+          <label className="text-sm sm:col-span-2">
+            <span className="text-gray-600">
+              Em cópia (CC) — opcional
+            </span>
+            <input
+              value={ccEmails}
+              onChange={(e) => setCcEmails(e.target.value)}
+              placeholder="outros e-mails, separados por vírgula (ex: joao@x.com, ana@x.com)"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+            />
+            <span className="mt-1 block text-xs text-gray-400">
+              Manda a apresentação para 2-3 pessoas de uma vez, num disparo só.
+            </span>
           </label>
           <label className="text-sm">
             <span className="text-gray-600">Telefone / WhatsApp</span>
@@ -250,6 +267,7 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
   const [eBriefing, setEBriefing] = useState(op.briefing ?? "");
   const [eContact, setEContact] = useState(contact?.name ?? "");
   const [eEmail, setEEmail] = useState(contact?.email ?? "");
+  const [eCcEmails, setECcEmails] = useState(op.cc_emails ?? "");
   const [ePhone, setEPhone] = useState(contact?.phone ?? "");
   const [eWhats, setEWhats] = useState(contact?.is_whatsapp ?? false);
   const [eNotes, setENotes] = useState(op.notes ?? "");
@@ -266,6 +284,7 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
           briefing: eBriefing,
           contactName: eContact,
           email: eEmail,
+          ccEmails: eCcEmails,
           phone: ePhone,
           isWhatsapp: eWhats,
           notes: eNotes,
@@ -405,10 +424,19 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
               />
             </label>
             <label className="text-xs text-gray-600">
-              E-mail
+              E-mail (destinatário principal)
               <input
                 value={eEmail}
                 onChange={(e) => setEEmail(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs text-gray-600 sm:col-span-2">
+              Em cópia (CC) — opcional
+              <input
+                value={eCcEmails}
+                onChange={(e) => setECcEmails(e.target.value)}
+                placeholder="outros e-mails, separados por vírgula"
                 className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               />
             </label>

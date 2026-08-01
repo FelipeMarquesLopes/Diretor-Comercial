@@ -70,12 +70,26 @@ export async function sendEmail(opts: {
   to: string;
   subject: string;
   text: string;
+  // E-mails extras em cópia (ex: outras pessoas da operadora). Opcional.
+  extraCc?: string[];
 }): Promise<void> {
   const { user, fromName, cc } = cfg();
+  // Monta a cópia: e-mail de monitoramento do CEO + extras informados.
+  // Remove duplicatas e nunca repete o próprio destinatário.
+  const seen = new Set<string>([opts.to.toLowerCase()]);
+  const ccList: string[] = [];
+  for (const e of [cc, ...(opts.extraCc ?? [])]) {
+    const addr = (e ?? "").trim();
+    if (!addr) continue;
+    const key = addr.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ccList.push(addr);
+  }
   await getTransporter().sendMail({
     from: `${fromName} <${user}>`,
     to: opts.to,
-    cc: cc && cc !== opts.to ? cc : undefined, // CEO em cópia p/ acompanhar
+    cc: ccList.length > 0 ? ccList : undefined, // CEO + extras em cópia
     subject: opts.subject || "(sem assunto)",
     text: opts.text, // fallback em texto puro
     html: toHtml(opts.text), // versão com a fonte Arial 13

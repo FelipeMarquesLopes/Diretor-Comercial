@@ -66,10 +66,10 @@ export async function PATCH(
           { status: 400 },
         );
       }
-      // Busca o destinatário e o conteúdo antes de enviar.
+      // Busca o destinatário, o conteúdo e os CCs opcionais antes de enviar.
       const { data: pre } = await supabase
         .from("drafts")
-        .select("subject, body, contacts(email)")
+        .select("subject, body, contacts(email), companies(cc_emails)")
         .eq("id", id)
         .single();
       const to = (pre?.contacts as { email?: string } | null)?.email;
@@ -79,11 +79,19 @@ export async function PATCH(
           { status: 400 },
         );
       }
+      // CCs opcionais (informados no cadastro): separados por vírgula/;/espaço.
+      const ccRaw =
+        (pre?.companies as { cc_emails?: string } | null)?.cc_emails ?? "";
+      const extraCc = ccRaw
+        .split(/[\s,;]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.includes("@"));
       try {
         await sendEmail({
           to,
           subject: (pre?.subject as string) ?? "",
           text: (pre?.body as string) ?? "",
+          extraCc,
         });
       } catch (err) {
         return NextResponse.json(

@@ -61,6 +61,7 @@ export interface Company {
   category: PartnerCategory;
   operator_type: OperatorType;
   briefing: string | null;
+  cc_emails: string | null;
   apollo_id: string | null;
   name: string;
   domain: string | null;

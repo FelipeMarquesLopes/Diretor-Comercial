@@ -5,7 +5,12 @@ import type { Draft, DraftStatus } from "@/lib/types";
 import { HOOK_LABELS } from "@/lib/types";
 
 type DraftRow = Draft & {
-  companies: { name: string; industry: string | null; city: string | null } | null;
+  companies: {
+    name: string;
+    industry: string | null;
+    city: string | null;
+    cc_emails: string | null;
+  } | null;
   contacts: { name: string; title: string | null; email: string | null } | null;
   sequences: {
     next_action_at: string | null;
@@ -196,6 +201,13 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
               {draft.contacts?.name
                 ? `Para: ${draft.contacts.name}`
                 : "Destinatário no WhatsApp"}
+            </p>
+          )}
+
+          {/* Em cópia (CC) — outras pessoas que também recebem o e-mail. */}
+          {draft.channel === "email" && draft.companies?.cc_emails && (
+            <p className="mt-0.5 text-xs text-gray-500">
+              Em cópia: {draft.companies.cc_emails}
             </p>
           )}
 
