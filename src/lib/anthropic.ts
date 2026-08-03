@@ -363,7 +363,12 @@ export async function analyzeContract(opts: {
 
   const response = await getClient().messages.create({
     model: MODEL,
-    max_tokens: 2000,
+    // Análise de contrato é complexa e o modelo usa "pensamento estendido".
+    // Damos um orçamento fixo para o raciocínio e ainda sobra espaço para a
+    // resposta (max_tokens > budget). Total 7000 fica abaixo do teto de saída
+    // de todos os modelos.
+    max_tokens: 7000,
+    thinking: { type: "enabled", budget_tokens: 5000 },
     system: ANALYSIS_SYSTEM,
     messages: [
       {
