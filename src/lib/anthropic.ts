@@ -305,7 +305,12 @@ visão de um ADVOGADO (leitura da cláusula) e de um SETOR COMERCIAL (estratégi
 de reajuste). Sua análise é um APOIO à decisão do CEO — não é parecer jurídico \
 definitivo.
 
-Leia o contrato em anexo e identifique a CLÁUSULA DE REAJUSTE. Determine:
+Podem ser anexados VÁRIOS documentos: o CONTRATO ORIGINAL e seus ADENDOS/\
+ADITIVOS (extensões, alterações ao longo do tempo). Considere TODOS em conjunto: \
+um adendo mais recente PREVALECE sobre o contrato original na parte que ele \
+altera. Baseie a cláusula de reajuste na versão mais atual/vigente.
+
+Leia os documentos em anexo e identifique a CLÁUSULA DE REAJUSTE vigente. Determine:
 1. O ÍNDICE/critério de reajuste previsto (ex: IPCA, IGP-M, percentual fixo, \
 negociação anual) e o percentual que faz sentido pleitear com base nele.
 2. A JANELA/DATA ideal para enviar o pedido de reajuste (ex: data-base/aniversário \
@@ -331,16 +336,30 @@ export interface ContractAnalysis {
  * cláusula, percentual/índice sugerido, janela ideal e um parecer curto.
  */
 export async function analyzeContract(opts: {
-  pdfBase64: string;
+  pdfs: { base64: string; name: string }[];
   operadora: string;
   briefing?: string | null;
 }): Promise<ContractAnalysis> {
+  const lista = opts.pdfs
+    .map((p, i) => `${i + 1}) ${p.name}`)
+    .join("\n");
   const userText =
     `Operadora: ${opts.operadora}.\n` +
+    `Documentos anexados (nesta ordem — considere original + adendos/aditivos ` +
+    `em conjunto, o mais recente prevalece):\n${lista}\n` +
     (opts.briefing?.trim()
       ? `Contexto/orientação do CEO: """${opts.briefing.trim()}"""\n`
       : "") +
-    `Analise o contrato anexado e devolva o parecer no formato pedido.`;
+    `Analise os documentos e devolva o parecer no formato pedido.`;
+
+  const docBlocks = opts.pdfs.map((p) => ({
+    type: "document" as const,
+    source: {
+      type: "base64" as const,
+      media_type: "application/pdf" as const,
+      data: p.base64,
+    },
+  }));
 
   const response = await getClient().messages.create({
     model: MODEL,
@@ -349,17 +368,7 @@ export async function analyzeContract(opts: {
     messages: [
       {
         role: "user",
-        content: [
-          {
-            type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
-              data: opts.pdfBase64,
-            },
-          },
-          { type: "text", text: userText },
-        ],
+        content: [...docBlocks, { type: "text", text: userText }],
       },
     ],
   });

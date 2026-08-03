@@ -186,21 +186,25 @@ function ReajusteCard({
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function analisarContrato() {
-    const file = fileRef.current?.files?.[0];
-    if (!file) {
-      setNote("Escolha o arquivo do contrato (PDF) primeiro.");
+    const files = fileRef.current?.files;
+    if (!files || files.length === 0) {
+      setNote("Escolha o(s) arquivo(s) do contrato (PDF) primeiro.");
       return;
     }
-    if (file.size > 4 * 1024 * 1024) {
+    let total = 0;
+    for (const f of Array.from(files)) total += f.size;
+    if (total > 4 * 1024 * 1024) {
       setNote(
-        "⚠️ Esse PDF é grande (>4MB) e pode falhar no upload. Se der erro, me avise que ajusto o envio.",
+        "⚠️ Os PDFs somados passam de 4MB e o upload pode falhar. Se der erro, me avise que ajusto o envio.",
       );
     }
     setBusy(true);
-    setNote("Analisando o contrato com a IA… (pode levar até 1 min)");
+    setNote(
+      `Analisando ${files.length} documento(s) com a IA… (pode levar até 1 min)`,
+    );
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      for (const f of Array.from(files)) fd.append("files", f);
       const r = await fetch(`/api/reajustes/${row.id}/contract`, {
         method: "POST",
         body: fd,
@@ -295,14 +299,15 @@ function ReajusteCard({
       <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 p-2">
         <p className="mb-1 text-xs text-gray-500">
           {temAnalise
-            ? "Reanalisar com outro contrato (PDF):"
-            : "Anexe o contrato (PDF) para a IA analisar o reajuste:"}
+            ? "Reanalisar: anexe o contrato e os adendos/aditivos (pode selecionar vários PDFs):"
+            : "Anexe o contrato e os adendos/aditivos (pode selecionar vários PDFs de uma vez):"}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <input
             ref={fileRef}
             type="file"
             accept="application/pdf,.pdf"
+            multiple
             className="text-xs"
           />
           <button
