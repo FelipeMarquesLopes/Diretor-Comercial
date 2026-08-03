@@ -43,7 +43,8 @@ export async function POST(
   // Garante o bucket (privado). Se já existir, o erro é ignorado.
   await supabase.storage.createBucket(BUCKET, { public: false });
 
-  const uploads: { path: string; token: string; name: string }[] = [];
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const uploads: { path: string; signedUrl: string; name: string }[] = [];
   for (let i = 0; i < names.length; i++) {
     const safe = names[i].replace(/[^\w.\-]+/g, "_");
     const path = `${id}/${Date.now()}-${i}-${safe}`;
@@ -56,7 +57,11 @@ export async function POST(
         { status: 502 },
       );
     }
-    uploads.push({ path: data.path, token: data.token, name: names[i] });
+    // URL absoluta (o token vai embutido) para o navegador dar PUT direto.
+    const signedUrl = data.signedUrl.startsWith("http")
+      ? data.signedUrl
+      : `${base}${data.signedUrl}`;
+    uploads.push({ path: data.path, signedUrl, name: names[i] });
   }
 
   return NextResponse.json({ uploads });

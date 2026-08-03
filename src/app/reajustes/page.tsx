@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Company, Contact } from "@/lib/types";
-import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 type ReajusteRow = Company & { contacts: Contact[] };
 
@@ -208,17 +207,21 @@ function ReajusteCard({
         setNote(`Erro: ${signData.error}`);
         return;
       }
-      const uploads: { path: string; token: string; name: string }[] =
+      const uploads: { path: string; signedUrl: string; name: string }[] =
         signData.uploads;
 
-      // 2) Sobe cada PDF DIRETO ao Storage (sem passar pela hospedagem).
-      const supabase = getBrowserSupabase();
+      // 2) Sobe cada PDF DIRETO ao Storage (PUT na URL assinada), sem passar
+      //    pela hospedagem e sem precisar de chave no navegador.
       for (let i = 0; i < files.length; i++) {
-        const { error } = await supabase.storage
-          .from("contratos")
-          .uploadToSignedUrl(uploads[i].path, uploads[i].token, files[i]);
-        if (error) {
-          setNote(`Erro ao enviar "${files[i].name}": ${error.message}`);
+        const put = await fetch(uploads[i].signedUrl, {
+          method: "PUT",
+          headers: { "content-type": "application/pdf", "x-upsert": "true" },
+          body: files[i],
+        });
+        if (!put.ok) {
+          setNote(
+            `Erro ao enviar "${files[i].name}" (código ${put.status}).`,
+          );
           return;
         }
       }
