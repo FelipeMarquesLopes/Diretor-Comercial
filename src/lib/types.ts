@@ -18,7 +18,12 @@ export type DraftChannel = "email" | "whatsapp";
 export type DraftStatus = "pendente" | "aprovado" | "rejeitado" | "enviado";
 
 // Categoria do parceiro — o mesmo sistema controla as 3 frentes.
-export type PartnerCategory = "operadora" | "empresa" | "escola" | "medico";
+export type PartnerCategory =
+  | "operadora"
+  | "empresa"
+  | "escola"
+  | "medico"
+  | "agenda_aberta";
 
 export type SequenceChannel = "email" | "whatsapp";
 
@@ -145,6 +150,7 @@ export const CATEGORY_LABELS: Record<PartnerCategory, string> = {
   empresa: "Empresa",
   escola: "Escola",
   medico: "Médico prescritor",
+  agenda_aberta: "Agenda Aberta",
 };
 
 export const SEQUENCE_STATUS_LABELS: Record<SequenceStatus, string> = {

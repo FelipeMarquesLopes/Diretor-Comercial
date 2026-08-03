@@ -24,6 +24,16 @@ Administrativo
 Tel: (11) 2382-4087
 WhatsApp: (11) 97695-0702`;
 
+// Unidades/regiões da MenthalHelp — sempre reforçadas no informativo de
+// "agenda aberta" para as operadoras.
+export const MENTHAL_UNITS = [
+  "Guarulhos",
+  "Zona Norte de SP (Tucuruvi)",
+  "Zona Sul de SP (Interlagos)",
+  "Bragança Paulista",
+  "Barueri (Alphaville)",
+];
+
 // Fonte padrão dos e-mails (pedido do CEO).
 export const EMAIL_FONT_FAMILY = "Arial, Helvetica, sans-serif";
 export const EMAIL_FONT_SIZE = "13px";

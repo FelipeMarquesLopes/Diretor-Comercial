@@ -2,7 +2,7 @@
 // Usados pelas rotas de API (nunca no navegador).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { generateDraft } from "./anthropic";
+import { generateDraft, generateAgendaInformativo } from "./anthropic";
 import { nextActionAt } from "./followup";
 import type {
   Company,
@@ -11,6 +11,45 @@ import type {
   Sequence,
   SequenceChannel,
 } from "./types";
+
+// Intervalo do informativo recorrente de "agenda aberta": 15 dias, para sempre.
+export const DIAS_AGENDA_ABERTA = 15;
+
+/**
+ * Gera um rascunho do informativo de "agenda aberta" (e-mail) para a operadora,
+ * escolhendo o melhor contato com e-mail. Não cria sequência: a recorrência é
+ * controlada por company.next_followup. Devolve se conseguiu gerar.
+ */
+export async function generateAgendaDraft(
+  supabase: SupabaseClient,
+  company: Company,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: contacts } = await supabase
+    .from("contacts")
+    .select("*")
+    .eq("company_id", company.id)
+    .limit(5);
+  const list = (contacts as Contact[] | null) ?? [];
+  const contact = list.find((c) => c.email) ?? list[0] ?? null;
+
+  let generated;
+  try {
+    generated = await generateAgendaInformativo({ company, contact });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro na IA" };
+  }
+
+  await supabase.from("drafts").insert({
+    company_id: company.id,
+    contact_id: contact?.id ?? null,
+    channel: "email",
+    hook: "nr1", // placeholder; o conteúdo é o informativo de agenda aberta
+    subject: generated.subject || null,
+    body: generated.body,
+    status: "pendente",
+  });
+  return { ok: true };
+}
 
 /**
  * Garante que exista uma sequência (ativa) para o parceiro em cada canal.

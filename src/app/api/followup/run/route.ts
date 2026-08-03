@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { generateDraftForSequence } from "@/lib/outreach";
+import {
+  DIAS_AGENDA_ABERTA,
+  generateAgendaDraft,
+  generateDraftForSequence,
+} from "@/lib/outreach";
 import { checkInbox, isInboxConfigured } from "@/lib/inbox";
 import type { Company, Sequence } from "@/lib/types";
+
+// Data (YYYY-MM-DD) daqui a N dias.
+function emDias(dias: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
 
 // Este endpoint pode demorar (lê e-mails + IA). Damos mais tempo.
 export const maxDuration = 60;
@@ -86,10 +97,40 @@ async function run() {
     if (res.ok) gerados++;
   }
 
+  // 3. Agenda Aberta: informativo recorrente a cada 15 dias, PARA SEMPRE
+  //    (independe de resposta). Só prepara um novo se não houver informativo
+  //    pendente da operadora (evita acúmulo se o CEO ainda não enviou).
+  const hoje = new Date().toISOString().slice(0, 10);
+  const { data: agendas } = await supabase
+    .from("companies")
+    .select("*")
+    .eq("category", "agenda_aberta")
+    .lte("next_followup", hoje);
+
+  let informativos = 0;
+  for (const c of (agendas as Company[] | null) ?? []) {
+    const { count } = await supabase
+      .from("drafts")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", c.id)
+      .eq("status", "pendente");
+    if ((count ?? 0) > 0) continue; // já tem um informativo aguardando envio
+
+    const res = await generateAgendaDraft(supabase, c);
+    if (res.ok) {
+      await supabase
+        .from("companies")
+        .update({ next_followup: emDias(DIAS_AGENDA_ABERTA) })
+        .eq("id", c.id);
+      informativos++;
+    }
+  }
+
   return NextResponse.json({
     respostas_lidas: respostas,
     positivas,
     reativadas,
     rascunhos_gerados: gerados,
+    informativos_agenda: informativos,
   });
 }

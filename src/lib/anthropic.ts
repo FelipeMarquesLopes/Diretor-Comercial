@@ -4,7 +4,7 @@
 // clique do CEO. (O WhatsApp, via API oficial, segue o funil aprovado.)
 
 import Anthropic from "@anthropic-ai/sdk";
-import { CLINIC_SERVICES, EMAIL_SIGNATURE } from "./branding";
+import { CLINIC_SERVICES, EMAIL_SIGNATURE, MENTHAL_UNITS } from "./branding";
 import type {
   Company,
   Contact,
@@ -193,6 +193,94 @@ Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
     subject: channel === "whatsapp" ? "" : (parsed.subject ?? ""),
     body,
   };
+}
+
+// --- Informativo recorrente de "Agenda Aberta" -----------------------------
+
+const AGENDA_SYSTEM = `Você é o assistente de RELACIONAMENTO da MenthalHelp, \
+clínica multidisciplinar de saúde mental e neurodesenvolvimento (forte \
+expertise em TEA/ABA), com mais de 3.000 pacientes/mês.
+
+Escreva o RASCUNHO de um E-MAIL INFORMATIVO, curto e caloroso, para uma \
+OPERADORA DE SAÚDE PARCEIRA, avisando que a MenthalHelp está com AGENDA ABERTA \
+para receber novos beneficiários. O objetivo é aumentar a visibilidade e \
+facilitar o direcionamento de pacientes. NÃO é cobrança nem venda, e NÃO exige \
+resposta — é um aviso de parceria.
+
+Diretrizes:
+- Português do Brasil. Tom MUITO HUMANO, cordial e de PARCERIA: uma clínica que \
+se coloca à disposição para ajudar a operadora com as demandas de atendimento \
+dos beneficiários.
+- Deixe claro que temos AGENDA ABERTA e capacidade para receber encaminhamentos.
+- CITE as unidades/regiões (todas as que forem informadas), pode variar a forma.
+- Incorpore com naturalidade o FOCO que o CEO pedir (ex: qual especialidade \
+está com agenda aberta).
+- VARIE o texto a cada envio: abertura, estrutura e fechamento diferentes. \
+NUNCA repita frases prontas nem pareça um modelo automático.
+- Curto (~120 a 150 palavras). Sem pressão, sem CAIXA ALTA, sem parecer robô.
+- NÃO escreva assinatura, nome, cargo, telefone, CNPJ nem lista de serviços — \
+o sistema adiciona automaticamente.
+- Termine se colocando à disposição (ex: "Seguimos à disposição para o que \
+precisarem.").
+
+FORMATO DE SAÍDA: responda SOMENTE com JSON válido, sem texto antes/depois e \
+sem blocos de código: {"subject": "<assunto>", "body": "<corpo>"}`;
+
+// Ângulos de abertura para forçar variação a cada envio.
+const AGENDA_ANGLES = [
+  "Abra agradecendo a parceria e a confiança de sempre.",
+  "Abra destacando o cuidado e o acolhimento aos beneficiários.",
+  "Abra pela novidade concreta: temos vagas/agenda aberta agora.",
+  "Abra pela capacidade de atendimento nas unidades.",
+  "Abra reforçando a disponibilidade para agilizar os encaminhamentos.",
+  "Abra valorizando o trabalho conjunto para atender melhor os beneficiários.",
+];
+
+/**
+ * Gera o informativo recorrente de "agenda aberta" para uma operadora parceira.
+ * Cada chamada tende a produzir um texto diferente (ângulo sorteado + instrução
+ * explícita de variar). Sempre reforça as unidades e incorpora a copy do CEO.
+ */
+export async function generateAgendaInformativo(opts: {
+  company: Company;
+  contact?: Contact | null;
+}): Promise<GeneratedDraft> {
+  const { company, contact } = opts;
+
+  const contactLine = contact
+    ? `Contato: ${contact.name}${contact.title ? `, ${contact.title}` : ""}.`
+    : "Contato específico não identificado — trate de forma cordial e geral.";
+
+  const briefingLine = company.briefing?.trim()
+    ? `\n\nFOCO QUE O CEO QUER COMUNICAR (incorpore com naturalidade):\n"""${company.briefing.trim()}"""`
+    : "";
+
+  const angle = AGENDA_ANGLES[Math.floor(Math.random() * AGENDA_ANGLES.length)];
+
+  const userPrompt = `Escreva o informativo de agenda aberta.
+
+Operadora parceira: ${company.name}.
+${contactLine}
+
+Unidades/regiões da MenthalHelp (reforce todas, pode variar a forma):
+- ${MENTHAL_UNITS.join("\n- ")}
+${briefingLine}
+
+Variação desta vez: ${angle}
+Lembre-se: precisa soar diferente de envios anteriores.
+
+Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
+
+  const parsed = parseJsonObject(
+    await ask(AGENDA_SYSTEM, userPrompt),
+  ) as Partial<GeneratedDraft>;
+  if (typeof parsed.body !== "string") {
+    throw new Error("A IA retornou JSON sem o campo 'body'.");
+  }
+
+  // Assinatura em todos os e-mails (unidades já entram no corpo pela IA).
+  const body = `${parsed.body.trim()}\n\n${EMAIL_SIGNATURE}`;
+  return { subject: parsed.subject ?? "MenthalHelp — agenda aberta", body };
 }
 
 // --- Leitura/classificação de respostas ------------------------------------

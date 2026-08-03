@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Draft, DraftStatus } from "@/lib/types";
-import { HOOK_LABELS } from "@/lib/types";
+import { CATEGORY_LABELS, HOOK_LABELS } from "@/lib/types";
 
 type DraftRow = Draft & {
   companies: {
@@ -10,6 +10,8 @@ type DraftRow = Draft & {
     industry: string | null;
     city: string | null;
     cc_emails: string | null;
+    category: string | null;
+    next_followup: string | null;
   } | null;
   contacts: { name: string; title: string | null; email: string | null } | null;
   sequences: {
@@ -35,6 +37,12 @@ function fmtDataHora(iso: string | null): string {
 // Só a data (sem hora). Ex: 03/08/2026
 function fmtData(iso: string | null): string {
   if (!iso) return "";
+  // Data pura (YYYY-MM-DD, ex: next_followup): formata sem fuso para não
+  // "voltar um dia" na conversão de horário.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  }
   return new Date(iso).toLocaleDateString("pt-BR", {
     timeZone: "America/Sao_Paulo",
     day: "2-digit",
@@ -172,7 +180,9 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
           </p>
           <p className="text-xs text-gray-500">
             {draft.channel === "email" ? "E-mail" : "WhatsApp"} ·{" "}
-            {HOOK_LABELS[draft.hook]}
+            {draft.companies?.category === "agenda_aberta"
+              ? CATEGORY_LABELS.agenda_aberta
+              : HOOK_LABELS[draft.hook]}
           </p>
           {/* Destinatário — para o CEO ver PRA QUEM vai antes de disparar */}
           {draft.channel === "email" ? (
@@ -249,6 +259,14 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
               <p className="mt-0.5 text-xs font-medium text-amber-700">
                 🔁 Próximo envio (se ninguém responder):{" "}
                 {fmtData(draft.sequences.next_action_at)}
+              </p>
+            )}
+          {/* Agenda Aberta: informativo recorrente a cada 15 dias. */}
+          {draft.companies?.category === "agenda_aberta" &&
+            draft.companies.next_followup && (
+              <p className="mt-0.5 text-xs font-medium text-amber-700">
+                🔁 Próximo informativo (a cada 15 dias):{" "}
+                {fmtData(draft.companies.next_followup)}
               </p>
             )}
         </div>
