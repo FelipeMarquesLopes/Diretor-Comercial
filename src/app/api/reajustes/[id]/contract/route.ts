@@ -9,14 +9,31 @@ export const maxDuration = 60;
 
 const BUCKET = "contratos";
 
-// POST /api/reajustes/[id]/contract  (multipart/form-data, campo "file")
-// Sobe o contrato (PDF) para o Storage, a IA analisa a cláusula de reajuste
-// (percentual + janela ideal + parecer) e gera o 1º rascunho do pedido.
+// POST /api/reajustes/[id]/contract   body: { paths: string[], names: string[] }
+// Os PDFs já foram subidos direto ao Storage (via /contract/sign). Aqui só
+// recebemos os caminhos, baixamos do Storage (sem limite de requisição), a IA
+// analisa a cláusula de reajuste (percentual + janela + parecer) e geramos o
+// 1º rascunho do pedido.
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  let body: { paths?: string[]; names?: string[] };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+  }
+  const paths = (body.paths ?? []).filter((p) => typeof p === "string");
+  const names = body.names ?? [];
+  if (paths.length === 0) {
+    return NextResponse.json(
+      { error: "Nenhum contrato para analisar." },
+      { status: 400 },
+    );
+  }
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -25,46 +42,6 @@ export async function POST(
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Configuração ausente" },
       { status: 500 },
-    );
-  }
-
-  let form: FormData;
-  try {
-    form = await req.formData();
-  } catch {
-    return NextResponse.json({ error: "Envio inválido" }, { status: 400 });
-  }
-  // Aceita 1 ou vários arquivos (contrato original + adendos/aditivos).
-  const files = [
-    ...form.getAll("files"),
-    ...form.getAll("file"),
-  ].filter((f): f is File => f instanceof File);
-  if (files.length === 0) {
-    return NextResponse.json(
-      { error: "Anexe pelo menos um contrato (PDF)." },
-      { status: 400 },
-    );
-  }
-  for (const f of files) {
-    if (f.type && !f.type.toLowerCase().includes("pdf")) {
-      return NextResponse.json(
-        { error: `"${f.name}" não é PDF. Anexe apenas PDFs.` },
-        { status: 400 },
-      );
-    }
-  }
-
-  const docs: { buf: Buffer; name: string }[] = [];
-  let total = 0;
-  for (const f of files) {
-    const buf = Buffer.from(await f.arrayBuffer());
-    total += buf.length;
-    docs.push({ buf, name: f.name || "contrato.pdf" });
-  }
-  if (total > 25 * 1024 * 1024) {
-    return NextResponse.json(
-      { error: "Os PDFs somados estão muito grandes (máx. ~25 MB no total)." },
-      { status: 413 },
     );
   }
 
@@ -77,30 +54,26 @@ export async function POST(
     return NextResponse.json({ error: "Operadora não encontrada" }, { status: 404 });
   }
 
-  // Garante o bucket (privado). Se já existir, o erro é ignorado.
-  await supabase.storage.createBucket(BUCKET, { public: false });
-
-  const paths: string[] = [];
-  for (const d of docs) {
-    const safeName = d.name.replace(/[^\w.\-]+/g, "_");
-    const path = `${id}/${Date.now()}-${safeName}`;
-    const up = await supabase.storage
-      .from(BUCKET)
-      .upload(path, d.buf, { contentType: "application/pdf", upsert: true });
-    if (up.error) {
+  // Baixa cada PDF do Storage e converte para base64 (para a IA).
+  const docs: { base64: string; name: string }[] = [];
+  for (let i = 0; i < paths.length; i++) {
+    const nome = names[i] || paths[i].split("/").pop() || "contrato.pdf";
+    const { data, error } = await supabase.storage.from(BUCKET).download(paths[i]);
+    if (error || !data) {
       return NextResponse.json(
-        { error: `Falha ao guardar "${d.name}": ${up.error.message}` },
+        { error: `Falha ao ler "${nome}" do armazenamento.` },
         { status: 502 },
       );
     }
-    paths.push(path);
+    const buf = Buffer.from(await data.arrayBuffer());
+    docs.push({ base64: buf.toString("base64"), name: nome });
   }
 
   // Análise da IA (advogado + comercial) com TODOS os documentos juntos.
   let analysis;
   try {
     analysis = await analyzeContract({
-      pdfs: docs.map((d) => ({ base64: d.buf.toString("base64"), name: d.name })),
+      pdfs: docs,
       operadora: company.name,
       briefing: company.briefing,
     });
@@ -125,7 +98,7 @@ export async function POST(
   await supabase.from("activities").insert({
     company_id: id,
     type: "analise",
-    description: `Contrato analisado pela IA. Percentual sugerido: ${analysis.percentual}. Janela: ${analysis.janela}.`,
+    description: `Contratos analisados pela IA (${docs.length}). Percentual sugerido: ${analysis.percentual}. Janela: ${analysis.janela}.`,
   });
 
   // Gera o 1º rascunho do pedido de reajuste (com o percentual analisado).

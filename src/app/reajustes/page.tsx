@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Company, Contact } from "@/lib/types";
+import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 type ReajusteRow = Company & { contacts: Contact[] };
 
@@ -186,35 +187,58 @@ function ReajusteCard({
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function analisarContrato() {
-    const files = fileRef.current?.files;
-    if (!files || files.length === 0) {
+    const files = fileRef.current?.files
+      ? Array.from(fileRef.current.files)
+      : [];
+    if (files.length === 0) {
       setNote("Escolha o(s) arquivo(s) do contrato (PDF) primeiro.");
       return;
     }
-    let total = 0;
-    for (const f of Array.from(files)) total += f.size;
-    if (total > 4 * 1024 * 1024) {
-      setNote(
-        "⚠️ Os PDFs somados passam de 4MB e o upload pode falhar. Se der erro, me avise que ajusto o envio.",
-      );
-    }
     setBusy(true);
-    setNote(
-      `Analisando ${files.length} documento(s) com a IA… (pode levar até 1 min)`,
-    );
     try {
-      const fd = new FormData();
-      for (const f of Array.from(files)) fd.append("files", f);
+      // 1) Pede URLs de upload assinadas (uma por arquivo).
+      setNote(`Enviando ${files.length} documento(s)…`);
+      const signRes = await fetch(`/api/reajustes/${row.id}/contract/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names: files.map((f) => f.name) }),
+      });
+      const signData = await signRes.json();
+      if (signData.error) {
+        setNote(`Erro: ${signData.error}`);
+        return;
+      }
+      const uploads: { path: string; token: string; name: string }[] =
+        signData.uploads;
+
+      // 2) Sobe cada PDF DIRETO ao Storage (sem passar pela hospedagem).
+      const supabase = getBrowserSupabase();
+      for (let i = 0; i < files.length; i++) {
+        const { error } = await supabase.storage
+          .from("contratos")
+          .uploadToSignedUrl(uploads[i].path, uploads[i].token, files[i]);
+        if (error) {
+          setNote(`Erro ao enviar "${files[i].name}": ${error.message}`);
+          return;
+        }
+      }
+
+      // 3) Pede a análise (só os caminhos — payload pequeno).
+      setNote("Analisando os documentos com a IA… (pode levar até 1 min)");
       const r = await fetch(`/api/reajustes/${row.id}/contract`, {
         method: "POST",
-        body: fd,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paths: uploads.map((u) => u.path),
+          names: files.map((f) => f.name),
+        }),
       });
       const d = await r.json();
       if (d.error) {
         setNote(`Erro: ${d.error}`);
       } else {
         setNote(
-          "✅ Contrato analisado e rascunho do pedido gerado — veja em Rascunhos.",
+          "✅ Contratos analisados e rascunho do pedido gerado — veja em Rascunhos.",
         );
         onChanged();
       }
