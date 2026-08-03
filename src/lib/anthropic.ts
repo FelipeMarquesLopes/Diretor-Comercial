@@ -363,7 +363,7 @@ export async function analyzeContract(opts: {
 
   const response = await getClient().messages.create({
     model: MODEL,
-    max_tokens: 1500,
+    max_tokens: 2000,
     system: ANALYSIS_SYSTEM,
     messages: [
       {
@@ -372,11 +372,20 @@ export async function analyzeContract(opts: {
       },
     ],
   });
-  const text = response.content.find((b) => b.type === "text");
-  if (!text || text.type !== "text") {
-    throw new Error("A IA não retornou texto ao analisar o contrato.");
+  // Junta todos os blocos de texto (robusto a múltiplos blocos).
+  const joined = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+  if (!joined) {
+    const tipos = response.content.map((b) => b.type).join(", ") || "vazio";
+    throw new Error(
+      `A IA não retornou texto (motivo: ${response.stop_reason}; blocos: [${tipos}]). ` +
+        "Se o motivo for max_tokens, o(s) contrato(s) podem ser muito longos.",
+    );
   }
-  const p = parseJsonObject(text.text) as Partial<ContractAnalysis>;
+  const p = parseJsonObject(joined) as Partial<ContractAnalysis>;
   return {
     clausula: p.clausula ?? "Não identificado no contrato.",
     percentual: p.percentual ?? "Não identificado — definir manualmente.",
