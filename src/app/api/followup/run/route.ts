@@ -92,6 +92,13 @@ async function run() {
     (due as (Sequence & { companies: Company | null })[] | null) ?? [];
   for (const row of rows) {
     if (!row.companies) continue;
+    // Reajuste sem contrato analisado ainda: não gera pedido "sem sentido".
+    if (
+      row.companies.category === "reajuste" &&
+      !row.companies.reajuste_percent
+    ) {
+      continue;
+    }
     // `row` inclui o join `companies`, mas é compatível com Sequence.
     const res = await generateDraftForSequence(supabase, row.companies, row);
     if (res.ok) gerados++;

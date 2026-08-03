@@ -96,6 +96,13 @@ export async function POST(req: Request) {
 
   // Sequência de e-mail (cobrança a cada 72h — o intervalo padrão de e-mail).
   await ensureSequences(supabase, company.id, false);
+  // IMPORTANTE: deixa a sequência PARADA (next_action_at = null) até o contrato
+  // ser analisado. Assim o robô não gera um pedido "sem sentido" antes da
+  // análise — o 1º rascunho só é montado após analisar os contratos.
+  await supabase
+    .from("sequences")
+    .update({ next_action_at: null })
+    .eq("company_id", company.id);
 
   await supabase.from("activities").insert({
     company_id: company.id,
