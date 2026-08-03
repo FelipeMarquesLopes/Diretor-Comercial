@@ -23,7 +23,8 @@ export type PartnerCategory =
   | "empresa"
   | "escola"
   | "medico"
-  | "agenda_aberta";
+  | "agenda_aberta"
+  | "reajuste";
 
 export type SequenceChannel = "email" | "whatsapp";
 
@@ -67,6 +68,11 @@ export interface Company {
   operator_type: OperatorType;
   briefing: string | null;
   cc_emails: string | null;
+  contract_path: string | null;
+  contract_name: string | null;
+  reajuste_parecer: string | null;
+  reajuste_percent: string | null;
+  reajuste_janela: string | null;
   apollo_id: string | null;
   name: string;
   domain: string | null;
@@ -151,6 +157,7 @@ export const CATEGORY_LABELS: Record<PartnerCategory, string> = {
   escola: "Escola",
   medico: "Médico prescritor",
   agenda_aberta: "Agenda Aberta",
+  reajuste: "Reajuste",
 };
 
 export const SEQUENCE_STATUS_LABELS: Record<SequenceStatus, string> = {

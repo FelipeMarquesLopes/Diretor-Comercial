@@ -182,7 +182,9 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
             {draft.channel === "email" ? "E-mail" : "WhatsApp"} ·{" "}
             {draft.companies?.category === "agenda_aberta"
               ? CATEGORY_LABELS.agenda_aberta
-              : HOOK_LABELS[draft.hook]}
+              : draft.companies?.category === "reajuste"
+                ? CATEGORY_LABELS.reajuste
+                : HOOK_LABELS[draft.hook]}
           </p>
           {/* Destinatário — para o CEO ver PRA QUEM vai antes de disparar */}
           {draft.channel === "email" ? (

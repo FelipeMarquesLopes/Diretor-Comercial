@@ -104,7 +104,7 @@ export async function checkInbox(
         let sentiment: "positivo" | "negativo" | "neutro" = "neutro";
         let summary = "";
         try {
-          const c = await classifyResponse(text);
+          const c = await classifyResponse(text, match.companies.category);
           sentiment = c.sentiment;
           summary = c.summary;
         } catch {

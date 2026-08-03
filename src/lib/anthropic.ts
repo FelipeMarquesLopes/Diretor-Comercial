@@ -63,6 +63,20 @@ function categoryBriefing(company: Company, hook: MessageHook): string {
         "qualidade clínica, capacidade (3.000+ pacientes/mês, várias " +
         "unidades) e a expertise em TEA/ABA. Tom institucional e respeitoso."
       );
+    case "reajuste":
+      return (
+        "Alvo: uma OPERADORA PARCEIRA — objetivo é SOLICITAR REAJUSTE " +
+        "contratual, embasado na cláusula de reajuste do contrato. " +
+        (company.reajuste_percent
+          ? `Percentual pleiteado (da análise da cláusula): ${company.reajuste_percent}. `
+          : "") +
+        (company.reajuste_janela
+          ? `Janela/data-base do reajuste: ${company.reajuste_janela}. `
+          : "") +
+        "Escreva um pedido FORMAL, cordial e objetivo, citando o embasamento " +
+        "contratual (cláusula/índice) e o percentual pleiteado, com tom de " +
+        "parceria de longo prazo. Nunca ameace, pressione ou soe agressivo."
+      );
     case "escola":
       return (
         "Alvo: uma ESCOLA/colégio (falar com a coordenação). Objetivo: " +
@@ -283,6 +297,85 @@ Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
   return { subject: parsed.subject ?? "MenthalHelp — agenda aberta", body };
 }
 
+// --- Análise de contrato para REAJUSTE (advogado + comercial) --------------
+
+const ANALYSIS_SYSTEM = `Você é um assistente que analisa CONTRATOS de \
+credenciamento entre a clínica MenthalHelp e OPERADORAS DE SAÚDE, combinando a \
+visão de um ADVOGADO (leitura da cláusula) e de um SETOR COMERCIAL (estratégia \
+de reajuste). Sua análise é um APOIO à decisão do CEO — não é parecer jurídico \
+definitivo.
+
+Leia o contrato em anexo e identifique a CLÁUSULA DE REAJUSTE. Determine:
+1. O ÍNDICE/critério de reajuste previsto (ex: IPCA, IGP-M, percentual fixo, \
+negociação anual) e o percentual que faz sentido pleitear com base nele.
+2. A JANELA/DATA ideal para enviar o pedido de reajuste (ex: data-base/aniversário \
+do contrato, antecedência exigida em cláusula, periodicidade permitida).
+3. Um PARECER curto e prático (2-4 frases) unindo o lado jurídico e o comercial.
+
+Se o contrato não trouxer a informação com clareza, diga isso honestamente no \
+campo correspondente (não invente números nem datas).
+
+FORMATO DE SAÍDA: responda SOMENTE com JSON válido, sem texto antes/depois e \
+sem blocos de código:
+{"clausula": "<resumo da cláusula de reajuste>", "percentual": "<percentual/índice sugerido>", "janela": "<janela/data ideal para pedir>", "parecer": "<parecer curto jurídico+comercial>"}`;
+
+export interface ContractAnalysis {
+  clausula: string;
+  percentual: string;
+  janela: string;
+  parecer: string;
+}
+
+/**
+ * Analisa um contrato (PDF em base64) e devolve um parecer de reajuste:
+ * cláusula, percentual/índice sugerido, janela ideal e um parecer curto.
+ */
+export async function analyzeContract(opts: {
+  pdfBase64: string;
+  operadora: string;
+  briefing?: string | null;
+}): Promise<ContractAnalysis> {
+  const userText =
+    `Operadora: ${opts.operadora}.\n` +
+    (opts.briefing?.trim()
+      ? `Contexto/orientação do CEO: """${opts.briefing.trim()}"""\n`
+      : "") +
+    `Analise o contrato anexado e devolva o parecer no formato pedido.`;
+
+  const response = await getClient().messages.create({
+    model: MODEL,
+    max_tokens: 1500,
+    system: ANALYSIS_SYSTEM,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: opts.pdfBase64,
+            },
+          },
+          { type: "text", text: userText },
+        ],
+      },
+    ],
+  });
+  const text = response.content.find((b) => b.type === "text");
+  if (!text || text.type !== "text") {
+    throw new Error("A IA não retornou texto ao analisar o contrato.");
+  }
+  const p = parseJsonObject(text.text) as Partial<ContractAnalysis>;
+  return {
+    clausula: p.clausula ?? "Não identificado no contrato.",
+    percentual: p.percentual ?? "Não identificado — definir manualmente.",
+    janela: p.janela ?? "Não identificada — definir manualmente.",
+    parecer: p.parecer ?? "",
+  };
+}
+
 // --- Leitura/classificação de respostas ------------------------------------
 
 const CLASSIFY_SYSTEM = `Você é um AGENTE ESPECIALISTA em ler as respostas de \
@@ -323,8 +416,28 @@ export interface ClassifiedResponse {
   summary: string;
 }
 
-export async function classifyResponse(text: string): Promise<ClassifiedResponse> {
-  const raw = await ask(CLASSIFY_SYSTEM, `Resposta recebida:\n"""${text}"""`, 300);
+// Ajuste de contexto por frente. No REAJUSTE, um "vamos analisar/estamos
+// avaliando/encaminhamos ao setor" é NEUTRO (ainda não decidiram) — para o
+// motor seguir cobrando a cada 72h até um SIM ou NÃO claro.
+const REAJUSTE_CLASSIFY_EXTRA = `
+
+CONTEXTO ESPECÍFICO — este é um pedido de REAJUSTE contratual:
+- "positivo" = a operadora ACEITA o reajuste, propõe um percentual concreto, ou \
+pede documentos/dados para EFETIVAR o reajuste.
+- "negativo" = recusa o reajuste ou nega o pedido.
+- "neutro" = qualquer acusar de recebimento SEM decisão: "vamos analisar", \
+"estamos avaliando", "encaminhamos ao setor responsável", "retornaremos". \
+Isso NÃO é positivo — ainda não há decisão, então seguimos cobrando.`;
+
+export async function classifyResponse(
+  text: string,
+  category?: string,
+): Promise<ClassifiedResponse> {
+  const system =
+    category === "reajuste"
+      ? CLASSIFY_SYSTEM + REAJUSTE_CLASSIFY_EXTRA
+      : CLASSIFY_SYSTEM;
+  const raw = await ask(system, `Resposta recebida:\n"""${text}"""`, 300);
   const parsed = parseJsonObject(raw) as Partial<ClassifiedResponse>;
   const sentiment: ResponseSentiment =
     parsed.sentiment === "positivo" || parsed.sentiment === "negativo"
