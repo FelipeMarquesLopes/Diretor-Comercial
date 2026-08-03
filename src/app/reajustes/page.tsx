@@ -239,12 +239,26 @@ function ReajusteCard({
       const d = await r.json();
       if (d.error) {
         setNote(`Erro: ${d.error}`);
+        return;
+      }
+
+      // 4) Gera o rascunho do pedido (chamada separada, leve).
+      setNote("Análise pronta ✅ — gerando o rascunho do pedido…");
+      onChanged(); // já mostra o parecer no card
+      const dr = await fetch(`/api/reajustes/${row.id}/draft`, {
+        method: "POST",
+      });
+      const drData = await dr.json().catch(() => ({}));
+      if (drData.error) {
+        setNote(
+          `Análise pronta ✅, mas houve erro ao gerar o rascunho: ${drData.error}`,
+        );
       } else {
         setNote(
           "✅ Contratos analisados e rascunho do pedido gerado — veja em Rascunhos.",
         );
-        onChanged();
       }
+      onChanged();
     } catch (e) {
       setNote(String(e));
     } finally {

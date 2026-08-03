@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { analyzeContract } from "@/lib/anthropic";
-import { generateDraftForSequence } from "@/lib/outreach";
-import type { Company, Sequence } from "@/lib/types";
+import type { Company } from "@/lib/types";
 
 // A análise de PDF pela IA pode demorar — damos mais tempo.
 export const maxDuration = 60;
@@ -101,21 +100,7 @@ export async function POST(
     description: `Contratos analisados pela IA (${docs.length}). Percentual sugerido: ${analysis.percentual}. Janela: ${analysis.janela}.`,
   });
 
-  // Gera o 1º rascunho do pedido de reajuste (com o percentual analisado).
-  const updated: Company = {
-    ...company,
-    reajuste_percent: analysis.percentual,
-    reajuste_janela: analysis.janela,
-  };
-  const { data: seqs } = await supabase
-    .from("sequences")
-    .select("*")
-    .eq("company_id", id)
-    .eq("channel", "email");
-  const emailSeq = (seqs as Sequence[] | null)?.[0];
-  if (emailSeq) {
-    await generateDraftForSequence(supabase, updated, emailSeq);
-  }
-
+  // O rascunho do pedido é gerado numa chamada separada (/draft) para manter
+  // cada requisição leve e dentro do limite de tempo da hospedagem.
   return NextResponse.json({ ok: true, analysis });
 }

@@ -363,11 +363,11 @@ export async function analyzeContract(opts: {
 
   const response = await getClient().messages.create({
     model: MODEL,
-    // Análise de contrato é complexa: o modelo usa pensamento ADAPTATIVO
-    // (automático). Damos um teto de tokens bem folgado para ele pensar o
-    // quanto precisar E ainda escrever o parecer (antes 2000 era pouco e o
-    // raciocínio consumia tudo).
-    max_tokens: 16000,
+    // Pensamento ADAPTATIVO com esforço BAIXO: mantém a análise rápida (para
+    // não estourar o limite de tempo da hospedagem) e deixa espaço garantido
+    // para o parecer. (effort controla o quanto o modelo "pensa".)
+    max_tokens: 4000,
+    output_config: { effort: "low" },
     system: ANALYSIS_SYSTEM,
     messages: [
       {
@@ -375,7 +375,7 @@ export async function analyzeContract(opts: {
         content: [...docBlocks, { type: "text", text: userText }],
       },
     ],
-  });
+  } as Anthropic.MessageCreateParamsNonStreaming);
   // Junta todos os blocos de texto (robusto a múltiplos blocos).
   const joined = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
