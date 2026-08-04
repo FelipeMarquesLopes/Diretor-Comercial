@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { generateReply } from "@/lib/anthropic";
 import { resumeAtAfterNegative } from "@/lib/followup";
-import type { Company, Contact, Sequence } from "@/lib/types";
+import type { Company, Contact } from "@/lib/types";
 
 export const maxDuration = 60;
 
@@ -146,19 +146,20 @@ export async function POST(
       );
     }
 
-    // Sequência de e-mail: reativa para a cobrança recomeçar após o envio.
-    const { data: seqs } = await supabase
+    // Cria uma NOVA sequência (assunto próprio) só para esta réplica. Assim o
+    // controle de automação deste assunto fica INDEPENDENTE dos outros
+    // assuntos da mesma operadora (ex: glosas x extensão contratual).
+    const { data: newSeq } = await supabase
       .from("sequences")
-      .select("*")
-      .eq("company_id", companyId)
-      .eq("channel", "email");
-    const emailSeq = (seqs as Sequence[] | null)?.[0];
-    if (emailSeq) {
-      await supabase
-        .from("sequences")
-        .update({ status: "ativa", next_action_at: null })
-        .eq("id", emailSeq.id);
-    }
+      .insert({
+        company_id: companyId,
+        channel: "email",
+        status: "ativa",
+        step: 0,
+        next_action_at: null,
+      })
+      .select("id")
+      .single<{ id: string }>();
 
     await supabase.from("drafts").insert({
       company_id: companyId,
@@ -168,8 +169,8 @@ export async function POST(
       subject: generated.subject || null,
       body: generated.body,
       status: "pendente",
-      sequence_id: emailSeq?.id ?? null,
-      step: emailSeq?.step ?? 0,
+      sequence_id: newSeq?.id ?? null,
+      step: 0,
     });
 
     await supabase
