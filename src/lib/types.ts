@@ -129,6 +129,8 @@ export interface Draft {
   body: string;
   status: DraftStatus;
   attachments: DraftAttachment[];
+  sequence_id: string | null;
+  step: number;
   approved_by: string | null;
   approved_at: string | null;
   sent_at: string | null;

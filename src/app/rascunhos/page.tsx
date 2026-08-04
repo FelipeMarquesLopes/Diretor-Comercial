@@ -298,6 +298,27 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
     }
   }
 
+  // Muda o estado da automação deste assunto (só quando há sequência).
+  async function mudarAutomacao(action: "seguir" | "standby" | "encerrar") {
+    if (!draft.sequence_id) return;
+    if (action === "encerrar" && !confirm("Encerrar este assunto? O sistema para de cobrar retorno."))
+      return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/sequences/${draft.sequence_id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.error) setErr(d.error);
+      else onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function act(
     action: "aprovar" | "rejeitar" | "enviar" | "enviar_email" | "editar",
   ) {
@@ -464,6 +485,38 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
           </button>
         </div>
       </div>
+
+      {/* Controle manual da automação deste assunto (e-mail já enviado) */}
+      {draft.channel === "email" &&
+        draft.sequence_id &&
+        draft.status === "enviado" && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-gray-100 bg-gray-50 p-2">
+            <span className="text-xs font-medium text-gray-500">
+              Automação:
+            </span>
+            <button
+              onClick={() => mudarAutomacao("seguir")}
+              disabled={busy}
+              className="rounded-md border border-brand-300 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+            >
+              🔁 Follow-up 72h
+            </button>
+            <button
+              onClick={() => mudarAutomacao("standby")}
+              disabled={busy}
+              className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+            >
+              ⏳ Stand by 30 dias
+            </button>
+            <button
+              onClick={() => mudarAutomacao("encerrar")}
+              disabled={busy}
+              className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+            >
+              ✖️ Encerrar assunto
+            </button>
+          </div>
+        )}
 
       {draft.channel === "email" && (
         <input
