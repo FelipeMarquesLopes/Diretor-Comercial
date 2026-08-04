@@ -72,6 +72,8 @@ export async function sendEmail(opts: {
   text: string;
   // E-mails extras em cópia (ex: outras pessoas da operadora). Opcional.
   extraCc?: string[];
+  // Anexos (documentos que vão junto no e-mail). Opcional.
+  attachments?: { filename: string; content: Buffer }[];
 }): Promise<void> {
   const { user, fromName, cc } = cfg();
   // Monta a cópia: e-mail de monitoramento do CEO + extras informados.
@@ -93,5 +95,9 @@ export async function sendEmail(opts: {
     subject: opts.subject || "(sem assunto)",
     text: opts.text, // fallback em texto puro
     html: toHtml(opts.text), // versão com a fonte Arial 13
+    attachments:
+      opts.attachments && opts.attachments.length > 0
+        ? opts.attachments
+        : undefined,
   });
 }

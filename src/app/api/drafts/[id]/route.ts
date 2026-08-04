@@ -66,10 +66,12 @@ export async function PATCH(
           { status: 400 },
         );
       }
-      // Busca o destinatário, o conteúdo e os CCs opcionais antes de enviar.
+      // Busca o destinatário, o conteúdo, os CCs e os anexos antes de enviar.
       const { data: pre } = await supabase
         .from("drafts")
-        .select("subject, body, contacts(email), companies(cc_emails)")
+        .select(
+          "subject, body, attachments, contacts(email), companies(cc_emails)",
+        )
         .eq("id", id)
         .single();
       const to = (pre?.contacts as { email?: string } | null)?.email;
@@ -86,12 +88,26 @@ export async function PATCH(
         .split(/[\s,;]+/)
         .map((s) => s.trim())
         .filter((s) => s.includes("@"));
+      // Baixa os anexos do Storage para irem junto no e-mail.
+      const anexos =
+        (pre?.attachments as { path: string; name: string }[] | null) ?? [];
+      const attachments: { filename: string; content: Buffer }[] = [];
+      for (const a of anexos) {
+        const { data } = await supabase.storage.from("anexos").download(a.path);
+        if (data) {
+          attachments.push({
+            filename: a.name,
+            content: Buffer.from(await data.arrayBuffer()),
+          });
+        }
+      }
       try {
         await sendEmail({
           to,
           subject: (pre?.subject as string) ?? "",
           text: (pre?.body as string) ?? "",
           extraCc,
+          attachments,
         });
       } catch (err) {
         return NextResponse.json(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Draft, DraftStatus } from "@/lib/types";
 import { CATEGORY_LABELS, HOOK_LABELS } from "@/lib/types";
 
@@ -229,7 +229,74 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
   const [body, setBody] = useState(draft.body);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const anexos = draft.attachments ?? [];
   const dirty = subject !== (draft.subject ?? "") || body !== draft.body;
+
+  // Anexa documento(s) ao rascunho (sobe direto ao Storage, sem limite).
+  async function anexar() {
+    const files = fileRef.current?.files ? Array.from(fileRef.current.files) : [];
+    if (files.length === 0) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const signRes = await fetch(`/api/drafts/${draft.id}/attachments/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names: files.map((f) => f.name) }),
+      });
+      const signData = await signRes.json();
+      if (signData.error) {
+        setErr(signData.error);
+        return;
+      }
+      const uploads: { path: string; signedUrl: string; name: string }[] =
+        signData.uploads;
+      for (let i = 0; i < files.length; i++) {
+        const put = await fetch(uploads[i].signedUrl, {
+          method: "PUT",
+          headers: { "x-upsert": "true" },
+          body: files[i],
+        });
+        if (!put.ok) {
+          setErr(`Erro ao enviar "${files[i].name}" (código ${put.status}).`);
+          return;
+        }
+      }
+      const reg = await fetch(`/api/drafts/${draft.id}/attachments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paths: uploads.map((u) => u.path),
+          names: files.map((f) => f.name),
+        }),
+      });
+      const regData = await reg.json().catch(() => ({}));
+      if (regData.error) setErr(regData.error);
+      else {
+        if (fileRef.current) fileRef.current.value = "";
+        onChanged();
+      }
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removerAnexo(path: string) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await fetch(
+        `/api/drafts/${draft.id}/attachments?path=${encodeURIComponent(path)}`,
+        { method: "DELETE" },
+      );
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function act(
     action: "aprovar" | "rejeitar" | "enviar" | "enviar_email" | "editar",
@@ -414,6 +481,49 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
         disabled={draft.status !== "pendente"}
         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
       />
+
+      {/* Anexos — documentos que vão junto no e-mail */}
+      {draft.channel === "email" && (
+        <div className="mt-2 rounded-md border border-gray-100 bg-gray-50 p-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            📎 Anexos {anexos.length > 0 ? `(${anexos.length})` : ""}
+          </p>
+          {anexos.length > 0 && (
+            <ul className="mt-1 space-y-1">
+              {anexos.map((a) => (
+                <li
+                  key={a.path}
+                  className="flex items-center justify-between gap-2 text-xs text-gray-700"
+                >
+                  <span className="min-w-0 truncate">📄 {a.name}</span>
+                  {draft.status === "pendente" && (
+                    <button
+                      onClick={() => removerAnexo(a.path)}
+                      disabled={busy}
+                      className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                      title="Remover anexo"
+                    >
+                      remover
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {draft.status === "pendente" && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input ref={fileRef} type="file" multiple className="text-xs" />
+              <button
+                onClick={anexar}
+                disabled={busy}
+                className="rounded-md border border-brand-300 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+              >
+                {busy ? "Anexando…" : "Anexar documento"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {draft.status === "pendente" && (
         <div className="mt-3 flex flex-wrap gap-2">

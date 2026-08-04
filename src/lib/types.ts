@@ -114,6 +114,11 @@ export interface Contact {
   created_at: string;
 }
 
+export interface DraftAttachment {
+  path: string;
+  name: string;
+}
+
 export interface Draft {
   id: string;
   company_id: string;
@@ -123,6 +128,7 @@ export interface Draft {
   subject: string | null;
   body: string;
   status: DraftStatus;
+  attachments: DraftAttachment[];
   approved_by: string | null;
   approved_at: string | null;
   sent_at: string | null;
