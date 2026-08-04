@@ -117,6 +117,7 @@ export async function checkInbox(
           sentiment,
           summary,
           raw_text: text,
+          message_id: parsed.messageId ?? null, // p/ responder na mesma thread
         });
 
         // QUALQUER resposta PARA a cobrança automática (a de 72h só corre no

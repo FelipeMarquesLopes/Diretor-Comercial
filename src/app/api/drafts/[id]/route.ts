@@ -66,11 +66,11 @@ export async function PATCH(
           { status: 400 },
         );
       }
-      // Busca o destinatário, o conteúdo, os CCs e os anexos antes de enviar.
+      // Busca o destinatário, o conteúdo, os CCs, os anexos e a sequência.
       const { data: pre } = await supabase
         .from("drafts")
         .select(
-          "subject, body, attachments, contacts(email), companies(cc_emails)",
+          "subject, body, attachments, sequence_id, contacts(email), companies(cc_emails)",
         )
         .eq("id", id)
         .single();
@@ -101,19 +101,56 @@ export async function PATCH(
           });
         }
       }
+      // Threading: mantém a conversa amarrada (mesmo assunto "Re:" +
+      // In-Reply-To), para o destinatário ver o histórico/contexto.
+      const seqId = (pre as { sequence_id?: string } | null)?.sequence_id ?? null;
+      let seqThread: { last_message_id: string | null; thread_subject: string | null } | null =
+        null;
+      if (seqId) {
+        const { data } = await supabase
+          .from("sequences")
+          .select("last_message_id, thread_subject")
+          .eq("id", seqId)
+          .single<{ last_message_id: string | null; thread_subject: string | null }>();
+        seqThread = data ?? null;
+      }
+      const draftSubject = (pre?.subject as string) ?? "";
+      const semRe = draftSubject.replace(/^\s*(re:\s*)+/i, "").trim();
+      // 1º e-mail do assunto: usa o assunto como está. Follow-ups/réplicas:
+      // usam "Re: <assunto raiz>" para casar a conversa.
+      const sendSubject = seqThread?.thread_subject
+        ? `Re: ${seqThread.thread_subject}`
+        : draftSubject;
+      const inReplyTo = seqThread?.last_message_id ?? undefined;
+
+      let sentInfo: { messageId?: string } = {};
       try {
-        await sendEmail({
+        sentInfo = await sendEmail({
           to,
-          subject: (pre?.subject as string) ?? "",
+          subject: sendSubject,
           text: (pre?.body as string) ?? "",
           extraCc,
           attachments,
+          inReplyTo,
+          references: inReplyTo,
         });
       } catch (err) {
         return NextResponse.json(
           { error: err instanceof Error ? err.message : "Falha ao enviar e-mail" },
           { status: 502 },
         );
+      }
+
+      // Atualiza o estado da thread: guarda o Message-ID enviado e fixa o
+      // assunto raiz (se ainda não houver).
+      if (seqId) {
+        await supabase
+          .from("sequences")
+          .update({
+            last_message_id: sentInfo.messageId ?? seqThread?.last_message_id ?? null,
+            thread_subject: seqThread?.thread_subject ?? (semRe || draftSubject),
+          })
+          .eq("id", seqId);
       }
       update.status = "enviado" as DraftStatus;
       update.approved_by = payload.approvedBy ?? "CEO";

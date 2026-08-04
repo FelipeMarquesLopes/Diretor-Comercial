@@ -74,7 +74,10 @@ export async function sendEmail(opts: {
   extraCc?: string[];
   // Anexos (documentos que vão junto no e-mail). Opcional.
   attachments?: { filename: string; content: Buffer }[];
-}): Promise<void> {
+  // Threading: amarra este e-mail na mesma conversa da mensagem anterior.
+  inReplyTo?: string;
+  references?: string;
+}): Promise<{ messageId?: string }> {
   const { user, fromName, cc } = cfg();
   // Monta a cópia: e-mail de monitoramento do CEO + extras informados.
   // Remove duplicatas e nunca repete o próprio destinatário.
@@ -88,7 +91,7 @@ export async function sendEmail(opts: {
     seen.add(key);
     ccList.push(addr);
   }
-  await getTransporter().sendMail({
+  const info = await getTransporter().sendMail({
     from: `${fromName} <${user}>`,
     to: opts.to,
     cc: ccList.length > 0 ? ccList : undefined, // CEO + extras em cópia
@@ -99,5 +102,8 @@ export async function sendEmail(opts: {
       opts.attachments && opts.attachments.length > 0
         ? opts.attachments
         : undefined,
+    inReplyTo: opts.inReplyTo || undefined,
+    references: opts.references || undefined,
   });
+  return { messageId: info.messageId };
 }

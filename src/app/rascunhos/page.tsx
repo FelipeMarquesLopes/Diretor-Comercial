@@ -115,6 +115,24 @@ export default function Rascunhos() {
     (d) => companyFilter === "todas" || d.company_id === companyFilter,
   );
 
+  // Na aba "Enviados", mostra só o ÚLTIMO e-mail de cada assunto (thread),
+  // para não poluir o histórico com todos os follow-ups. (A lista já vem
+  // ordenada do mais novo para o mais antigo.)
+  const visiveis =
+    filter !== "enviado"
+      ? filtrados
+      : (() => {
+          const vistos = new Set<string>();
+          const out: DraftRow[] = [];
+          for (const d of filtrados) {
+            const chave = d.sequence_id ?? `draft-${d.id}`;
+            if (vistos.has(chave)) continue;
+            vistos.add(chave);
+            out.push(d);
+          }
+          return out;
+        })();
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
@@ -202,9 +220,17 @@ export default function Rascunhos() {
           )}
 
           <span className="ml-auto text-xs text-gray-400">
-            {filtrados.length} e-mail(s)
+            {visiveis.length}
+            {filter === "enviado" ? " assunto(s)" : " e-mail(s)"}
           </span>
         </div>
+      )}
+
+      {filter === "enviado" && visiveis.length > 0 && (
+        <p className="text-xs text-gray-400">
+          Mostrando só o último e-mail de cada assunto (o histórico completo de
+          cada conversa fica na aba do seu e-mail).
+        </p>
       )}
 
       {error && (
@@ -213,11 +239,11 @@ export default function Rascunhos() {
         </div>
       )}
 
-      {filtrados.length === 0 && !error && (
+      {visiveis.length === 0 && !error && (
         <p className="text-sm text-gray-500">Nenhum rascunho neste filtro.</p>
       )}
 
-      {filtrados.map((d) => (
+      {visiveis.map((d) => (
         <DraftCard key={d.id} draft={d} onChanged={load} />
       ))}
     </div>

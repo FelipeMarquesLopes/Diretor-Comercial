@@ -42,13 +42,14 @@ export async function POST(
 
   const { data: resp } = await supabase
     .from("responses")
-    .select("id, company_id, raw_text, channel")
+    .select("id, company_id, raw_text, channel, message_id")
     .eq("id", id)
     .single<{
       id: string;
       company_id: string;
       raw_text: string | null;
       channel: string;
+      message_id: string | null;
     }>();
   if (!resp) {
     return NextResponse.json({ error: "Resposta não encontrada" }, { status: 404 });
@@ -149,6 +150,12 @@ export async function POST(
     // Cria uma NOVA sequência (assunto próprio) só para esta réplica. Assim o
     // controle de automação deste assunto fica INDEPENDENTE dos outros
     // assuntos da mesma operadora (ex: glosas x extensão contratual).
+    // A nova sequência já nasce amarrada na mensagem que a operadora enviou
+    // (last_message_id = message_id dela) — a réplica responde POR CIMA dela,
+    // então o destinatário vê o histórico da conversa.
+    const semRe = (generated.subject ?? "")
+      .replace(/^\s*(re:\s*)+/i, "")
+      .trim();
     const { data: newSeq } = await supabase
       .from("sequences")
       .insert({
@@ -157,6 +164,8 @@ export async function POST(
         status: "ativa",
         step: 0,
         next_action_at: null,
+        last_message_id: resp.message_id ?? null,
+        thread_subject: semRe || null,
       })
       .select("id")
       .single<{ id: string }>();
