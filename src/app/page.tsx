@@ -21,11 +21,13 @@ interface Stats {
 
 interface ResponseRow {
   id: string;
+  company_id: string;
   sentiment: "positivo" | "negativo" | "neutro";
   summary: string | null;
+  raw_text: string | null;
   channel: string;
   created_at: string;
-  companies: { name: string } | null;
+  companies: { name: string; category: string | null } | null;
 }
 
 export default function Dashboard() {
@@ -132,43 +134,7 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-2">
             {responses.map((r) => (
-              <div
-                key={r.id}
-                className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3"
-              >
-                <span
-                  className={`mt-0.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-                    r.sentiment === "positivo"
-                      ? "bg-green-100 text-green-800"
-                      : r.sentiment === "negativo"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-gray-100 text-gray-600"
-                  }`}
-                >
-                  {r.sentiment === "positivo"
-                    ? "🟢 Positivo"
-                    : r.sentiment === "negativo"
-                      ? "🔴 Negativo"
-                      : "⚪ Neutro"}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
-                    {r.companies?.name ?? "Operadora"}
-                    <span className="ml-2 text-xs font-normal text-gray-400">
-                      {r.channel === "whatsapp" ? "WhatsApp" : "E-mail"} ·{" "}
-                      {new Date(r.created_at).toLocaleDateString("pt-BR")}
-                    </span>
-                  </p>
-                  {r.summary && (
-                    <p className="text-xs text-gray-500">{r.summary}</p>
-                  )}
-                  {r.sentiment === "positivo" && (
-                    <p className="text-xs font-medium text-green-700">
-                      👉 Hora de você entrar e assumir a conversa!
-                    </p>
-                  )}
-                </div>
-              </div>
+              <ResponseItem key={r.id} r={r} onChanged={loadStats} />
             ))}
           </div>
         )}
@@ -225,6 +191,135 @@ export default function Dashboard() {
           </li>
         </ol>
       </section>
+    </div>
+  );
+}
+
+function ResponseItem({
+  r,
+  onChanged,
+}: {
+  r: ResponseRow;
+  onChanged: () => void;
+}) {
+  const [mode, setMode] = useState<"idle" | "replying">("idle");
+  const [instruction, setInstruction] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function act(action: "responder" | "encerrar" | "adiar") {
+    if (action === "responder" && !instruction.trim()) {
+      setNote("Escreva o que você quer responder.");
+      return;
+    }
+    if (action === "encerrar" && !confirm("Encerrar este assunto? O sistema para de cobrar retorno.")) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await fetch(`/api/responses/${r.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          action === "responder" ? { action, instruction } : { action },
+        ),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (d.error) {
+        setNote(`Erro: ${d.error}`);
+      } else if (action === "responder") {
+        setNote("✅ Réplica criada em Rascunhos. Revise e dispare — a cobrança de 72h recomeça ao enviar.");
+        setMode("idle");
+        setInstruction("");
+      } else if (action === "encerrar") {
+        setNote("Assunto encerrado.");
+      } else {
+        setNote("Adiado — o sistema retoma a cobrança em 30 dias.");
+      }
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3">
+      <div className="flex items-start gap-3">
+        <span
+          className={`mt-0.5 rounded-full px-2 py-0.5 text-xs font-medium ${
+            r.sentiment === "positivo"
+              ? "bg-green-100 text-green-800"
+              : r.sentiment === "negativo"
+                ? "bg-red-100 text-red-700"
+                : "bg-gray-100 text-gray-600"
+          }`}
+        >
+          {r.sentiment === "positivo"
+            ? "🟢 Positivo"
+            : r.sentiment === "negativo"
+              ? "🔴 Negativo"
+              : "⚪ Neutro"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-900">
+            {r.companies?.name ?? "Operadora"}
+            <span className="ml-2 text-xs font-normal text-gray-400">
+              {r.channel === "whatsapp" ? "WhatsApp" : "E-mail"} ·{" "}
+              {new Date(r.created_at).toLocaleDateString("pt-BR")}
+            </span>
+          </p>
+          {r.summary && <p className="text-xs text-gray-500">{r.summary}</p>}
+
+          {/* Ações — para nada cair no esquecimento */}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => setMode(mode === "replying" ? "idle" : "replying")}
+              disabled={busy}
+              className="rounded-md bg-brand-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              ✍️ Responder pelo sistema
+            </button>
+            <button
+              onClick={() => act("adiar")}
+              disabled={busy}
+              className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              ⏳ Retomar em 30 dias
+            </button>
+            <button
+              onClick={() => act("encerrar")}
+              disabled={busy}
+              className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              ✖️ Encerrar assunto
+            </button>
+          </div>
+
+          {mode === "replying" && (
+            <div className="mt-2 rounded-md border border-gray-100 bg-gray-50 p-2">
+              <p className="mb-1 text-xs text-gray-500">
+                O que você quer responder? A IA monta o e-mail com base na
+                mensagem deles + na sua orientação.
+              </p>
+              <textarea
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+                rows={3}
+                placeholder="ex: Contestar a negativa da glosa. Argumentar que o procedimento foi autorizado previamente e pedir reanálise formal, anexando o número da guia."
+                className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+              <button
+                onClick={() => act("responder")}
+                disabled={busy || !instruction.trim()}
+                className="mt-2 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {busy ? "Gerando…" : "Gerar réplica"}
+              </button>
+            </div>
+          )}
+
+          {note && <p className="mt-2 text-xs text-gray-600">{note}</p>}
+        </div>
+      </div>
     </div>
   );
 }

@@ -209,6 +209,73 @@ Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
   };
 }
 
+// --- Réplica a uma resposta do parceiro (continuar a cobrança) --------------
+
+const REPLY_SYSTEM = `Você é o assistente comercial da MenthalHelp (clínica \
+multidisciplinar de saúde mental e neurodesenvolvimento, forte em TEA/ABA).
+
+Escreva o RASCUNHO de uma RÉPLICA a uma mensagem que um parceiro (operadora, \
+empresa ou escola) enviou. O objetivo é DAR CONTINUIDADE ao assunto conforme a \
+orientação do CEO — por exemplo, contestar uma negativa, responder a uma \
+solicitação, ou seguir negociando.
+
+Diretrizes:
+- Português do Brasil, tom profissional, cordial e de parceria. Pode ser FIRME \
+e assertivo quando o CEO pedir para contestar, mas NUNCA agressivo ou ríspido.
+- Responda diretamente ao ponto que o parceiro trouxe (mostre que leu).
+- Siga À RISCA a orientação do CEO sobre o que argumentar/propor.
+- Curto e objetivo (~120-160 palavras). Sem CAIXA ALTA, sem pressão indevida.
+- Não invente dados. Se faltar algo, não afirme.
+- NÃO escreva assinatura, nome, cargo, telefone, CNPJ nem lista de serviços — \
+o sistema adiciona automaticamente.
+
+FORMATO DE SAÍDA: responda SOMENTE com JSON válido, sem texto antes/depois e \
+sem blocos de código: {"subject": "<assunto (Re: ...)>", "body": "<corpo>"}`;
+
+/**
+ * Gera a réplica a uma resposta recebida do parceiro, usando o texto que ele
+ * mandou + a orientação do CEO (a "copy" do que se quer argumentar).
+ */
+export async function generateReply(opts: {
+  company: Company;
+  contact?: Contact | null;
+  incomingText: string;
+  instruction: string;
+  channel: DraftChannel;
+}): Promise<GeneratedDraft> {
+  const { company, contact, incomingText, instruction, channel } = opts;
+  const contactLine = contact
+    ? `Contato: ${contact.name}${contact.title ? `, ${contact.title}` : ""}.`
+    : "Contato: responda de forma cordial e geral.";
+
+  const userPrompt = `Escreva a réplica.
+
+Canal: ${channel === "email" ? "E-mail" : "WhatsApp"}
+Parceiro: ${company.name}. ${contactLine}
+
+MENSAGEM QUE O PARCEIRO ENVIOU (responda a isto):
+"""${incomingText.slice(0, 3000)}"""
+
+O QUE O CEO QUER RESPONDER (siga à risca — é a orientação da réplica):
+"""${instruction.trim()}"""
+
+Gere o assunto (use "Re: ..." quando fizer sentido) e o corpo, seguindo as \
+diretrizes do sistema.`;
+
+  const parsed = parseJsonObject(
+    await ask(REPLY_SYSTEM, userPrompt),
+  ) as Partial<GeneratedDraft>;
+  if (typeof parsed.body !== "string") {
+    throw new Error("A IA retornou JSON sem o campo 'body'.");
+  }
+  let body = parsed.body.trim();
+  if (channel === "email") body += `\n\n${EMAIL_SIGNATURE}`;
+  return {
+    subject: channel === "whatsapp" ? "" : (parsed.subject ?? ""),
+    body,
+  };
+}
+
 // --- Informativo recorrente de "Agenda Aberta" -----------------------------
 
 const AGENDA_SYSTEM = `Você é o assistente de RELACIONAMENTO da MenthalHelp, \

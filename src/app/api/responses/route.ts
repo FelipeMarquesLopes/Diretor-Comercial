@@ -19,7 +19,9 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("responses")
-    .select("id, sentiment, summary, channel, created_at, companies(name)")
+    .select(
+      "id, company_id, sentiment, summary, raw_text, channel, created_at, companies(name, category)",
+    )
     .order("created_at", { ascending: false })
     .limit(30);
 
