@@ -24,6 +24,9 @@ export async function POST(req: Request) {
     // para saber de graça se o e-mail existe — por isso filtramos por "tem
     // decisor", e a revelação acontece no clique de "Abordar".
     onlyWithContact?: boolean;
+    // Categoria em que salvar (empresa por padrão; "medico" para a frente de
+    // médicos/consultórios — muda a tese da IA e não filtra por porte).
+    category?: string;
   };
   try {
     body = await req.json();
@@ -34,6 +37,8 @@ export async function POST(req: Request) {
   // "Só com decisor" exige buscar os decisores (é de graça no Apollo).
   const onlyWithContact = body.onlyWithContact !== false;
   const withContacts = body.withContacts !== false || onlyWithContact;
+  const category = body.category === "medico" ? "medico" : "empresa";
+  const isMedico = category === "medico";
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -73,7 +78,7 @@ export async function POST(req: Request) {
   let decisoresEncontrados = 0; // total de decisores achados (antes do filtro)
 
   for (const org of orgs) {
-    const q = qualifyCompany(org);
+    const q = qualifyCompany(org, { ignoreSize: isMedico });
 
     if (q.qualified && !org.domain) qualificadasSemDominio++;
 
@@ -110,6 +115,7 @@ export async function POST(req: Request) {
       .upsert(
         {
           apollo_id: org.apolloId,
+          category,
           name: org.name,
           domain: org.domain,
           website: org.website,

@@ -29,11 +29,35 @@ const HIGH_RELEVANCE_INDUSTRIES = [
 
 export function qualifyCompany(
   org: ApolloOrganization,
+  opts?: { ignoreSize?: boolean },
 ): QualificationResult {
   const reasons: string[] = [];
   let score = 0;
 
   const employees = org.employeeCount ?? 0;
+
+  // Frente de médicos/consultórios: são pequenos por natureza, então NÃO
+  // reprovamos por porte.
+  if (opts?.ignoreSize) {
+    let s = 40;
+    const region = `${org.city ?? ""} ${org.state ?? ""}`.toLowerCase();
+    if (region.includes("são paulo") || region.includes("sao paulo") || region.includes("sp")) {
+      s += 25;
+      reasons.push("Região de São Paulo");
+    }
+    if (org.domain) {
+      s += 10;
+      reasons.push("Domínio identificado");
+    }
+    if (org.industry) reasons.push(org.industry);
+    s = Math.min(100, s);
+    return {
+      score: s,
+      qualified: true,
+      priority: s >= 65 ? 4 : 3,
+      notes: reasons.join("; ") || "Consultório/médico.",
+    };
+  }
 
   // Só reprova se SOUBERMOS que é abaixo de 100. Quando o Apollo não informa o
   // porte (employees = 0/null), confiamos no filtro da busca — que já pediu
