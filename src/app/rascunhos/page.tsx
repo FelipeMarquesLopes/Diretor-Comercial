@@ -11,6 +11,7 @@ type DraftRow = Draft & {
     city: string | null;
     cc_emails: string | null;
     category: string | null;
+    operator_type: string | null;
     next_followup: string | null;
   } | null;
   contacts: { name: string; title: string | null; email: string | null } | null;
@@ -64,6 +65,11 @@ export default function Rascunhos() {
   const [drafts, setDrafts] = useState<DraftRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Filtros em cascata: categoria → (tipo, se operadora) → parceiro específico.
+  const [catFilter, setCatFilter] = useState<string>("todas");
+  const [tipoFilter, setTipoFilter] = useState<string>("todos");
+  const [companyFilter, setCompanyFilter] = useState<string>("todas");
+
   const load = useCallback(async () => {
     const qs = filter === "todos" ? "" : `?status=${filter}`;
     const r = await fetch(`/api/drafts${qs}`);
@@ -78,6 +84,36 @@ export default function Rascunhos() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Categorias presentes nos rascunhos carregados (para o 1º filtro).
+  const categoriasPresentes = Array.from(
+    new Set(drafts.map((d) => d.companies?.category).filter(Boolean)),
+  ) as string[];
+
+  // Aplica categoria + tipo antes de listar os parceiros do 3º filtro.
+  const porCatETipo = drafts.filter((d) => {
+    if (catFilter !== "todas" && d.companies?.category !== catFilter) return false;
+    if (
+      catFilter === "operadora" &&
+      tipoFilter !== "todos" &&
+      d.companies?.operator_type !== tipoFilter
+    )
+      return false;
+    return true;
+  });
+
+  // Parceiros distintos que casam com categoria+tipo (para o 3º filtro).
+  const parceiros = Array.from(
+    new Map(
+      porCatETipo
+        .filter((d) => d.companies)
+        .map((d) => [d.company_id, d.companies!.name] as const),
+    ).entries(),
+  ).sort((a, b) => a[1].localeCompare(b[1]));
+
+  const filtrados = porCatETipo.filter(
+    (d) => companyFilter === "todas" || d.company_id === companyFilter,
+  );
 
   return (
     <div className="space-y-4">
@@ -97,17 +133,91 @@ export default function Rascunhos() {
         ))}
       </div>
 
+      {/* Filtros em cascata: categoria → tipo (se operadora) → parceiro */}
+      {drafts.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-3">
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+            Filtrar:
+          </span>
+          <select
+            value={catFilter}
+            onChange={(e) => {
+              setCatFilter(e.target.value);
+              setTipoFilter("todos");
+              setCompanyFilter("todas");
+            }}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+          >
+            <option value="todas">Todas as frentes</option>
+            {categoriasPresentes.map((c) => (
+              <option key={c} value={c}>
+                {CATEGORY_LABELS[c as keyof typeof CATEGORY_LABELS] ?? c}
+              </option>
+            ))}
+          </select>
+
+          {catFilter === "operadora" && (
+            <select
+              value={tipoFilter}
+              onChange={(e) => {
+                setTipoFilter(e.target.value);
+                setCompanyFilter("todas");
+              }}
+              className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+            >
+              <option value="todos">Captação e relacionamento</option>
+              <option value="nova">Captação (novas)</option>
+              <option value="ativa">Relacionamento (ativas)</option>
+            </select>
+          )}
+
+          {parceiros.length > 1 && (
+            <select
+              value={companyFilter}
+              onChange={(e) => setCompanyFilter(e.target.value)}
+              className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+            >
+              <option value="todas">Todos os parceiros</option>
+              {parceiros.map(([id, nome]) => (
+                <option key={id} value={id}>
+                  {nome}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {(catFilter !== "todas" ||
+            tipoFilter !== "todos" ||
+            companyFilter !== "todas") && (
+            <button
+              onClick={() => {
+                setCatFilter("todas");
+                setTipoFilter("todos");
+                setCompanyFilter("todas");
+              }}
+              className="text-xs text-gray-500 underline hover:text-gray-700"
+            >
+              limpar
+            </button>
+          )}
+
+          <span className="ml-auto text-xs text-gray-400">
+            {filtrados.length} e-mail(s)
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           {error}
         </div>
       )}
 
-      {drafts.length === 0 && !error && (
+      {filtrados.length === 0 && !error && (
         <p className="text-sm text-gray-500">Nenhum rascunho neste filtro.</p>
       )}
 
-      {drafts.map((d) => (
+      {filtrados.map((d) => (
         <DraftCard key={d.id} draft={d} onChanged={load} />
       ))}
     </div>
