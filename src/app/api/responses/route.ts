@@ -22,6 +22,7 @@ export async function GET() {
     .select(
       "id, company_id, sentiment, summary, raw_text, channel, created_at, companies(name, category)",
     )
+    .is("dismissed_at", null) // só as respostas ainda abertas (não arquivadas)
     .order("created_at", { ascending: false })
     .limit(30);
 

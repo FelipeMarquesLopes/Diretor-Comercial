@@ -21,7 +21,7 @@ export async function POST(
   const { id } = await params;
 
   let body: {
-    action?: "responder" | "encerrar" | "adiar" | "seguir";
+    action?: "responder" | "encerrar" | "adiar" | "seguir" | "fechar";
     instruction?: string;
   };
   try {
@@ -56,6 +56,19 @@ export async function POST(
   }
   const companyId = resp.company_id;
 
+  // Arquiva a resposta (tira do radar do dashboard).
+  const arquivar = () =>
+    supabase
+      .from("responses")
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq("id", id);
+
+  // --- Fechar: só arquiva (o CEO viu e não quer mais no radar). ---
+  if (body.action === "fechar") {
+    await arquivar();
+    return NextResponse.json({ ok: true });
+  }
+
   // --- Encerrar: para de cobrar de vez. ---
   if (body.action === "encerrar") {
     await supabase
@@ -67,6 +80,7 @@ export async function POST(
       type: "decisao",
       description: "CEO encerrou o assunto (sem mais cobrança).",
     });
+    await arquivar();
     return NextResponse.json({ ok: true });
   }
 
@@ -84,6 +98,7 @@ export async function POST(
       type: "decisao",
       description: "CEO optou por seguir cobrando (próxima cutucada em 72h).",
     });
+    await arquivar();
     return NextResponse.json({ ok: true });
   }
 
@@ -102,6 +117,7 @@ export async function POST(
       type: "decisao",
       description: "CEO adiou o assunto — retomada em 30 dias.",
     });
+    await arquivar();
     return NextResponse.json({ ok: true });
   }
 
@@ -192,6 +208,7 @@ export async function POST(
       type: "resposta",
       description: "CEO respondeu pelo sistema — réplica gerada; ciclo reativado.",
     });
+    await arquivar();
 
     return NextResponse.json({ ok: true, contato: contact?.name ?? null });
   }

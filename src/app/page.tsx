@@ -207,7 +207,9 @@ function ResponseItem({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  async function act(action: "responder" | "encerrar" | "adiar" | "seguir") {
+  async function act(
+    action: "responder" | "encerrar" | "adiar" | "seguir" | "fechar",
+  ) {
     if (action === "responder" && !instruction.trim()) {
       setNote("Escreva o que você quer responder.");
       return;
@@ -329,6 +331,14 @@ function ResponseItem({
 
           {note && <p className="mt-2 text-xs text-gray-600">{note}</p>}
         </div>
+        <button
+          onClick={() => act("fechar")}
+          disabled={busy}
+          className="shrink-0 text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+          title="Já vi/tratei — tirar do radar"
+        >
+          ✕ Fechar
+        </button>
       </div>
     </div>
   );
