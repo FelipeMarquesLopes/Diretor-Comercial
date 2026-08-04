@@ -20,7 +20,10 @@ export async function POST(
 ) {
   const { id } = await params;
 
-  let body: { action?: "responder" | "encerrar" | "adiar"; instruction?: string };
+  let body: {
+    action?: "responder" | "encerrar" | "adiar" | "seguir";
+    instruction?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -62,6 +65,23 @@ export async function POST(
       company_id: companyId,
       type: "decisao",
       description: "CEO encerrou o assunto (sem mais cobrança).",
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  // --- Seguir cobrando: retoma a cobrança automática de 72h (ex: "vamos
+  //     analisar"), sem escrever réplica. Conta 72h a partir de agora. ---
+  if (body.action === "seguir") {
+    const em72h = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase
+      .from("sequences")
+      .update({ status: "ativa", next_action_at: em72h })
+      .eq("company_id", companyId)
+      .eq("channel", "email");
+    await supabase.from("activities").insert({
+      company_id: companyId,
+      type: "decisao",
+      description: "CEO optou por seguir cobrando (próxima cutucada em 72h).",
     });
     return NextResponse.json({ ok: true });
   }

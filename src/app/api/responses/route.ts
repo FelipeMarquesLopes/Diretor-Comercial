@@ -91,19 +91,9 @@ export async function POST(req: Request) {
     raw_text: text,
   });
 
-  // Ajusta a máquina conforme o tom.
-  if (sentiment === "positivo") {
-    // Para tudo e chama o CEO.
-    await supabase
-      .from("sequences")
-      .update({ status: "aguardando_ceo", next_action_at: null })
-      .eq("company_id", companyId);
-    await supabase
-      .from("companies")
-      .update({ status: "em_negociacao" })
-      .eq("id", companyId);
-  } else if (sentiment === "negativo") {
-    // Pausa e agenda retomada em 30 dias.
+  // Qualquer resposta PARA a cobrança automática (só corre no silêncio); o CEO
+  // decide os próximos passos no dashboard.
+  if (sentiment === "negativo") {
     await supabase
       .from("sequences")
       .update({
@@ -112,6 +102,17 @@ export async function POST(req: Request) {
         resume_at: resumeAtAfterNegative().toISOString(),
       })
       .eq("company_id", companyId);
+  } else {
+    await supabase
+      .from("sequences")
+      .update({ status: "aguardando_ceo", next_action_at: null })
+      .eq("company_id", companyId);
+    if (sentiment === "positivo") {
+      await supabase
+        .from("companies")
+        .update({ status: "em_negociacao" })
+        .eq("id", companyId);
+    }
   }
 
   await supabase.from("activities").insert({

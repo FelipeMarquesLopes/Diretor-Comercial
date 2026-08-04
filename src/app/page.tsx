@@ -207,7 +207,7 @@ function ResponseItem({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  async function act(action: "responder" | "encerrar" | "adiar") {
+  async function act(action: "responder" | "encerrar" | "adiar" | "seguir") {
     if (action === "responder" && !instruction.trim()) {
       setNote("Escreva o que você quer responder.");
       return;
@@ -232,6 +232,8 @@ function ResponseItem({
         setInstruction("");
       } else if (action === "encerrar") {
         setNote("Assunto encerrado.");
+      } else if (action === "seguir") {
+        setNote("Seguindo a cobrança — próxima cutucada em 72h.");
       } else {
         setNote("Adiado — o sistema retoma a cobrança em 30 dias.");
       }
@@ -277,6 +279,14 @@ function ResponseItem({
               className="rounded-md bg-brand-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50"
             >
               ✍️ Responder pelo sistema
+            </button>
+            <button
+              onClick={() => act("seguir")}
+              disabled={busy}
+              className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              title="Ex: responderam 'vamos analisar' — retoma a cobrança automática de 72h sem escrever réplica"
+            >
+              🔁 Seguir cobrando
             </button>
             <button
               onClick={() => act("adiar")}

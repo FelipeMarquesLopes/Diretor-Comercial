@@ -119,17 +119,11 @@ export async function checkInbox(
           raw_text: text,
         });
 
-        if (sentiment === "positivo") {
-          await supabase
-            .from("sequences")
-            .update({ status: "aguardando_ceo", next_action_at: null })
-            .eq("company_id", match.company_id);
-          await supabase
-            .from("companies")
-            .update({ status: "em_negociacao" })
-            .eq("id", match.company_id);
-          positivas.push(match.companies.name);
-        } else if (sentiment === "negativo") {
+        // QUALQUER resposta PARA a cobrança automática (a de 72h só corre no
+        // silêncio). A bola vai para o CEO decidir: responder (a réplica
+        // reinicia o relógio), seguir cobrando, adiar ou encerrar.
+        if (sentiment === "negativo") {
+          // Negativa: pausa e agenda uma retomada automática em 30 dias.
           await supabase
             .from("sequences")
             .update({
@@ -138,6 +132,19 @@ export async function checkInbox(
               resume_at: resumeAtAfterNegative().toISOString(),
             })
             .eq("company_id", match.company_id);
+        } else {
+          // Positiva ou neutra ("vamos analisar"): aguarda decisão do CEO.
+          await supabase
+            .from("sequences")
+            .update({ status: "aguardando_ceo", next_action_at: null })
+            .eq("company_id", match.company_id);
+          if (sentiment === "positivo") {
+            await supabase
+              .from("companies")
+              .update({ status: "em_negociacao" })
+              .eq("id", match.company_id);
+            positivas.push(match.companies.name);
+          }
         }
 
         await supabase.from("activities").insert({
