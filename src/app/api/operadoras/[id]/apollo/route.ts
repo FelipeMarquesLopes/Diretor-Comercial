@@ -5,40 +5,12 @@ import {
   searchDecisionMakers,
   revealPerson,
 } from "@/lib/apollo";
-import { ensureSequences, generateDraftForSequence } from "@/lib/outreach";
-import type { Company, Contact, Sequence } from "@/lib/types";
+import type { Company, Contact } from "@/lib/types";
 
-// Revelar até 25 e-mails no Apollo + gerar o rascunho com a IA é pesado —
-// sem isto a função roda no tempo-limite padrão (~10s) e é morta antes de
-// gerar o rascunho (por isso operadoras com muitos contatos não geravam).
+// Revelar até 25 e-mails no Apollo é pesado — sem isto a função roda no
+// tempo-limite padrão (~10s). A GERAÇÃO do rascunho fica numa rota à parte
+// (/draft) de propósito, para não competir pelo mesmo tempo de execução.
 export const maxDuration = 60;
-
-// Depois que o destinatário é definido (via Apollo), garante que exista UM
-// rascunho pendente já endereçado — apagando pendentes antigos (montados no
-// cadastro, quando ainda não havia e-mail) para não duplicar.
-async function regenerarRascunho(
-  supabase: ReturnType<typeof getServerSupabase>,
-  company: Company,
-): Promise<{ ok: boolean; error?: string }> {
-  await ensureSequences(supabase, company.id, false);
-  const { data: seqs } = await supabase
-    .from("sequences")
-    .select("*")
-    .eq("company_id", company.id)
-    .eq("channel", "email");
-  const emailSeq = (seqs as Sequence[] | null)?.[0];
-  if (!emailSeq) return { ok: false, error: "Sequência de e-mail não encontrada." };
-
-  // Remove rascunhos de e-mail ainda pendentes (não enviados) desta operadora.
-  await supabase
-    .from("drafts")
-    .delete()
-    .eq("company_id", company.id)
-    .eq("channel", "email")
-    .eq("status", "pendente");
-
-  return generateDraftForSequence(supabase, company, emailSeq, "nr1");
-}
 
 // POST /api/operadoras/[id]/apollo
 // Usa o Apollo para achar contatos do SETOR DE CREDENCIAMENTO / COMERCIAL de
@@ -158,15 +130,11 @@ export async function POST(
       description: `Contato de credenciamento definido via Apollo: ${contactName} · ${revealed.email}.`,
     });
 
-    // Gera o rascunho já endereçado para o clique final do CEO.
-    const draft = await regenerarRascunho(supabase, company);
-
+    // O rascunho é gerado numa chamada separada (/draft) pelo cliente.
     return NextResponse.json({
       ok: true,
       email: revealed.email,
       name: contactName,
-      draftGerado: draft.ok,
-      draftErro: draft.ok ? undefined : draft.error,
     });
   }
 
@@ -273,17 +241,13 @@ export async function POST(
       description: `Credenciamento (Apollo): ${nomePrincipal} como destinatário e ${ccFinal.length} em cópia — num disparo só.`,
     });
 
-    // Gera UM rascunho já endereçado (Para + CC) para o clique final do CEO.
-    const draft = await regenerarRascunho(supabase, company);
-
+    // O rascunho é gerado numa chamada separada (/draft) pelo cliente.
     return NextResponse.json({
       ok: true,
       principal: { name: nomePrincipal, email: principal.email },
       ccCount: ccFinal.length,
       revelados: comEmail.length,
       pedidos: alvo.length,
-      draftGerado: draft.ok,
-      draftErro: draft.ok ? undefined : draft.error,
     });
   }
 

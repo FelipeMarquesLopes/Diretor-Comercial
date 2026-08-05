@@ -299,6 +299,27 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
     }
   }
 
+  // Gera o rascunho numa chamada à parte (não compete com os reveals do Apollo).
+  // Devolve uma frase de status para anexar à mensagem.
+  async function gerarRascunho(): Promise<string> {
+    try {
+      const r = await fetch(`/api/operadoras/${op.id}/draft`, { method: "POST" });
+      const txt = await r.text();
+      let d: { ok?: boolean; error?: string } = {};
+      try {
+        d = txt ? JSON.parse(txt) : {};
+      } catch {
+        return ` ⚠️ Rascunho não gerou (resposta ${r.status} do servidor). Tente de novo em alguns segundos.`;
+      }
+      if (r.ok && d.ok) {
+        return " Rascunho gerado — confirme o envio em Rascunhos.";
+      }
+      return ` ⚠️ Destinatário definido, mas o rascunho não gerou: ${d.error ?? `erro ${r.status}`}.`;
+    } catch (err) {
+      return ` ⚠️ Rascunho não gerou (falha de rede: ${String(err)}).`;
+    }
+  }
+
   async function usarTodos() {
     const lista = apolloPeople ?? [];
     if (lista.length === 0) return;
@@ -323,19 +344,36 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
           })),
         }),
       });
-      const d = await r.json();
-      if (d.error) {
-        setApolloNote(`Erro: ${d.error}`);
-      } else {
+      const txt = await r.text();
+      let d: {
+        error?: string;
+        principal?: { name?: string; email?: string };
+        ccCount?: number;
+        revelados?: number;
+        pedidos?: number;
+      } = {};
+      try {
+        d = txt ? JSON.parse(txt) : {};
+      } catch {
         setApolloNote(
-          `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${d.revelados} de ${d.pedidos} e-mails revelados.` +
-            (d.draftGerado
-              ? " Rascunho gerado — confirme o envio em Rascunhos."
-              : ` ⚠️ Destinatário definido, mas o rascunho não gerou (${d.draftErro ?? "erro na IA"}). Tente 'Registrar resposta' ou edite/gere de novo.`),
+          `Erro: o servidor respondeu ${r.status} (provável tempo esgotado). Tente de novo.`,
         );
-        setShowApollo(false);
-        onChanged();
+        return;
       }
+      if (!r.ok || d.error) {
+        setApolloNote(`Erro: ${d.error ?? `resposta ${r.status}`}`);
+        return;
+      }
+      setApolloNote(
+        `Revelando destinatário… ${d.revelados} de ${d.pedidos} e-mails revelados. Gerando rascunho…`,
+      );
+      const draftMsg = await gerarRascunho();
+      setApolloNote(
+        `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${d.revelados} de ${d.pedidos} e-mails revelados.` +
+          draftMsg,
+      );
+      setShowApollo(false);
+      onChanged();
     } catch (err) {
       setApolloNote(String(err));
     } finally {
@@ -363,19 +401,22 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
           title: p.title,
         }),
       });
-      const d = await r.json();
-      if (d.error) {
-        setApolloNote(`Erro: ${d.error}`);
-      } else {
-        setApolloNote(
-          `Destinatário definido: ${d.name} · ${d.email}.` +
-            (d.draftGerado
-              ? " Rascunho gerado — confirme o envio em Rascunhos."
-              : ` ⚠️ Destinatário definido, mas o rascunho não gerou (${d.draftErro ?? "erro na IA"}).`),
-        );
-        setShowApollo(false);
-        onChanged();
+      const txt = await r.text();
+      let d: { error?: string; name?: string; email?: string } = {};
+      try {
+        d = txt ? JSON.parse(txt) : {};
+      } catch {
+        setApolloNote(`Erro: o servidor respondeu ${r.status}. Tente de novo.`);
+        return;
       }
+      if (!r.ok || d.error) {
+        setApolloNote(`Erro: ${d.error ?? `resposta ${r.status}`}`);
+        return;
+      }
+      const draftMsg = await gerarRascunho();
+      setApolloNote(`Destinatário definido: ${d.name} · ${d.email}.` + draftMsg);
+      setShowApollo(false);
+      onChanged();
     } catch (err) {
       setApolloNote(String(err));
     } finally {
