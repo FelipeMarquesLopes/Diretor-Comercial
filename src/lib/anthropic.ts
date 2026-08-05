@@ -79,10 +79,13 @@ function categoryBriefing(company: Company, hook: MessageHook): string {
       );
     case "escola":
       return (
-        "Alvo: uma ESCOLA/colégio (falar com a coordenação). Objetivo: " +
-        "parceria institucional e canal de cuidado para alunos e famílias — " +
-        "avaliação e acompanhamento em saúde mental e neurodesenvolvimento " +
-        "(forte em TEA/ABA). Tom acolhedor e educativo."
+        "Alvo: uma ESCOLA/colégio PARTICULAR — falar com o time administrativo " +
+        "(coordenação pedagógica, direção, orientação educacional, secretaria). " +
+        "Objetivo: PARCERIA CLÍNICA↔ESCOLA — a MenthalHelp vira o canal de " +
+        "cuidado da escola para alunos e famílias: avaliação e acompanhamento " +
+        "em saúde mental e neurodesenvolvimento (forte em TEA/ABA), apoio à " +
+        "inclusão, suporte à equipe pedagógica e encaminhamento facilitado. " +
+        "Tom acolhedor, educativo e de parceria institucional — nunca vendedor."
       );
     case "medico":
       return (

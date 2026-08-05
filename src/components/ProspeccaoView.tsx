@@ -15,11 +15,12 @@ function emailUnavailable(status: string | null): boolean {
 export function ProspeccaoView({
   mode = "empresa",
 }: {
-  mode?: "empresa" | "medico";
+  mode?: "empresa" | "medico" | "escola";
 }) {
   const isMedico = mode === "medico";
-  const category = isMedico ? "medico" : "empresa";
-  const noun = isMedico ? "consultório(s)" : "empresa(s)";
+  const isEscola = mode === "escola";
+  const category = mode;
+  const noun = isEscola ? "escola(s)" : isMedico ? "consultório(s)" : "empresa(s)";
 
   const [companies, setCompanies] = useState<CompanyWithContacts[]>([]);
   const [loading, setLoading] = useState(false);
@@ -27,12 +28,17 @@ export function ProspeccaoView({
 
   // formulário de busca
   const [keywords, setKeywords] = useState("");
-  const [notKeywords, setNotKeywords] = useState("");
+  // Escola: já exclui rede pública por padrão (foco em particulares).
+  const [notKeywords, setNotKeywords] = useState(
+    isEscola
+      ? "prefeitura, municipal, estadual, secretaria de educação, federal, público, pública"
+      : "",
+  );
   const [nome, setNome] = useState("");
   const [estado, setEstado] = useState("Sao Paulo");
   const [cidades, setCidades] = useState("");
-  // Consultórios/médicos são pequenos: não filtra por porte (mín. 1).
-  const [minEmployees, setMinEmployees] = useState(isMedico ? 1 : 100);
+  // Consultórios/médicos e escolas são pequenos/variados: não filtra por porte.
+  const [minEmployees, setMinEmployees] = useState(mode === "empresa" ? 100 : 1);
   const [maxEmployees, setMaxEmployees] = useState<string>("");
   const [perPage, setPerPage] = useState(25);
   const [onlyWithContact, setOnlyWithContact] = useState(true);
@@ -124,32 +130,44 @@ export function ProspeccaoView({
         className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
       >
         <h2 className="mb-1 font-semibold text-gray-800">
-          {isMedico
-            ? "Buscar médicos / consultórios no Apollo (iscas de marketing)"
-            : "Buscar empresas no Apollo"}
+          {isEscola
+            ? "Buscar escolas / colégios no Apollo (parceria clínica ↔ escola)"
+            : isMedico
+              ? "Buscar médicos / consultórios no Apollo (iscas de marketing)"
+              : "Buscar empresas no Apollo"}
         </h2>
         <p className="mb-3 text-xs text-gray-500">
-          {isMedico
-            ? "Médicos prescritores (neuro, psiquiatria, pediatria…) para rede de encaminhamento. Atalhos por especialidade:"
-            : "Quanto mais detalhes, melhores os resultados. Atalhos:"}
+          {isEscola
+            ? "Escolas particulares (rede pública já vem excluída). Buscamos TODO o time administrativo — coordenação, direção, orientação, secretaria. Atalhos por segmento:"
+            : isMedico
+              ? "Médicos prescritores (neuro, psiquiatria, pediatria…) para rede de encaminhamento. Atalhos por especialidade:"
+              : "Quanto mais detalhes, melhores os resultados. Atalhos:"}
         </p>
         {/* Atalhos de preenchimento rápido */}
         <div className="mb-3 flex flex-wrap gap-2">
-          {(isMedico
+          {(isEscola
             ? ([
-                ["🧠 Neuro", "neurologia, neurologista, neuropediatria"],
-                ["🧩 Psiquiatria", "psiquiatria, psiquiatra, saúde mental"],
-                ["👶 Pediatria", "pediatria, pediatra, neuropediatra"],
-                ["🩺 Clínicas", "clínica médica, consultório, ambulatório"],
-                ["👵 Geriatria", "geriatria, geriatra"],
+                ["🏫 Colégios particulares", "colégio particular, escola particular, ensino privado"],
+                ["🎒 Ed. Infantil", "educação infantil, creche, pré-escola, berçário"],
+                ["📚 Fundamental/Médio", "ensino fundamental, ensino médio, colégio"],
+                ["🌱 Bilíngue/Montessori", "escola bilíngue, montessoriana, escola construtivista"],
+                ["🧩 Inclusiva/Especial", "escola inclusiva, educação especial, inclusão"],
               ] as const)
-            : ([
-                ["🏭 Indústrias", "manufacturing, indústria, metalurgia, fábrica"],
-                ["🚚 Transporte/Logística", "transporte, logística, distribuição"],
-                ["🏫 Escolas/Colégios", "escola, colégio, educação, ensino"],
-                ["🛒 Varejo", "varejo, supermercado, comércio"],
-                ["🏥 Saúde", "hospital, clínica, saúde"],
-              ] as const)
+            : isMedico
+              ? ([
+                  ["🧠 Neuro", "neurologia, neurologista, neuropediatria"],
+                  ["🧩 Psiquiatria", "psiquiatria, psiquiatra, saúde mental"],
+                  ["👶 Pediatria", "pediatria, pediatra, neuropediatra"],
+                  ["🩺 Clínicas", "clínica médica, consultório, ambulatório"],
+                  ["👵 Geriatria", "geriatria, geriatra"],
+                ] as const)
+              : ([
+                  ["🏭 Indústrias", "manufacturing, indústria, metalurgia, fábrica"],
+                  ["🚚 Transporte/Logística", "transporte, logística, distribuição"],
+                  ["🏫 Escolas/Colégios", "escola, colégio, educação, ensino"],
+                  ["🛒 Varejo", "varejo, supermercado, comércio"],
+                  ["🏥 Saúde", "hospital, clínica, saúde"],
+                ] as const)
           ).map(([label, kw]) => (
             <button
               key={label}
@@ -248,8 +266,11 @@ export function ProspeccaoView({
               onChange={(e) => setOnlyWithContact(e.target.checked)}
             />
             <span className="text-gray-600">
-              Só trazer empresas com decisor encontrado — RH, dono, diretor,
-              sócio (o e-mail é revelado ao Abordar) — recomendado
+              {isEscola
+                ? "Só trazer escolas com contato encontrado — coordenação, direção, orientação (o e-mail é revelado ao Abordar) — recomendado"
+                : isMedico
+                  ? "Só trazer consultórios com contato encontrado — médico, direção clínica, dono (o e-mail é revelado ao Abordar) — recomendado"
+                  : "Só trazer empresas com decisor encontrado — RH, dono, diretor, sócio (o e-mail é revelado ao Abordar) — recomendado"}
             </span>
           </label>
         </div>
@@ -265,8 +286,12 @@ export function ProspeccaoView({
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-          {isMedico ? "Médicos / consultórios" : "Empresas qualificadas"} (
-          {companies.length})
+          {isEscola
+            ? "Escolas / colégios"
+            : isMedico
+              ? "Médicos / consultórios"
+              : "Empresas qualificadas"}{" "}
+          ({companies.length})
         </h2>
         <div className="space-y-3">
           {companies.length === 0 && (

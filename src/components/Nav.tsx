@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/operadoras", label: "Operadoras" },
   { href: "/prospeccao", label: "Empresas" },
   { href: "/medicos", label: "Médicos" },
+  { href: "/escolas", label: "Escolas" },
   { href: "/agenda", label: "Agenda Aberta" },
   { href: "/reajustes", label: "Reajustes" },
   { href: "/rascunhos", label: "Rascunhos" },

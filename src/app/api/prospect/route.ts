@@ -37,8 +37,17 @@ export async function POST(req: Request) {
   // "Só com decisor" exige buscar os decisores (é de graça no Apollo).
   const onlyWithContact = body.onlyWithContact !== false;
   const withContacts = body.withContacts !== false || onlyWithContact;
-  const category = body.category === "medico" ? "medico" : "empresa";
-  const isMedico = category === "medico";
+  const category: "empresa" | "medico" | "escola" =
+    body.category === "medico"
+      ? "medico"
+      : body.category === "escola"
+        ? "escola"
+        : "empresa";
+  // Médicos e escolas são pequenos/variados — não reprovamos por porte.
+  const ignoreSize = category !== "empresa";
+  // Numa escola queremos TODO o time administrativo (coordenação, direção,
+  // orientação, secretaria), não só um contato — puxamos mais decisores.
+  const decisoresPorEmpresa = category === "escola" ? 25 : 10;
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -78,7 +87,7 @@ export async function POST(req: Request) {
   let decisoresEncontrados = 0; // total de decisores achados (antes do filtro)
 
   for (const org of orgs) {
-    const q = qualifyCompany(org, { ignoreSize: isMedico });
+    const q = qualifyCompany(org, { ignoreSize });
 
     if (q.qualified && !org.domain) qualificadasSemDominio++;
 
@@ -87,7 +96,11 @@ export async function POST(req: Request) {
     let decisores: Awaited<ReturnType<typeof searchDecisionMakers>> = [];
     if (withContacts && q.qualified && org.domain) {
       try {
-        decisores = await searchDecisionMakers(org.domain, 10, category);
+        decisores = await searchDecisionMakers(
+          org.domain,
+          decisoresPorEmpresa,
+          category,
+        );
       } catch (err) {
         if (!avisoContatos) {
           avisoContatos =

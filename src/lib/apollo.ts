@@ -213,6 +213,46 @@ const DECISION_TITLES = {
     "Founder",
     "Fundador",
   ],
+  escola: [
+    // Direção (quem fecha parceria institucional)
+    "Diretor",
+    "Diretora",
+    "Diretor Geral",
+    "Diretor Pedagógico",
+    "Diretora Pedagógica",
+    "Diretor Escolar",
+    "Diretor Administrativo",
+    "Diretor Financeiro",
+    "Principal",
+    "Headmaster",
+    "School Director",
+    // Coordenação (o coração do time administrativo/pedagógico)
+    "Coordenador",
+    "Coordenadora",
+    "Coordenador Pedagógico",
+    "Coordenadora Pedagógica",
+    "Coordenador Educacional",
+    "Coordenador de Ensino",
+    "Coordenador Administrativo",
+    "Pedagogical Coordinator",
+    // Orientação / apoio ao aluno (porta de entrada do cuidado)
+    "Orientador Educacional",
+    "Orientadora Educacional",
+    "Orientador Pedagógico",
+    "Psicólogo Escolar",
+    "Psicopedagogo",
+    "Psicopedagoga",
+    // Gestão / secretaria / mantenedores
+    "Gestor Escolar",
+    "Supervisor Pedagógico",
+    "Secretário Escolar",
+    "Secretária Escolar",
+    "Mantenedor",
+    "Proprietário",
+    "Owner",
+    "Sócio",
+    "Fundador",
+  ],
 } as const;
 
 const DECISION_SENIORITIES = {
@@ -229,6 +269,18 @@ const DECISION_SENIORITIES = {
   // Médicos costumam aparecer sem senioridade corporativa clara; não
   // restringimos por senioridade para não perder o próprio prescritor.
   medico: ["owner", "founder", "partner", "director", "head"],
+  // Escola: queremos TODO o time administrativo, não só a diretoria — por isso
+  // incluímos manager/head/vp além dos donos e diretores.
+  escola: [
+    "owner",
+    "founder",
+    "partner",
+    "c_suite",
+    "vp",
+    "director",
+    "head",
+    "manager",
+  ],
 } as const;
 
 /**
@@ -241,7 +293,7 @@ const DECISION_SENIORITIES = {
 export async function searchDecisionMakers(
   organizationDomain: string,
   perPage = 10,
-  category: "empresa" | "medico" = "empresa",
+  category: "empresa" | "medico" | "escola" = "empresa",
 ): Promise<ApolloContact[]> {
   const body = {
     page: 1,
