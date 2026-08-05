@@ -30,6 +30,8 @@ export async function POST(
     apolloId?: string;
     name?: string;
     title?: string;
+    // Para a ação "usar_todos": a lista de contatos a revelar de uma vez.
+    people?: { apolloId: string; name?: string; title?: string }[];
   };
   try {
     body = await req.json();
@@ -124,6 +126,118 @@ export async function POST(
     });
 
     return NextResponse.json({ ok: true, email: revealed.email, name: contactName });
+  }
+
+  // --- Ação: USAR TODOS — revela todos de uma vez, 1º = Para, resto = CC ------
+  if (body.action === "usar_todos") {
+    const alvo = (body.people ?? []).filter((p) => p.apolloId);
+    if (alvo.length === 0) {
+      return NextResponse.json(
+        { error: "Nenhum contato para revelar." },
+        { status: 400 },
+      );
+    }
+
+    // Revela todos em paralelo (consome 1 crédito por contato revelável).
+    const revelados = await Promise.all(
+      alvo.map(async (p) => {
+        try {
+          const r = await revealPerson(p.apolloId);
+          return { name: p.name, title: p.title, email: r.email, phone: r.phone };
+        } catch {
+          return { name: p.name, title: p.title, email: null, phone: null };
+        }
+      }),
+    );
+
+    // Só os que realmente vieram com e-mail, sem duplicar.
+    const comEmail: { name?: string; title?: string; email: string; phone: string | null }[] =
+      [];
+    const vistos = new Set<string>();
+    for (const r of revelados) {
+      if (!r.email) continue;
+      const key = r.email.toLowerCase();
+      if (vistos.has(key)) continue;
+      vistos.add(key);
+      comEmail.push({ name: r.name, title: r.title, email: r.email, phone: r.phone });
+    }
+
+    if (comEmail.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "O Apollo não conseguiu revelar nenhum e-mail desta lista. Tente outros contatos.",
+        },
+        { status: 422 },
+      );
+    }
+
+    // 1º revelado = destinatário principal (Para); o resto entra em cópia (CC).
+    const principal = comEmail[0];
+    const ccNovos = comEmail.slice(1).map((c) => c.email);
+
+    // Junta com o CC que já existia (sem duplicar e sem repetir o principal).
+    const ccExistente = (company.cc_emails ?? "")
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean);
+    const ccFinal: string[] = [];
+    const ccVistos = new Set<string>([principal.email.toLowerCase()]);
+    for (const e of [...ccExistente, ...ccNovos]) {
+      const key = e.toLowerCase();
+      if (ccVistos.has(key)) continue;
+      ccVistos.add(key);
+      ccFinal.push(e);
+    }
+
+    // Define o contato principal (Para).
+    const { data: existing } = await supabase
+      .from("contacts")
+      .select("*")
+      .eq("company_id", id)
+      .limit(1);
+    const current = (existing as Contact[] | null)?.[0];
+    const nomePrincipal = principal.name || current?.name || "Credenciamento";
+    if (current) {
+      await supabase
+        .from("contacts")
+        .update({
+          name: nomePrincipal,
+          title: principal.title ?? current.title,
+          email: principal.email,
+          phone: principal.phone ?? current.phone,
+        })
+        .eq("id", current.id);
+    } else {
+      await supabase.from("contacts").insert({
+        company_id: id,
+        name: nomePrincipal,
+        title: principal.title ?? null,
+        email: principal.email,
+        phone: principal.phone,
+        is_decision_maker: true,
+      });
+    }
+
+    // Salva o CC na operadora (o disparo do rascunho já usa cc_emails).
+    await supabase
+      .from("companies")
+      .update({ cc_emails: ccFinal.join(", ") || null })
+      .eq("id", id);
+
+    await supabase.from("activities").insert({
+      company_id: id,
+      type: "cadastro",
+      description: `Credenciamento (Apollo): ${nomePrincipal} como destinatário e ${ccFinal.length} em cópia — num disparo só.`,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      principal: { name: nomePrincipal, email: principal.email },
+      ccCount: ccFinal.length,
+      revelados: comEmail.length,
+      pedidos: alvo.length,
+    });
   }
 
   // --- Ação: BUSCAR (padrão) — acha os contatos de credenciamento ------------

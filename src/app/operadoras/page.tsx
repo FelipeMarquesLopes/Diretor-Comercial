@@ -299,6 +299,47 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
     }
   }
 
+  async function usarTodos() {
+    const lista = apolloPeople ?? [];
+    if (lista.length === 0) return;
+    if (
+      !confirm(
+        `Revelar o e-mail de TODOS os ${lista.length} contatos de uma vez? Isso consome até ${lista.length} créditos do Apollo. O 1º vira o destinatário (Para) e os demais entram em cópia (CC) — tudo num disparo só.`,
+      )
+    )
+      return;
+    setApolloBusy(true);
+    setApolloNote("Revelando todos os e-mails… pode levar alguns segundos.");
+    try {
+      const r = await fetch(`/api/operadoras/${op.id}/apollo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "usar_todos",
+          people: lista.map((p) => ({
+            apolloId: p.apolloId,
+            name: p.name,
+            title: p.title,
+          })),
+        }),
+      });
+      const d = await r.json();
+      if (d.error) {
+        setApolloNote(`Erro: ${d.error}`);
+      } else {
+        setApolloNote(
+          `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${d.revelados} de ${d.pedidos} e-mails revelados. O rascunho vai para todos num disparo só.`,
+        );
+        setShowApollo(false);
+        onChanged();
+      }
+    } catch (err) {
+      setApolloNote(String(err));
+    } finally {
+      setApolloBusy(false);
+    }
+  }
+
   async function usarCredenciamento(p: ApolloPerson) {
     if (
       !confirm(
@@ -608,6 +649,22 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
             </div>
             {apolloBusy && !apolloPeople && (
               <p className="text-xs text-gray-500">Buscando no Apollo…</p>
+            )}
+            {apolloPeople && apolloPeople.length > 0 && (
+              <button
+                onClick={usarTodos}
+                disabled={apolloBusy}
+                className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+                title="Revela o e-mail de todos e monta um único rascunho (1º = Para, resto = CC)"
+              >
+                ✉️ Revelar todos e colocar em cópia (CC) — 1 disparo só
+              </button>
+            )}
+            {apolloPeople && apolloPeople.length > 0 && (
+              <p className="text-[11px] text-gray-400">
+                Ou revele individualmente abaixo (define só aquele como
+                destinatário):
+              </p>
             )}
             {apolloPeople && apolloPeople.length > 0 && (
               <div className="space-y-1.5">
