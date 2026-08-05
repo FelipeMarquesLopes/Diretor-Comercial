@@ -87,7 +87,7 @@ export async function POST(req: Request) {
     let decisores: Awaited<ReturnType<typeof searchDecisionMakers>> = [];
     if (withContacts && q.qualified && org.domain) {
       try {
-        decisores = await searchDecisionMakers(org.domain);
+        decisores = await searchDecisionMakers(org.domain, 10, category);
       } catch (err) {
         if (!avisoContatos) {
           avisoContatos =

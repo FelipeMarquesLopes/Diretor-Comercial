@@ -149,58 +149,106 @@ export async function searchCompanies(
   return orgs.map(normalizeOrg).filter((o) => o.apolloId);
 }
 
+// Cargos-alvo por frente. Empresa = RH + diretoria (quem fecha parceria de
+// benefício). Médico = o próprio médico + direção clínica (rede de
+// encaminhamento). Buscar "Gerente de RH" num consultório não faz sentido.
+const DECISION_TITLES = {
+  empresa: [
+    // Donos e lideranças (decisores)
+    "CEO",
+    "Founder",
+    "Owner",
+    "President",
+    "Presidente",
+    "Proprietário",
+    "Sócio",
+    "Sócio-Diretor",
+    "Managing Director",
+    "Diretor",
+    "Diretora",
+    "Diretor Geral",
+    "Diretor Executivo",
+    "Gerente Geral",
+    // RH / Gente / Benefícios (ideal para empresas)
+    "Human Resources",
+    "HR",
+    "People",
+    "Recursos Humanos",
+    "Gente e Gestão",
+    "Diretor de RH",
+    "Gerente de RH",
+    "Diretor de Recursos Humanos",
+    "Gerente de Recursos Humanos",
+    "Benefits",
+    "Benefícios",
+  ],
+  medico: [
+    // A direção clínica (quem decide encaminhamentos e parcerias)
+    "Diretor Clínico",
+    "Diretora Clínica",
+    "Diretor Médico",
+    "Diretor Técnico",
+    "Diretora Técnica",
+    "Responsável Técnico",
+    "Coordenador Médico",
+    "Clinical Director",
+    "Medical Director",
+    // O próprio médico prescritor / dono do consultório
+    "Médico",
+    "Médica",
+    "Doctor",
+    "Physician",
+    "Neurologista",
+    "Neuropediatra",
+    "Psiquiatra",
+    "Pediatra",
+    "Geriatra",
+    "Neurologist",
+    "Psychiatrist",
+    "Pediatrician",
+    // Dono/sócio do consultório
+    "Proprietário",
+    "Owner",
+    "Sócio",
+    "Founder",
+    "Fundador",
+  ],
+} as const;
+
+const DECISION_SENIORITIES = {
+  empresa: [
+    "owner",
+    "founder",
+    "c_suite",
+    "partner",
+    "vp",
+    "director",
+    "head",
+    "manager",
+  ],
+  // Médicos costumam aparecer sem senioridade corporativa clara; não
+  // restringimos por senioridade para não perder o próprio prescritor.
+  medico: ["owner", "founder", "partner", "director", "head"],
+} as const;
+
 /**
- * Busca DECISORES em uma empresa (por domínio): RH, mas também donos e
- * lideranças (CEO, sócio, diretor, proprietário) — porque muitas empresas não
- * têm um RH dedicado, e quem decide a parceria é o dono/diretor.
+ * Busca DECISORES em uma empresa (por domínio).
+ *
+ * - Frente "empresa": RH + diretoria (quem fecha benefício corporativo).
+ * - Frente "medico": o próprio médico + direção clínica (rede de
+ *   encaminhamento) — NÃO caça RH/Benefícios, que não existe em consultório.
  */
 export async function searchDecisionMakers(
   organizationDomain: string,
   perPage = 10,
+  category: "empresa" | "medico" = "empresa",
 ): Promise<ApolloContact[]> {
   const body = {
     page: 1,
     per_page: perPage,
     q_organization_domains_list: [organizationDomain],
-    person_seniorities: [
-      "owner",
-      "founder",
-      "c_suite",
-      "partner",
-      "vp",
-      "director",
-      "head",
-      "manager",
-    ],
-    person_titles: [
-      // Donos e lideranças (decisores)
-      "CEO",
-      "Founder",
-      "Owner",
-      "President",
-      "Presidente",
-      "Proprietário",
-      "Sócio",
-      "Sócio-Diretor",
-      "Managing Director",
-      "Diretor",
-      "Diretora",
-      "Diretor Geral",
-      "Diretor Executivo",
-      "Gerente Geral",
-      // RH / Gente / Benefícios (ideal para empresas)
-      "Human Resources",
-      "HR",
-      "People",
-      "Recursos Humanos",
-      "Gente e Gestão",
-      "Diretor de RH",
-      "Gerente de RH",
-      "Diretor de Recursos Humanos",
-      "Gerente de Recursos Humanos",
-      "Benefits",
-      "Benefícios",
-    ],
+    person_seniorities: DECISION_SENIORITIES[category],
+    person_titles: DECISION_TITLES[category],
   };
 
   // Endpoint NOVO de busca de pessoas (o /mixed_people/search foi descontinuado).
