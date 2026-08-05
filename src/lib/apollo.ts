@@ -367,7 +367,7 @@ export async function searchDecisionMakers(
  */
 export async function revealPerson(
   apolloId: string,
-): Promise<{ email: string | null; phone: string | null }> {
+): Promise<{ email: string | null; phone: string | null; emailStatus: string | null }> {
   const data = await apolloPost<{ person?: RawPerson }>("/people/match", {
     id: apolloId,
     // Por padrão o Apollo NÃO devolve e-mail pessoal. Pedimos também o pessoal
@@ -376,7 +376,7 @@ export async function revealPerson(
     reveal_personal_emails: true,
   });
   const p = data.person;
-  if (!p) return { email: null, phone: null };
+  if (!p) return { email: null, phone: null, emailStatus: null };
   // 1º o e-mail corporativo; se vier vazio/bloqueado, tenta um pessoal.
   const work =
     p.email && !p.email.includes("not_unlocked") ? p.email : null;
@@ -385,7 +385,17 @@ export async function revealPerson(
   return {
     email: work ?? personal,
     phone: p.phone_numbers?.[0]?.raw_number ?? null,
+    // Status do e-mail confirmado na revelação — "verified" é seguro para
+    // enviar; "guessed"/"unverified" costumam RETORNAR (bounce).
+    emailStatus: p.email_status ?? null,
   };
+}
+
+// E-mail "seguro" de enviar: só os que o Apollo marcou como verificados.
+// Enviar para adivinhados (guessed/unverified) causa bounces e ameaça a
+// reputação/conta de envio.
+export function isEmailVerified(status: string | null | undefined): boolean {
+  return (status ?? "").toLowerCase().trim() === "verified";
 }
 
 // --- Normalização das respostas cruas do Apollo ----------------------------

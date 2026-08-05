@@ -4,6 +4,7 @@ import {
   searchCompanies,
   searchDecisionMakers,
   revealPerson,
+  isEmailVerified,
 } from "@/lib/apollo";
 import type { Company, Contact } from "@/lib/types";
 
@@ -36,7 +37,15 @@ export async function POST(
     name?: string;
     title?: string;
     // Para a ação "usar_todos": a lista de contatos a revelar de uma vez.
-    people?: { apolloId: string; name?: string; title?: string }[];
+    people?: {
+      apolloId: string;
+      name?: string;
+      title?: string;
+      emailStatus?: string | null;
+    }[];
+    // Se true (padrão), só revela/usa e-mails VERIFICADOS pelo Apollo — evita
+    // bounces que ameaçam a reputação e a conta de envio.
+    onlyVerified?: boolean;
   };
   try {
     body = await req.json();
@@ -140,19 +149,37 @@ export async function POST(
 
   // --- Ação: USAR TODOS — revela todos de uma vez, 1º = Para, resto = CC ------
   if (body.action === "usar_todos") {
-    const alvo = (body.people ?? []).filter((p) => p.apolloId);
+    const onlyVerified = body.onlyVerified !== false;
+    let alvo = (body.people ?? []).filter((p) => p.apolloId);
+
+    // Deliverability: por padrão só revelamos VERIFICADOS. Revelar adivinhados
+    // gera bounce e ameaça a conta de envio (Titan/HostGator suspende).
+    const pediram = alvo.length;
+    if (onlyVerified) {
+      alvo = alvo.filter((p) => isEmailVerified(p.emailStatus));
+    }
+
     if (alvo.length === 0) {
       return NextResponse.json(
-        { error: "Nenhum contato para revelar." },
-        { status: 400 },
+        {
+          error: onlyVerified
+            ? `Nenhum dos ${pediram} contatos tem e-mail VERIFICADO pelo Apollo. Enviar para os não verificados causa retorno (bounce) e pode suspender a conta de envio — por isso não revelamos.`
+            : "Nenhum contato para revelar.",
+        },
+        { status: 422 },
       );
     }
 
-    // Revela todos em paralelo (consome 1 crédito por contato revelável).
+    // Revela em paralelo (consome 1 crédito por contato revelável).
     const revelados = await Promise.all(
       alvo.map(async (p) => {
         try {
           const r = await revealPerson(p.apolloId);
+          // 2ª barreira: mesmo revelado, se o status vier não-verificado e
+          // pedimos só verificados, descartamos (evita bounce).
+          if (onlyVerified && !isEmailVerified(r.emailStatus)) {
+            return { name: p.name, title: p.title, email: null, phone: null };
+          }
           return { name: p.name, title: p.title, email: r.email, phone: r.phone };
         } catch {
           return { name: p.name, title: p.title, email: null, phone: null };
@@ -247,7 +274,9 @@ export async function POST(
       principal: { name: nomePrincipal, email: principal.email },
       ccCount: ccFinal.length,
       revelados: comEmail.length,
-      pedidos: alvo.length,
+      verificados: alvo.length,
+      pedidos: pediram,
+      onlyVerified,
     });
   }
 

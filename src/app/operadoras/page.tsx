@@ -259,6 +259,12 @@ type ApolloPerson = {
   alreadyEmail: boolean;
 };
 
+// Só "verified" é seguro de enviar. Adivinhados (guessed/unverified) voltam
+// (bounce) e ameaçam a reputação e a conta de envio.
+function isVerified(status: string | null): boolean {
+  return (status ?? "").toLowerCase().trim() === "verified";
+}
+
 function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => void }) {
   const [showResp, setShowResp] = useState(false);
   const [respText, setRespText] = useState("");
@@ -322,25 +328,33 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
 
   async function usarTodos() {
     const lista = apolloPeople ?? [];
-    if (lista.length === 0) return;
+    const verificados = lista.filter((p) => isVerified(p.emailStatus));
+    if (verificados.length === 0) {
+      setApolloNote(
+        "Nenhum contato com e-mail VERIFICADO nesta lista. Enviar para os não verificados causa retorno (bounce) e pode suspender a conta de envio — por isso não revelamos automaticamente. Se conhecer o e-mail certo de alguém, cadastre na edição da operadora.",
+      );
+      return;
+    }
     if (
       !confirm(
-        `Revelar o e-mail de TODOS os ${lista.length} contatos de uma vez? Isso consome até ${lista.length} créditos do Apollo. O 1º vira o destinatário (Para) e os demais entram em cópia (CC) — tudo num disparo só.`,
+        `Revelar o e-mail dos ${verificados.length} contatos VERIFICADOS (de ${lista.length}) de uma vez? Consome até ${verificados.length} créditos do Apollo. O 1º vira o destinatário (Para) e os demais entram em cópia (CC), num disparo só. Os não verificados são deixados de fora para não gerar retorno (bounce).`,
       )
     )
       return;
     setApolloBusy(true);
-    setApolloNote("Revelando todos os e-mails… pode levar alguns segundos.");
+    setApolloNote("Revelando os e-mails verificados… pode levar alguns segundos.");
     try {
       const r = await fetch(`/api/operadoras/${op.id}/apollo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "usar_todos",
+          onlyVerified: true,
           people: lista.map((p) => ({
             apolloId: p.apolloId,
             name: p.name,
             title: p.title,
+            emailStatus: p.emailStatus,
           })),
         }),
       });
@@ -350,6 +364,7 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
         principal?: { name?: string; email?: string };
         ccCount?: number;
         revelados?: number;
+        verificados?: number;
         pedidos?: number;
       } = {};
       try {
@@ -365,11 +380,11 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
         return;
       }
       setApolloNote(
-        `Revelando destinatário… ${d.revelados} de ${d.pedidos} e-mails revelados. Gerando rascunho…`,
+        `${d.revelados} e-mail(s) verificado(s) revelado(s). Gerando rascunho…`,
       );
       const draftMsg = await gerarRascunho();
       setApolloNote(
-        `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${d.revelados} de ${d.pedidos} e-mails revelados.` +
+        `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${d.revelados} verificado(s) de ${d.pedidos} contatos (só verificados entram, para não gerar retorno).` +
           draftMsg,
       );
       setShowApollo(false);
@@ -382,9 +397,13 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
   }
 
   async function usarCredenciamento(p: ApolloPerson) {
+    const ok = isVerified(p.emailStatus);
+    const aviso = ok
+      ? ""
+      : "\n\n⚠️ ATENÇÃO: este e-mail NÃO é verificado (o Apollo adivinhou). Ele pode voltar (bounce) e prejudicar a reputação/conta de envio. Use só se tiver certeza de que o endereço existe.";
     if (
       !confirm(
-        `Usar "${p.name}"${p.title ? ` (${p.title})` : ""} como contato de credenciamento? Isso revela o e-mail (1 crédito do Apollo) e o define como destinatário da operadora.`,
+        `Usar "${p.name}"${p.title ? ` (${p.title})` : ""} como contato de credenciamento? Isso revela o e-mail (1 crédito do Apollo) e o define como destinatário da operadora.${aviso}`,
       )
     )
       return;
@@ -697,45 +716,80 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
             {apolloBusy && !apolloPeople && (
               <p className="text-xs text-gray-500">Buscando no Apollo…</p>
             )}
-            {apolloPeople && apolloPeople.length > 0 && (
-              <button
-                onClick={usarTodos}
-                disabled={apolloBusy}
-                className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
-                title="Revela o e-mail de todos e monta um único rascunho (1º = Para, resto = CC)"
-              >
-                ✉️ Revelar todos e colocar em cópia (CC) — 1 disparo só
-              </button>
-            )}
-            {apolloPeople && apolloPeople.length > 0 && (
-              <p className="text-[11px] text-gray-400">
-                Ou revele individualmente abaixo (define só aquele como
-                destinatário):
-              </p>
-            )}
+            {apolloPeople && apolloPeople.length > 0 && (() => {
+              const verif = apolloPeople.filter((p) => isVerified(p.emailStatus));
+              return (
+                <>
+                  <button
+                    onClick={usarTodos}
+                    disabled={apolloBusy || verif.length === 0}
+                    className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+                    title="Revela só os e-mails VERIFICADOS e monta um único rascunho (1º = Para, resto = CC)"
+                  >
+                    ✉️ Revelar os {verif.length} VERIFICADOS e colocar em cópia (CC)
+                  </button>
+                  <p className="text-[11px] text-gray-400">
+                    Só e-mails ✓ verificados entram — os adivinhados voltam
+                    (bounce) e podem suspender a conta de envio. Ou revele um a
+                    um abaixo:
+                  </p>
+                </>
+              );
+            })()}
             {apolloPeople && apolloPeople.length > 0 && (
               <div className="space-y-1.5">
-                {apolloPeople.map((p) => (
-                  <div
-                    key={p.apolloId}
-                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium text-gray-800">{p.name}</span>
-                      {p.title && (
-                        <span className="text-xs text-gray-500"> · {p.title}</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => usarCredenciamento(p)}
-                      disabled={apolloBusy}
-                      className="rounded-md border border-brand-300 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
-                      title="Revela o e-mail (1 crédito) e define como destinatário"
-                    >
-                      Usar (revelar e-mail)
-                    </button>
-                  </div>
-                ))}
+                {[...apolloPeople]
+                  .sort(
+                    (a, b) =>
+                      Number(isVerified(b.emailStatus)) -
+                      Number(isVerified(a.emailStatus)),
+                  )
+                  .map((p) => {
+                    const ok = isVerified(p.emailStatus);
+                    return (
+                      <div
+                        key={p.apolloId}
+                        className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-medium text-gray-800">{p.name}</span>
+                          {p.title && (
+                            <span className="text-xs text-gray-500"> · {p.title}</span>
+                          )}
+                          <span
+                            className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                              ok
+                                ? "bg-green-100 text-green-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                            title={
+                              ok
+                                ? "E-mail verificado pelo Apollo — seguro de enviar"
+                                : "Não verificado (adivinhado) — risco de retorno (bounce)"
+                            }
+                          >
+                            {ok ? "✓ verificado" : "⚠ não verificado"}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => usarCredenciamento(p)}
+                          disabled={apolloBusy}
+                          className={`rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50 ${
+                            ok
+                              ? "border-brand-300 text-brand-700 hover:bg-brand-50"
+                              : "border-amber-300 text-amber-700 hover:bg-amber-50"
+                          }`}
+                          title={
+                            ok
+                              ? "Revela o e-mail (1 crédito) e define como destinatário"
+                              : "E-mail não verificado — pode voltar (bounce). Use só se tiver certeza."
+                          }
+                        >
+                          {ok ? "Usar (revelar e-mail)" : "Usar mesmo assim"}
+                        </button>
+                      </div>
+                    );
+                  })}
               </div>
             )}
             {apolloPeople && apolloPeople.length === 0 && !apolloBusy && (
