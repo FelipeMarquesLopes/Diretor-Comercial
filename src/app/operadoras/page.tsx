@@ -328,7 +328,10 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
         setApolloNote(`Erro: ${d.error}`);
       } else {
         setApolloNote(
-          `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${d.revelados} de ${d.pedidos} e-mails revelados. O rascunho vai para todos num disparo só.`,
+          `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${d.revelados} de ${d.pedidos} e-mails revelados.` +
+            (d.draftGerado
+              ? " Rascunho gerado — confirme o envio em Rascunhos."
+              : ` ⚠️ Destinatário definido, mas o rascunho não gerou (${d.draftErro ?? "erro na IA"}). Tente 'Registrar resposta' ou edite/gere de novo.`),
         );
         setShowApollo(false);
         onChanged();
@@ -365,7 +368,10 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
         setApolloNote(`Erro: ${d.error}`);
       } else {
         setApolloNote(
-          `Destinatário definido: ${d.name} · ${d.email}. O rascunho desta operadora já vai para esse e-mail.`,
+          `Destinatário definido: ${d.name} · ${d.email}.` +
+            (d.draftGerado
+              ? " Rascunho gerado — confirme o envio em Rascunhos."
+              : ` ⚠️ Destinatário definido, mas o rascunho não gerou (${d.draftErro ?? "erro na IA"}).`),
         );
         setShowApollo(false);
         onChanged();
