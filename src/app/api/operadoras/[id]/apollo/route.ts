@@ -8,6 +8,11 @@ import {
 import { ensureSequences, generateDraftForSequence } from "@/lib/outreach";
 import type { Company, Contact, Sequence } from "@/lib/types";
 
+// Revelar até 25 e-mails no Apollo + gerar o rascunho com a IA é pesado —
+// sem isto a função roda no tempo-limite padrão (~10s) e é morta antes de
+// gerar o rascunho (por isso operadoras com muitos contatos não geravam).
+export const maxDuration = 60;
+
 // Depois que o destinatário é definido (via Apollo), garante que exista UM
 // rascunho pendente já endereçado — apagando pendentes antigos (montados no
 // cadastro, quando ainda não havia e-mail) para não duplicar.
