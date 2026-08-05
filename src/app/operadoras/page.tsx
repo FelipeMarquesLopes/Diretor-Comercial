@@ -251,12 +251,90 @@ export default function Operadoras() {
   );
 }
 
+type ApolloPerson = {
+  apolloId: string;
+  name: string;
+  title: string | null;
+  emailStatus: string | null;
+  alreadyEmail: boolean;
+};
+
 function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => void }) {
   const [showResp, setShowResp] = useState(false);
   const [respText, setRespText] = useState("");
   const [respChannel, setRespChannel] = useState<SequenceChannel>("email");
   const [busy, setBusy] = useState(false);
   const contact = op.contacts?.[0];
+
+  // Apollo: achar contatos do setor de credenciamento/comercial.
+  const [showApollo, setShowApollo] = useState(false);
+  const [apolloBusy, setApolloBusy] = useState(false);
+  const [apolloNote, setApolloNote] = useState<string | null>(null);
+  const [apolloPeople, setApolloPeople] = useState<ApolloPerson[] | null>(null);
+
+  async function buscarCredenciamento() {
+    setShowApollo(true);
+    setApolloBusy(true);
+    setApolloNote(null);
+    try {
+      const r = await fetch(`/api/operadoras/${op.id}/apollo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "buscar" }),
+      });
+      const d = await r.json();
+      if (d.error) {
+        setApolloNote(d.error);
+        setApolloPeople([]);
+      } else {
+        setApolloPeople(d.people ?? []);
+        setApolloNote(
+          `${d.total ?? 0} contato(s) de credenciamento/comercial em ${d.domain}. O e-mail é revelado (1 crédito) só quando você clicar "Usar".`,
+        );
+      }
+    } catch (err) {
+      setApolloNote(String(err));
+    } finally {
+      setApolloBusy(false);
+    }
+  }
+
+  async function usarCredenciamento(p: ApolloPerson) {
+    if (
+      !confirm(
+        `Usar "${p.name}"${p.title ? ` (${p.title})` : ""} como contato de credenciamento? Isso revela o e-mail (1 crédito do Apollo) e o define como destinatário da operadora.`,
+      )
+    )
+      return;
+    setApolloBusy(true);
+    setApolloNote(null);
+    try {
+      const r = await fetch(`/api/operadoras/${op.id}/apollo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "usar",
+          apolloId: p.apolloId,
+          name: p.name,
+          title: p.title,
+        }),
+      });
+      const d = await r.json();
+      if (d.error) {
+        setApolloNote(`Erro: ${d.error}`);
+      } else {
+        setApolloNote(
+          `Destinatário definido: ${d.name} · ${d.email}. O rascunho desta operadora já vai para esse e-mail.`,
+        );
+        setShowApollo(false);
+        onChanged();
+      }
+    } catch (err) {
+      setApolloNote(String(err));
+    } finally {
+      setApolloBusy(false);
+    }
+  }
 
   // edição da operadora
   const [showEdit, setShowEdit] = useState(false);
@@ -502,6 +580,70 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
               {s.step > 0 ? ` · ${s.step} envio(s)` : ""}
             </span>
           ))}
+      </div>
+
+      {/* Apollo: achar o setor de credenciamento/comercial da operadora */}
+      <div className="mt-3">
+        {!showApollo ? (
+          <button
+            onClick={buscarCredenciamento}
+            disabled={apolloBusy}
+            className="text-xs text-brand-600 underline hover:text-brand-700 disabled:opacity-50"
+            title="Busca no Apollo gerente/analista/auxiliar de credenciamento e comercial desta operadora"
+          >
+            🔎 Buscar credenciamento no Apollo
+          </button>
+        ) : (
+          <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Credenciamento / comercial (Apollo)
+              </span>
+              <button
+                onClick={() => setShowApollo(false)}
+                className="text-xs text-gray-400 underline hover:text-gray-600"
+              >
+                fechar
+              </button>
+            </div>
+            {apolloBusy && !apolloPeople && (
+              <p className="text-xs text-gray-500">Buscando no Apollo…</p>
+            )}
+            {apolloPeople && apolloPeople.length > 0 && (
+              <div className="space-y-1.5">
+                {apolloPeople.map((p) => (
+                  <div
+                    key={p.apolloId}
+                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-medium text-gray-800">{p.name}</span>
+                      {p.title && (
+                        <span className="text-xs text-gray-500"> · {p.title}</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => usarCredenciamento(p)}
+                      disabled={apolloBusy}
+                      className="rounded-md border border-brand-300 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                      title="Revela o e-mail (1 crédito) e define como destinatário"
+                    >
+                      Usar (revelar e-mail)
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {apolloPeople && apolloPeople.length === 0 && !apolloBusy && (
+              <p className="text-xs text-gray-500">
+                Nenhum contato de credenciamento encontrado.
+              </p>
+            )}
+            {apolloNote && (
+              <p className="text-xs text-gray-500">{apolloNote}</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="mt-3">

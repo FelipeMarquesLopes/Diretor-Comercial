@@ -213,6 +213,43 @@ const DECISION_TITLES = {
     "Founder",
     "Fundador",
   ],
+  operadora: [
+    // Setor de CREDENCIAMENTO / rede credenciada (quem credencia prestadores)
+    "Gerente de Credenciamento",
+    "Coordenador de Credenciamento",
+    "Coordenadora de Credenciamento",
+    "Supervisor de Credenciamento",
+    "Analista de Credenciamento",
+    "Assistente de Credenciamento",
+    "Auxiliar de Credenciamento",
+    "Credenciamento",
+    "Gerente de Rede Credenciada",
+    "Gerente de Rede",
+    "Coordenador de Rede",
+    "Gestão de Rede",
+    "Relacionamento com Prestadores",
+    "Relacionamento com Credenciados",
+    "Credentialing",
+    "Provider Network",
+    "Network Management",
+    "Gerente de Rede de Prestadores",
+    // Setor COMERCIAL / contratos / parcerias (quem fecha o contrato)
+    "Diretor Comercial",
+    "Gerente Comercial",
+    "Coordenador Comercial",
+    "Analista Comercial",
+    "Comercial",
+    "Gerente de Contratos",
+    "Gerente de Parcerias",
+    "Gerente de Novos Negócios",
+    "Diretor de Operações",
+    // Direção (fallback)
+    "Diretor",
+    "Diretor Geral",
+    "CEO",
+    "Owner",
+    "Sócio",
+  ],
   escola: [
     // Direção (quem fecha parceria institucional)
     "Diretor",
@@ -269,6 +306,17 @@ const DECISION_SENIORITIES = {
   // Médicos costumam aparecer sem senioridade corporativa clara; não
   // restringimos por senioridade para não perder o próprio prescritor.
   medico: ["owner", "founder", "partner", "director", "head"],
+  // Operadora: o setor de credenciamento tem de gerente a AUXILIAR/analista
+  // (entry/senior) — precisamos pegar todos, não só a liderança.
+  operadora: [
+    "c_suite",
+    "vp",
+    "director",
+    "head",
+    "manager",
+    "senior",
+    "entry",
+  ],
   // Escola: queremos TODO o time administrativo, não só a diretoria — por isso
   // incluímos manager/head/vp além dos donos e diretores.
   escola: [
@@ -293,7 +341,7 @@ const DECISION_SENIORITIES = {
 export async function searchDecisionMakers(
   organizationDomain: string,
   perPage = 10,
-  category: "empresa" | "medico" | "escola" = "empresa",
+  category: "empresa" | "medico" | "escola" | "operadora" = "empresa",
 ): Promise<ApolloContact[]> {
   const body = {
     page: 1,

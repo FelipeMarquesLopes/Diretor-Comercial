@@ -284,6 +284,13 @@ export function ProspeccaoView({
         {msg && <p className="mt-3 text-sm text-gray-600">{msg}</p>}
       </form>
 
+      <ManualCadastro
+        category={category}
+        isMedico={isMedico}
+        isEscola={isEscola}
+        onCreated={loadCompanies}
+      />
+
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
           {isEscola
@@ -304,6 +311,199 @@ export function ProspeccaoView({
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+// Cadastro manual: quando o Apollo não acha, mas o CEO já tem o contato.
+// Cria a empresa/consultório/escola já qualificada; o CEO clica "Abordar".
+function ManualCadastro({
+  category,
+  isMedico,
+  isEscola,
+  onCreated,
+}: {
+  category: string;
+  isMedico: boolean;
+  isEscola: boolean;
+  onCreated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [title, setTitle] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [city, setCity] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const rotulo = isEscola
+    ? "escola / colégio"
+    : isMedico
+      ? "médico / consultório"
+      : "empresa";
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await fetch("/api/companies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          category,
+          contactName,
+          title,
+          email,
+          phone,
+          city,
+          notes,
+        }),
+      });
+      const d = await r.json();
+      if (d.error) {
+        setNote(`Erro: ${d.error}`);
+      } else {
+        setNote(
+          `"${name}" cadastrada. Aparece na lista abaixo — clique "Abordar" para gerar o rascunho.`,
+        );
+        setName("");
+        setContactName("");
+        setTitle("");
+        setEmail("");
+        setPhone("");
+        setCity("");
+        setNotes("");
+        onCreated();
+      }
+    } catch (err) {
+      setNote(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-dashed border-gray-300 bg-white p-4 shadow-sm">
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          + Cadastrar {rotulo} manualmente (fora do Apollo)
+        </button>
+      ) : (
+        <form onSubmit={salvar}>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-800">
+              Cadastrar {rotulo} manualmente
+            </h2>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-xs text-gray-400 underline hover:text-gray-600"
+            >
+              fechar
+            </button>
+          </div>
+          <p className="mb-3 text-xs text-gray-500">
+            Para quando você já tem o contato e o Apollo não achou. Entra na
+            mesma automação: revisão, follow-up e clique final seu.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="text-sm sm:col-span-2">
+              <span className="text-gray-600">
+                Nome {isEscola ? "da escola" : isMedico ? "do consultório/médico" : "da empresa"} *
+              </span>
+              <input
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-gray-600">Pessoa de contato</span>
+              <input
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+                placeholder={
+                  isEscola
+                    ? "ex: Ana (coordenação)"
+                    : isMedico
+                      ? "ex: Dr. Paulo"
+                      : "ex: Maria (RH)"
+                }
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-gray-600">Cargo</span>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={
+                  isEscola
+                    ? "ex: Coordenadora Pedagógica"
+                    : isMedico
+                      ? "ex: Diretor Clínico"
+                      : "ex: Gerente de RH"
+                }
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-gray-600">E-mail (destinatário)</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="contato@dominio.com.br"
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-gray-600">Telefone (opcional)</span>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="ex: 11 99999-9999"
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-gray-600">Cidade (opcional)</span>
+              <input
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-gray-600">Observações (opcional)</span>
+              <input
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+          </div>
+          <button
+            type="submit"
+            disabled={busy || !name.trim()}
+            className="mt-4 rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {busy ? "Salvando…" : "Cadastrar"}
+          </button>
+        </form>
+      )}
+      {note && <p className="mt-3 text-sm text-gray-600">{note}</p>}
     </div>
   );
 }

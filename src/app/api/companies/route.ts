@@ -33,3 +33,92 @@ export async function GET(req: Request) {
   }
   return NextResponse.json({ companies: data ?? [] });
 }
+
+// POST /api/companies — cadastra manualmente uma empresa/consultório/escola
+// (quando o Apollo não acha, mas o CEO já tem o contato). Ela entra na lista
+// como "qualificada" e o CEO clica "Abordar" para gerar o rascunho.
+// Body: { name, category, contactName?, title?, email?, phone?, city?, notes? }
+export async function POST(req: Request) {
+  let body: {
+    name?: string;
+    category?: string;
+    contactName?: string;
+    title?: string;
+    email?: string;
+    phone?: string;
+    city?: string;
+    state?: string;
+    notes?: string;
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+  }
+
+  if (!body.name?.trim()) {
+    return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 });
+  }
+
+  const category: "empresa" | "medico" | "escola" =
+    body.category === "medico"
+      ? "medico"
+      : body.category === "escola"
+        ? "escola"
+        : "empresa";
+
+  let supabase: ReturnType<typeof getServerSupabase>;
+  try {
+    supabase = getServerSupabase();
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Configuração ausente" },
+      { status: 500 },
+    );
+  }
+
+  // Cria já qualificada (cadastro manual = decisão do CEO de abordar).
+  const { data: company, error: cErr } = await supabase
+    .from("companies")
+    .insert({
+      category,
+      name: body.name.trim(),
+      city: body.city?.trim() || null,
+      state: body.state?.trim() || null,
+      status: "qualificado",
+      qualified: true,
+      qualification_score: 100,
+      priority: 5,
+      qualification_notes: "Cadastro manual pelo CEO.",
+      notes: body.notes?.trim() || null,
+    })
+    .select()
+    .single();
+
+  if (cErr || !company) {
+    return NextResponse.json(
+      { error: cErr?.message ?? "Erro ao cadastrar" },
+      { status: 500 },
+    );
+  }
+
+  // Contato (se informado) — já com e-mail, então o "Abordar" pula a revelação.
+  if (body.contactName?.trim() || body.email?.trim() || body.phone?.trim()) {
+    await supabase.from("contacts").insert({
+      company_id: company.id,
+      name: body.contactName?.trim() || body.name.trim(),
+      title: body.title?.trim() || null,
+      email: body.email?.trim() || null,
+      phone: body.phone?.trim() || null,
+      is_decision_maker: true,
+    });
+  }
+
+  await supabase.from("activities").insert({
+    company_id: company.id,
+    type: "cadastro",
+    description: "Cadastrado manualmente pelo CEO (fora do Apollo).",
+  });
+
+  return NextResponse.json({ company });
+}
