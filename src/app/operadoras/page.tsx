@@ -768,6 +768,9 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
                   )
                   .map((p) => {
                     const ok = isVerified(p.emailStatus);
+                    // Com verificador ligado, um "não verificado" do Apollo não
+                    // é beco sem saída: ele vai ser CHECADO no clique.
+                    const aValidar = !ok && verifierAtivo;
                     return (
                       <div
                         key={p.apolloId}
@@ -782,32 +785,46 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
                             className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
                               ok
                                 ? "bg-green-100 text-green-700"
-                                : "bg-amber-100 text-amber-700"
+                                : aValidar
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-amber-100 text-amber-700"
                             }`}
                             title={
                               ok
                                 ? "E-mail verificado pelo Apollo — seguro de enviar"
-                                : "Não verificado (adivinhado) — risco de retorno (bounce)"
+                                : aValidar
+                                  ? "Vai ser checado no verificador ao clicar — só entra se existir"
+                                  : "Não verificado (adivinhado) — risco de retorno (bounce)"
                             }
                           >
-                            {ok ? "✓ verificado" : "⚠ não verificado"}
+                            {ok
+                              ? "✓ verificado"
+                              : aValidar
+                                ? "• a validar"
+                                : "⚠ não verificado"}
                           </span>
                         </div>
                         <button
                           onClick={() => usarCredenciamento(p)}
                           disabled={apolloBusy}
                           className={`rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50 ${
-                            ok
+                            ok || aValidar
                               ? "border-brand-300 text-brand-700 hover:bg-brand-50"
                               : "border-amber-300 text-amber-700 hover:bg-amber-50"
                           }`}
                           title={
                             ok
                               ? "Revela o e-mail (1 crédito) e define como destinatário"
-                              : "E-mail não verificado — pode voltar (bounce). Use só se tiver certeza."
+                              : aValidar
+                                ? "Revela, valida no verificador e usa só se existir"
+                                : "E-mail não verificado — pode voltar (bounce). Use só se tiver certeza."
                           }
                         >
-                          {ok ? "Usar (revelar e-mail)" : "Usar mesmo assim"}
+                          {ok
+                            ? "Usar (revelar e-mail)"
+                            : aValidar
+                              ? "Usar (validar e-mail)"
+                              : "Usar mesmo assim"}
                         </button>
                       </div>
                     );
