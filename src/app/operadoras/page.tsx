@@ -277,6 +277,9 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
   const [apolloBusy, setApolloBusy] = useState(false);
   const [apolloNote, setApolloNote] = useState<string | null>(null);
   const [apolloPeople, setApolloPeople] = useState<ApolloPerson[] | null>(null);
+  // Verificador de e-mail ligado? (permite enviar também para não-verificados
+  // que passem na checagem).
+  const [verifierAtivo, setVerifierAtivo] = useState(false);
 
   async function buscarCredenciamento() {
     setShowApollo(true);
@@ -294,8 +297,12 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
         setApolloPeople([]);
       } else {
         setApolloPeople(d.people ?? []);
+        setVerifierAtivo(Boolean(d.verifierAtivo));
         setApolloNote(
-          `${d.total ?? 0} contato(s) de credenciamento/comercial em ${d.domain}. O e-mail é revelado (1 crédito) só quando você clicar "Usar".`,
+          `${d.total ?? 0} contato(s) de credenciamento/comercial em ${d.domain}. O e-mail é revelado (1 crédito) só quando você clicar "Usar".` +
+            (d.verifierAtivo
+              ? " Verificador de e-mail ATIVO: dá para revelar todos — só os que existem entram no disparo."
+              : ""),
         );
       }
     } catch (err) {
@@ -328,28 +335,34 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
 
   async function usarTodos() {
     const lista = apolloPeople ?? [];
-    const verificados = lista.filter((p) => isVerified(p.emailStatus));
-    if (verificados.length === 0) {
+    // Com verificador: revela todos (a checagem filtra os inativos).
+    // Sem verificador: só os já-verificados pelo Apollo.
+    const enviaveis = verifierAtivo
+      ? lista
+      : lista.filter((p) => isVerified(p.emailStatus));
+    if (enviaveis.length === 0) {
       setApolloNote(
-        "Nenhum contato com e-mail VERIFICADO nesta lista. Enviar para os não verificados causa retorno (bounce) e pode suspender a conta de envio — por isso não revelamos automaticamente. Se conhecer o e-mail certo de alguém, cadastre na edição da operadora.",
+        "Nenhum contato com e-mail VERIFICADO nesta lista, e o verificador não está configurado. Enviar para não verificados causa retorno (bounce). Cadastre o e-mail certo na edição da operadora, ou ative o verificador.",
       );
       return;
     }
-    if (
-      !confirm(
-        `Revelar o e-mail dos ${verificados.length} contatos VERIFICADOS (de ${lista.length}) de uma vez? Consome até ${verificados.length} créditos do Apollo. O 1º vira o destinatário (Para) e os demais entram em cópia (CC), num disparo só. Os não verificados são deixados de fora para não gerar retorno (bounce).`,
-      )
-    )
-      return;
+    const msg = verifierAtivo
+      ? `Revelar e VALIDAR os ${enviaveis.length} contatos? Consome até ${enviaveis.length} créditos do Apollo + verificações. Só os e-mails que EXISTEM entram (1º = Para, resto = CC), num disparo só. Os inativos são descartados antes — sem risco de retorno.`
+      : `Revelar o e-mail dos ${enviaveis.length} contatos VERIFICADOS (de ${lista.length})? Consome até ${enviaveis.length} créditos do Apollo. O 1º vira o destinatário (Para) e os demais entram em cópia (CC). Os não verificados ficam de fora para não gerar retorno (bounce).`;
+    if (!confirm(msg)) return;
     setApolloBusy(true);
-    setApolloNote("Revelando os e-mails verificados… pode levar alguns segundos.");
+    setApolloNote(
+      verifierAtivo
+        ? "Revelando e validando os e-mails… pode levar alguns segundos."
+        : "Revelando os e-mails verificados… pode levar alguns segundos.",
+    );
     try {
       const r = await fetch(`/api/operadoras/${op.id}/apollo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "usar_todos",
-          onlyVerified: true,
+          onlyVerified: !verifierAtivo,
           people: lista.map((p) => ({
             apolloId: p.apolloId,
             name: p.name,
@@ -363,8 +376,9 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
         error?: string;
         principal?: { name?: string; email?: string };
         ccCount?: number;
-        revelados?: number;
-        verificados?: number;
+        enviaveis?: number;
+        checados?: number;
+        invalidos?: number;
         pedidos?: number;
       } = {};
       try {
@@ -380,11 +394,14 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
         return;
       }
       setApolloNote(
-        `${d.revelados} e-mail(s) verificado(s) revelado(s). Gerando rascunho…`,
+        `${d.enviaveis} e-mail(s) aprovado(s) para envio. Gerando rascunho…`,
       );
       const draftMsg = await gerarRascunho();
+      const detalhe = verifierAtivo
+        ? `${d.enviaveis} de ${d.pedidos} entraram (${d.invalidos ?? 0} descartado(s) por não existirem; ${d.checados ?? 0} checado(s)).`
+        : `${d.enviaveis} verificado(s) de ${d.pedidos}.`;
       setApolloNote(
-        `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${d.revelados} verificado(s) de ${d.pedidos} contatos (só verificados entram, para não gerar retorno).` +
+        `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${detalhe}` +
           draftMsg,
       );
       setShowApollo(false);
@@ -718,20 +735,25 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
             )}
             {apolloPeople && apolloPeople.length > 0 && (() => {
               const verif = apolloPeople.filter((p) => isVerified(p.emailStatus));
+              const total = apolloPeople.length;
               return (
                 <>
                   <button
                     onClick={usarTodos}
-                    disabled={apolloBusy || verif.length === 0}
+                    disabled={
+                      apolloBusy || (!verifierAtivo && verif.length === 0)
+                    }
                     className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
-                    title="Revela só os e-mails VERIFICADOS e monta um único rascunho (1º = Para, resto = CC)"
+                    title="Monta um único rascunho (1º = Para, resto = CC)"
                   >
-                    ✉️ Revelar os {verif.length} VERIFICADOS e colocar em cópia (CC)
+                    {verifierAtivo
+                      ? `✉️ Revelar e validar os ${total} e colocar em cópia (CC)`
+                      : `✉️ Revelar os ${verif.length} VERIFICADOS e colocar em cópia (CC)`}
                   </button>
                   <p className="text-[11px] text-gray-400">
-                    Só e-mails ✓ verificados entram — os adivinhados voltam
-                    (bounce) e podem suspender a conta de envio. Ou revele um a
-                    um abaixo:
+                    {verifierAtivo
+                      ? "Todos são revelados e checados — só os e-mails que EXISTEM entram no disparo (os inativos são descartados antes, sem bounce). Ou revele um a um abaixo:"
+                      : "Só e-mails ✓ verificados entram — os adivinhados voltam (bounce) e podem suspender a conta de envio. Ou revele um a um abaixo:"}
                   </p>
                 </>
               );

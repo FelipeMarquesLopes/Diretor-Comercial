@@ -6,6 +6,11 @@ import {
   revealPerson,
   isEmailVerified,
 } from "@/lib/apollo";
+import {
+  verifierConfigured,
+  verifyEmail,
+  isSendable,
+} from "@/lib/emailVerify";
 import type { Company, Contact } from "@/lib/types";
 
 // Revelar até 25 e-mails no Apollo é pesado — sem isto a função roda no
@@ -84,7 +89,11 @@ export async function POST(
         { status: 400 },
       );
     }
-    let revealed: { email: string | null; phone: string | null };
+    let revealed: {
+      email: string | null;
+      phone: string | null;
+      emailStatus: string | null;
+    };
     try {
       revealed = await revealPerson(body.apolloId);
     } catch (err) {
@@ -101,6 +110,19 @@ export async function POST(
         },
         { status: 422 },
       );
+    }
+
+    // Se não é verificado pelo Apollo e há verificador, checa antes de aceitar.
+    if (!isEmailVerified(revealed.emailStatus) && verifierConfigured()) {
+      const vr = await verifyEmail(revealed.email);
+      if (!isSendable(vr)) {
+        return NextResponse.json(
+          {
+            error: `O e-mail revelado (${revealed.email}) não passou na verificação (${vr}) — provavelmente a caixa não está ativa. Não usei, para não gerar retorno (bounce).`,
+          },
+          { status: 422 },
+        );
+      }
     }
 
     // Define como o contato PRINCIPAL (o disparo usa o 1º contato com e-mail).
@@ -151,59 +173,106 @@ export async function POST(
   if (body.action === "usar_todos") {
     const onlyVerified = body.onlyVerified !== false;
     let alvo = (body.people ?? []).filter((p) => p.apolloId);
-
-    // Deliverability: por padrão só revelamos VERIFICADOS. Revelar adivinhados
-    // gera bounce e ameaça a conta de envio (Titan/HostGator suspende).
     const pediram = alvo.length;
-    if (onlyVerified) {
+    const verifierOn = verifierConfigured();
+
+    // Estratégia de deliverability:
+    //  - COM verificador: revela todos e depois checa os não-verificados,
+    //    enviando só para os que EXISTEM (sem gerar bounce).
+    //  - SEM verificador: revela só os já-verificados pelo Apollo (seguro).
+    if (!verifierOn && onlyVerified) {
       alvo = alvo.filter((p) => isEmailVerified(p.emailStatus));
     }
 
     if (alvo.length === 0) {
       return NextResponse.json(
         {
-          error: onlyVerified
-            ? `Nenhum dos ${pediram} contatos tem e-mail VERIFICADO pelo Apollo. Enviar para os não verificados causa retorno (bounce) e pode suspender a conta de envio — por isso não revelamos.`
-            : "Nenhum contato para revelar.",
+          error: `Nenhum dos ${pediram} contatos tem e-mail VERIFICADO pelo Apollo, e não há verificador configurado. Enviar para os não verificados causa retorno (bounce) e pode suspender a conta de envio — por isso não revelamos.`,
         },
         { status: 422 },
       );
     }
 
-    // Revela em paralelo (consome 1 crédito por contato revelável).
+    // Revela em paralelo (consome 1 crédito do Apollo por contato revelável).
     const revelados = await Promise.all(
       alvo.map(async (p) => {
         try {
           const r = await revealPerson(p.apolloId);
-          // 2ª barreira: mesmo revelado, se o status vier não-verificado e
-          // pedimos só verificados, descartamos (evita bounce).
-          if (onlyVerified && !isEmailVerified(r.emailStatus)) {
-            return { name: p.name, title: p.title, email: null, phone: null };
-          }
-          return { name: p.name, title: p.title, email: r.email, phone: r.phone };
+          return {
+            name: p.name,
+            title: p.title,
+            email: r.email,
+            phone: r.phone,
+            apolloVerified:
+              isEmailVerified(r.emailStatus) || isEmailVerified(p.emailStatus),
+          };
         } catch {
-          return { name: p.name, title: p.title, email: null, phone: null };
+          return {
+            name: p.name,
+            title: p.title,
+            email: null,
+            phone: null,
+            apolloVerified: false,
+          };
         }
       }),
     );
 
-    // Só os que realmente vieram com e-mail, sem duplicar.
-    const comEmail: { name?: string; title?: string; email: string; phone: string | null }[] =
-      [];
+    // Os que vieram com e-mail, sem duplicar.
+    const unicos: {
+      name?: string;
+      title?: string;
+      email: string;
+      phone: string | null;
+      apolloVerified: boolean;
+    }[] = [];
     const vistos = new Set<string>();
     for (const r of revelados) {
       if (!r.email) continue;
       const key = r.email.toLowerCase();
       if (vistos.has(key)) continue;
       vistos.add(key);
-      comEmail.push({ name: r.name, title: r.title, email: r.email, phone: r.phone });
+      unicos.push({ ...r, email: r.email });
     }
+
+    // Verifica (em paralelo) os que o Apollo NÃO garantiu, quando há
+    // verificador. Só entram os enviáveis (válido ou catch-all).
+    const naoVerificados = verifierOn
+      ? unicos.filter((r) => !r.apolloVerified)
+      : [];
+    const verifMap = new Map<string, boolean>();
+    if (naoVerificados.length > 0) {
+      await Promise.all(
+        naoVerificados.map(async (r) => {
+          const vr = await verifyEmail(r.email);
+          verifMap.set(r.email.toLowerCase(), isSendable(vr));
+        }),
+      );
+    }
+
+    const comEmail: { name?: string; title?: string; email: string; phone: string | null }[] =
+      [];
+    let invalidos = 0;
+    for (const r of unicos) {
+      const enviavel = r.apolloVerified
+        ? true
+        : verifierOn
+          ? verifMap.get(r.email.toLowerCase()) === true
+          : false;
+      if (enviavel) {
+        comEmail.push({ name: r.name, title: r.title, email: r.email, phone: r.phone });
+      } else {
+        invalidos++;
+      }
+    }
+    const checados = naoVerificados.length;
 
     if (comEmail.length === 0) {
       return NextResponse.json(
         {
-          error:
-            "O Apollo não conseguiu revelar nenhum e-mail desta lista. Tente outros contatos.",
+          error: verifierOn
+            ? `Nenhum e-mail passou na verificação (${checados} checado(s), todos inválidos/inativos). Provavelmente essas pessoas não têm mais caixa ativa nesta operadora.`
+            : "O Apollo não conseguiu revelar nenhum e-mail verificado desta lista.",
         },
         { status: 422 },
       );
@@ -273,10 +342,11 @@ export async function POST(
       ok: true,
       principal: { name: nomePrincipal, email: principal.email },
       ccCount: ccFinal.length,
-      revelados: comEmail.length,
-      verificados: alvo.length,
+      enviaveis: comEmail.length,
+      checados,
+      invalidos,
       pedidos: pediram,
-      onlyVerified,
+      verifierAtivo: verifierOn,
     });
   }
 
@@ -329,6 +399,9 @@ export async function POST(
   return NextResponse.json({
     domain,
     total: people.length,
+    // Com verificador ativo, dá para enviar também para não-verificados que
+    // passem na checagem — a UI usa isso para adaptar o botão.
+    verifierAtivo: verifierConfigured(),
     // Só devolvemos o necessário para escolher (sem gastar crédito).
     people: people.map((p) => ({
       apolloId: p.apolloId,
