@@ -316,7 +316,7 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
   // Devolve uma frase de status para anexar à mensagem.
   async function gerarRascunho(): Promise<string> {
     try {
-      const r = await fetch(`/api/operadoras/${op.id}/draft`, { method: "POST" });
+      const r = await fetch(`/api/companies/${op.id}/draft`, { method: "POST" });
       const txt = await r.text();
       let d: { ok?: boolean; error?: string } = {};
       try {
@@ -330,6 +330,20 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
       return ` ⚠️ Destinatário definido, mas o rascunho não gerou: ${d.error ?? `erro ${r.status}`}.`;
     } catch (err) {
       return ` ⚠️ Rascunho não gerou (falha de rede: ${String(err)}).`;
+    }
+  }
+
+  // Botão "Gerar rascunho": reexecuta só a etapa da IA (quando falhou), sem
+  // refazer Apollo/verificação. Serve para qualquer cadastro com destinatário.
+  async function regerarRascunho() {
+    setApolloBusy(true);
+    setApolloNote("Gerando rascunho…");
+    try {
+      const msg = await gerarRascunho();
+      setApolloNote(msg.trim());
+      onChanged();
+    } finally {
+      setApolloBusy(false);
     }
   }
 
@@ -842,6 +856,20 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
           </div>
         )}
       </div>
+
+      {/* Ação de retomada: gerar o rascunho de novo (quando a IA falhou) */}
+      {contact?.email && (
+        <div className="mt-3">
+          <button
+            onClick={regerarRascunho}
+            disabled={apolloBusy}
+            className="rounded-lg border border-brand-300 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+            title="Reescreve o rascunho de e-mail com a IA (substitui o pendente). Use quando o rascunho não gerou."
+          >
+            📝 Gerar rascunho
+          </button>
+        </div>
+      )}
 
       <div className="mt-3">
         {!showResp ? (

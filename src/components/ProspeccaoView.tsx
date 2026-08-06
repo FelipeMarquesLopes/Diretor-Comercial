@@ -558,6 +558,42 @@ function CompanyCard({
     }
   }
 
+  // "Gerar rascunho": reexecuta só a etapa da IA (quando falhou), sem refazer
+  // Apollo/revelação. Só faz sentido quando já há um contato com e-mail.
+  async function gerarRascunho() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await fetch(`/api/companies/${company.id}/draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hook }),
+      });
+      const txt = await r.text();
+      let d: { ok?: boolean; error?: string } = {};
+      try {
+        d = txt ? JSON.parse(txt) : {};
+      } catch {
+        setState("erro");
+        setNote(`O servidor respondeu ${r.status}. Tente de novo.`);
+        return;
+      }
+      if (r.ok && d.ok) {
+        setState("ok");
+        setNote("Rascunho gerado — confirme o envio em Rascunhos.");
+      } else {
+        setState("erro");
+        setNote(d.error ?? `Não gerou (erro ${r.status}).`);
+      }
+      onChanged();
+    } catch (e) {
+      setState("erro");
+      setNote(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function excluir() {
     if (!confirm(`Excluir a empresa "${company.name}"? Não dá para desfazer.`))
       return;
@@ -772,6 +808,16 @@ function CompanyCard({
         >
           {state === "gerando" ? "Abordando…" : "Abordar (revelar + escrever)"}
         </button>
+        {company.contacts?.some((c) => c.email) && (
+          <button
+            onClick={gerarRascunho}
+            disabled={busy}
+            className="rounded-md border border-brand-300 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+            title="Reescreve o rascunho de e-mail com a IA (substitui o pendente). Use quando o rascunho não gerou."
+          >
+            📝 Gerar rascunho
+          </button>
+        )}
         {note && (
           <span
             className={`text-xs ${state === "erro" ? "text-red-600" : "text-green-600"}`}

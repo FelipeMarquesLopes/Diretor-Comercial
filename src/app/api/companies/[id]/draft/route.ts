@@ -1,21 +1,27 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureSequences, generateDraftForSequence } from "@/lib/outreach";
-import type { Company, Sequence } from "@/lib/types";
+import type { Company, MessageHook, Sequence } from "@/lib/types";
 
-// Gerar o rascunho da operadora chama a IA — pode passar do tempo padrão.
+// Gerar o rascunho chama a IA — pode passar do tempo padrão.
 export const maxDuration = 60;
 
-// POST /api/operadoras/[id]/draft
-// Gera (ou regenera) UM rascunho de e-mail já endereçado para a operadora,
-// para o clique final do CEO. Separado do fluxo do Apollo de propósito: assim
-// a revelação dos e-mails e a geração do rascunho não competem pelo mesmo
-// tempo de execução (o que fazia o rascunho não gerar em operadoras grandes).
+// POST /api/companies/[id]/draft
+// Gera (ou regenera) UM rascunho de e-mail já endereçado, para QUALQUER
+// cadastro (operadora, empresa, médico, escola). Serve de "tentar de novo"
+// quando a IA falha na geração — sem refazer Apollo/verificação.
+// Body: { hook? }
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  let body: { hook?: MessageHook } = {};
+  try {
+    body = await req.json();
+  } catch {
+    body = {};
+  }
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -34,10 +40,7 @@ export async function POST(
     .single<Company>();
 
   if (!company) {
-    return NextResponse.json(
-      { error: "Operadora não encontrada" },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "Cadastro não encontrado" }, { status: 404 });
   }
 
   // Precisa de um contato com e-mail (o destinatário).
@@ -50,7 +53,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Esta operadora ainda não tem um contato com e-mail. Defina o destinatário (Apollo ou edição) antes de gerar o rascunho.",
+          "Este cadastro ainda não tem um contato com e-mail. Defina o destinatário (Apollo, revelar ou edição) antes de gerar o rascunho.",
       },
       { status: 400 },
     );
@@ -78,7 +81,12 @@ export async function POST(
     .eq("channel", "email")
     .eq("status", "pendente");
 
-  const res = await generateDraftForSequence(supabase, company, emailSeq, "nr1");
+  const res = await generateDraftForSequence(
+    supabase,
+    company,
+    emailSeq,
+    body.hook ?? "nr1",
+  );
   if (!res.ok) {
     return NextResponse.json(
       { error: res.error ?? "Erro ao gerar rascunho" },
