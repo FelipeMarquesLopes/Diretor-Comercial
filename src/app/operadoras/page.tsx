@@ -393,6 +393,7 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
         enviaveis?: number;
         checados?: number;
         invalidos?: number;
+        catchAll?: number;
         pedidos?: number;
       } = {};
       try {
@@ -412,7 +413,7 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
       );
       const draftMsg = await gerarRascunho();
       const detalhe = verifierAtivo
-        ? `${d.enviaveis} de ${d.pedidos} entraram (${d.invalidos ?? 0} descartado(s) por não existirem; ${d.checados ?? 0} checado(s)).`
+        ? `${d.enviaveis} VÁLIDO(s) de ${d.pedidos} entraram (${d.invalidos ?? 0} descartado(s)${d.catchAll ? `, sendo ${d.catchAll} catch-all que dão retorno` : ""}).`
         : `${d.enviaveis} verificado(s) de ${d.pedidos}.`;
       setApolloNote(
         `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${detalhe}` +

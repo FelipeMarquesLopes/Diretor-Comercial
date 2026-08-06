@@ -24,10 +24,12 @@ function provider(): "zerobounce" | "millionverifier" {
     : "zerobounce";
 }
 
-// "Enviável sem risco de bounce": válido (caixa existe) ou catch-all (o servidor
-// aceita tudo — não devolve). Inválido/desconhecido ficam de fora.
+// "Enviável sem risco de bounce": SOMENTE válido (a caixa existe de fato).
+// Catch-all é traiçoeiro: o servidor aceita na entrega mas devolve depois
+// (bounce assíncrono) se a caixa não existe — e o Titan conta esse retorno.
+// Por isso NÃO enviamos para catch-all/desconhecido/inválido.
 export function isSendable(r: VerifyResult): boolean {
-  return r === "valid" || r === "catch_all";
+  return r === "valid";
 }
 
 export async function verifyEmail(email: string): Promise<VerifyResult> {

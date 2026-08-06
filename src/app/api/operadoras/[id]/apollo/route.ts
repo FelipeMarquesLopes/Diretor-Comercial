@@ -236,16 +236,16 @@ export async function POST(
     }
 
     // Verifica (em paralelo) os que o Apollo NÃO garantiu, quando há
-    // verificador. Só entram os enviáveis (válido ou catch-all).
+    // verificador. Só entram os VÁLIDOS (catch-all e desconhecido ficam fora).
     const naoVerificados = verifierOn
       ? unicos.filter((r) => !r.apolloVerified)
       : [];
-    const verifMap = new Map<string, boolean>();
+    const verifMap = new Map<string, string>();
     if (naoVerificados.length > 0) {
       await Promise.all(
         naoVerificados.map(async (r) => {
           const vr = await verifyEmail(r.email);
-          verifMap.set(r.email.toLowerCase(), isSendable(vr));
+          verifMap.set(r.email.toLowerCase(), vr);
         }),
       );
     }
@@ -253,12 +253,13 @@ export async function POST(
     const comEmail: { name?: string; title?: string; email: string; phone: string | null }[] =
       [];
     let invalidos = 0;
+    let catchAll = 0;
     for (const r of unicos) {
-      const enviavel = r.apolloVerified
-        ? true
-        : verifierOn
-          ? verifMap.get(r.email.toLowerCase()) === true
-          : false;
+      const vr = r.apolloVerified
+        ? "valid"
+        : (verifMap.get(r.email.toLowerCase()) ?? (verifierOn ? "unknown" : "invalid"));
+      const enviavel = vr === "valid";
+      if (vr === "catch_all") catchAll++;
       if (enviavel) {
         comEmail.push({ name: r.name, title: r.title, email: r.email, phone: r.phone });
       } else {
@@ -271,7 +272,10 @@ export async function POST(
       return NextResponse.json(
         {
           error: verifierOn
-            ? `Nenhum e-mail passou na verificação (${checados} checado(s), todos inválidos/inativos). Provavelmente essas pessoas não têm mais caixa ativa nesta operadora.`
+            ? `Nenhum e-mail VÁLIDO nesta lista (${checados} checado(s): ${catchAll} catch-all e o resto inválido/inativo). ` +
+              (catchAll > 0
+                ? "Esta operadora usa servidor 'catch-all' (aceita tudo mas não confirma) — enviar para esses gera retorno. Melhor conseguir um contato direto por telefone/LinkedIn."
+                : "Provavelmente essas pessoas não têm mais caixa ativa aqui.")
             : "O Apollo não conseguiu revelar nenhum e-mail verificado desta lista.",
         },
         { status: 422 },
@@ -279,21 +283,17 @@ export async function POST(
     }
 
     // 1º revelado = destinatário principal (Para); o resto entra em cópia (CC).
+    // IMPORTANTE: o CC é SUBSTITUÍDO pela lista recém-validada — NÃO juntamos
+    // com o cc_emails antigo, que podia conter endereços não validados/ruins
+    // de rodadas anteriores (causa de bounce).
     const principal = comEmail[0];
-    const ccNovos = comEmail.slice(1).map((c) => c.email);
-
-    // Junta com o CC que já existia (sem duplicar e sem repetir o principal).
-    const ccExistente = (company.cc_emails ?? "")
-      .split(",")
-      .map((e) => e.trim())
-      .filter(Boolean);
     const ccFinal: string[] = [];
     const ccVistos = new Set<string>([principal.email.toLowerCase()]);
-    for (const e of [...ccExistente, ...ccNovos]) {
-      const key = e.toLowerCase();
+    for (const c of comEmail.slice(1)) {
+      const key = c.email.toLowerCase();
       if (ccVistos.has(key)) continue;
       ccVistos.add(key);
-      ccFinal.push(e);
+      ccFinal.push(c.email);
     }
 
     // Define o contato principal (Para).
@@ -345,6 +345,7 @@ export async function POST(
       enviaveis: comEmail.length,
       checados,
       invalidos,
+      catchAll,
       pedidos: pediram,
       verifierAtivo: verifierOn,
     });
