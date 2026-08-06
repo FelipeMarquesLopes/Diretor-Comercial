@@ -3,11 +3,45 @@
 @tailwind utilities;
 
 :root {
-  --background: #f7f9f9;
-  --foreground: #0f2020;
+  /* Fundo levemente frio (tom da marca), com profundidade sutil. */
+  --background: #f4f5fb;
+  --foreground: #1b1e33;
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(
+      1200px 600px at 50% -10%,
+      rgba(81, 93, 187, 0.08),
+      transparent 60%
+    ),
+    var(--background);
+  background-attachment: fixed;
   color: var(--foreground);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto,
+    "Helvetica Neue", Arial, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Assinatura da marca: faixa multicolor do "cérebro" do logo. */
+.brand-rainbow {
+  background: linear-gradient(
+    90deg,
+    #f2897c 0%,
+    #f6c266 22%,
+    #8ccb86 44%,
+    #57c2c4 62%,
+    #6aa6e6 80%,
+    #a98fe0 100%
+  );
+}
+
+/* Título/wordmark com um leve degradê da marca. */
+.brand-wordmark {
+  background: linear-gradient(90deg, #2e3680, #515dbb);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }

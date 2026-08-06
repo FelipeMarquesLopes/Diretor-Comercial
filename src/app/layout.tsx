@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0d9488",
+  themeColor: "#262c66",
 };
 
 export default function RootLayout({
@@ -28,19 +28,30 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className="min-h-screen antialiased">
-        <div className="mx-auto max-w-6xl px-4 py-6">
-          <header className="mb-6 flex flex-col items-center text-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo.png"
-              alt="Clínica Multidisciplinar MenthalHelp"
-              className="h-24 w-auto sm:h-28"
-            />
-            <p className="mt-2 text-sm font-semibold tracking-wide text-brand-700">
-              Growth AI · Diretor Comercial Digital
-            </p>
+        <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
+          {/* Cabeçalho premium: cartão branco com faixa multicolor da marca */}
+          <header className="overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-card">
+            <div className="brand-rainbow h-1.5 w-full" />
+            <div className="flex flex-col items-center gap-2 px-6 py-6 text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo.png"
+                alt="Clínica Multidisciplinar MenthalHelp"
+                className="h-20 w-auto sm:h-24"
+              />
+              <div>
+                <p className="brand-wordmark text-lg font-bold tracking-tight sm:text-xl">
+                  Growth AI
+                </p>
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-brand-400">
+                  Diretor Comercial Digital
+                </p>
+              </div>
+            </div>
           </header>
-          <Nav />
+          <div className="mt-5">
+            <Nav />
+          </div>
           <main className="mt-6">{children}</main>
         </div>
       </body>
