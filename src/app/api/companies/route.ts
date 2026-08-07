@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { verifierConfigured, verifyEmail, isSendable } from "@/lib/emailVerify";
+import { getSuppressedSet } from "@/lib/suppression";
+
+export const maxDuration = 60;
 
 // GET /api/companies?status=qualificado
 // Lista empresas, opcionalmente filtrando por status. Inclui contatos.
@@ -75,6 +79,28 @@ export async function POST(req: Request) {
       { error: err instanceof Error ? err.message : "Configuração ausente" },
       { status: 500 },
     );
+  }
+
+  // Valida o e-mail informado ANTES de criar (evita cadastro órfão e protege a
+  // conta de envio): bloqueio e verificador — mesma régua das operadoras.
+  const emailManual = body.email?.trim().toLowerCase();
+  if (emailManual && emailManual.includes("@")) {
+    const suprimidos = await getSuppressedSet(supabase, [emailManual]);
+    if (suprimidos.has(emailManual)) {
+      return NextResponse.json(
+        { error: "Este e-mail está na lista de bloqueio (retornou/descadastro). Use outro." },
+        { status: 409 },
+      );
+    }
+    if (verifierConfigured()) {
+      const vr = await verifyEmail(emailManual);
+      if (!isSendable(vr)) {
+        return NextResponse.json(
+          { error: `O e-mail não passou na validação (${vr}) — provável caixa inativa. Confira o endereço.` },
+          { status: 422 },
+        );
+      }
+    }
   }
 
   // Cria já qualificada (cadastro manual = decisão do CEO de abordar).

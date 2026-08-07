@@ -104,6 +104,27 @@ export async function PATCH(
       }
       // Remove do CC qualquer endereço suprimido (segue o envio sem eles).
       extraCc = extraCc.filter((e) => !suprimidos.has(e.toLowerCase()));
+
+      // TRAVA DE VOLUME DIÁRIO: protege a conta de envio de um disparo em massa
+      // acidental. Conta os e-mails enviados nas últimas 24h; acima do limite,
+      // bloqueia (o rascunho fica pendente para o dia seguinte).
+      const capDiario = Number(process.env.EMAIL_DAILY_CAP ?? "50");
+      const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count: enviados24h } = await supabase
+        .from("drafts")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "enviado")
+        .eq("channel", "email")
+        .gte("sent_at", desde24h);
+      if ((enviados24h ?? 0) >= capDiario) {
+        return NextResponse.json(
+          {
+            error: `Limite diário de envio atingido (${capDiario} e-mails/24h). Isto protege a reputação do domínio. O rascunho continua aqui — envie amanhã, ou ajuste EMAIL_DAILY_CAP.`,
+          },
+          { status: 429 },
+        );
+      }
+
       // Baixa os anexos do Storage para irem junto no e-mail.
       const anexos =
         (pre?.attachments as { path: string; name: string }[] | null) ?? [];

@@ -52,26 +52,53 @@ function fmtData(iso: string | null): string {
   });
 }
 
-const FILTERS: { key: DraftStatus | "todos"; label: string }[] = [
+type View = "pendente" | "enviado" | "rejeitado" | "proximos" | "todos";
+type Tipo = "todas" | "captacao" | "relacionamento";
+
+const STATUS_FILTERS: { key: View; label: string }[] = [
   { key: "pendente", label: "Pendentes" },
-  { key: "aprovado", label: "Aprovados" },
   { key: "enviado", label: "Enviados" },
   { key: "rejeitado", label: "Rejeitados" },
+  { key: "proximos", label: "Próximos envios" },
   { key: "todos", label: "Todos" },
 ];
 
+const TIPO_FILTERS: { key: Tipo; label: string }[] = [
+  { key: "todas", label: "Todas as frentes" },
+  { key: "captacao", label: "Captação" },
+  { key: "relacionamento", label: "Relacionamento" },
+];
+
+// Relacionamento = parceria em andamento (operadora ativa, reajuste, agenda).
+// Captação = primeira abordagem (operadora nova, empresa, médico, escola).
+function tipoOf(d: DraftRow): "captacao" | "relacionamento" {
+  const cat = d.companies?.category;
+  if (cat === "reajuste" || cat === "agenda_aberta") return "relacionamento";
+  if (cat === "operadora" && d.companies?.operator_type === "ativa")
+    return "relacionamento";
+  return "captacao";
+}
+
+// Data do próximo envio programado (follow-up da cadência ou informativo da
+// Agenda Aberta). Null quando não há nada agendado.
+function proximoEnvioDe(d: DraftRow): string | null {
+  if (d.companies?.category === "agenda_aberta" && d.companies.next_followup)
+    return d.companies.next_followup;
+  if (d.sequences?.status === "ativa" && d.sequences.next_action_at)
+    return d.sequences.next_action_at;
+  return null;
+}
+
 export default function Rascunhos() {
-  const [filter, setFilter] = useState<DraftStatus | "todos">("pendente");
+  const [view, setView] = useState<View>("pendente");
+  const [tipo, setTipo] = useState<Tipo>("todas");
+  const [companyFilter, setCompanyFilter] = useState<string>("todas");
   const [drafts, setDrafts] = useState<DraftRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Filtros em cascata: categoria → (tipo, se operadora) → parceiro específico.
-  const [catFilter, setCatFilter] = useState<string>("todas");
-  const [tipoFilter, setTipoFilter] = useState<string>("todos");
-  const [companyFilter, setCompanyFilter] = useState<string>("todas");
-
   const load = useCallback(async () => {
-    const qs = filter === "todos" ? "" : `?status=${filter}`;
+    // "Próximos envios" e "Todos" precisam de todos os status; os demais filtram.
+    const qs = view === "proximos" || view === "todos" ? "" : `?status=${view}`;
     const r = await fetch(`/api/drafts${qs}`);
     const d = await r.json();
     if (d.error) setError(d.error);
@@ -79,47 +106,49 @@ export default function Rascunhos() {
       setError(null);
       setDrafts(d.drafts);
     }
-  }, [filter]);
+  }, [view]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // Categorias presentes nos rascunhos carregados (para o 1º filtro).
-  const categoriasPresentes = Array.from(
-    new Set(drafts.map((d) => d.companies?.category).filter(Boolean)),
-  ) as string[];
+  // 1) Recorte por VIEW. "Próximos envios" = só o que tem data agendada,
+  //    um por assunto, ordenado pela data.
+  let base = drafts;
+  if (view === "proximos") {
+    const vistos = new Set<string>();
+    base = drafts
+      .filter((d) => proximoEnvioDe(d))
+      .filter((d) => {
+        const chave = d.sequence_id ?? d.company_id ?? d.id;
+        if (vistos.has(chave)) return false;
+        vistos.add(chave);
+        return true;
+      })
+      .sort((a, b) =>
+        (proximoEnvioDe(a) ?? "").localeCompare(proximoEnvioDe(b) ?? ""),
+      );
+  }
 
-  // Aplica categoria + tipo antes de listar os parceiros do 3º filtro.
-  const porCatETipo = drafts.filter((d) => {
-    if (catFilter !== "todas" && d.companies?.category !== catFilter) return false;
-    if (
-      catFilter === "operadora" &&
-      tipoFilter !== "todos" &&
-      d.companies?.operator_type !== tipoFilter
-    )
-      return false;
-    return true;
-  });
+  // 2) Recorte por TIPO (captação / relacionamento).
+  if (tipo !== "todas") base = base.filter((d) => tipoOf(d) === tipo);
 
-  // Parceiros distintos que casam com categoria+tipo (para o 3º filtro).
+  // 3) Parceiro específico.
   const parceiros = Array.from(
     new Map(
-      porCatETipo
+      base
         .filter((d) => d.companies)
         .map((d) => [d.company_id, d.companies!.name] as const),
     ).entries(),
   ).sort((a, b) => a[1].localeCompare(b[1]));
 
-  const filtrados = porCatETipo.filter(
+  const filtrados = base.filter(
     (d) => companyFilter === "todas" || d.company_id === companyFilter,
   );
 
-  // Na aba "Enviados", mostra só o ÚLTIMO e-mail de cada assunto (thread),
-  // para não poluir o histórico com todos os follow-ups. (A lista já vem
-  // ordenada do mais novo para o mais antigo.)
+  // Na aba "Enviados", só o ÚLTIMO e-mail de cada assunto (thread).
   const visiveis =
-    filter !== "enviado"
+    view !== "enviado"
       ? filtrados
       : (() => {
           const vistos = new Set<string>();
@@ -135,13 +164,17 @@ export default function Rascunhos() {
 
   return (
     <div className="space-y-4">
+      {/* Linha 1: situação / próximos envios */}
       <div className="flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
+        {STATUS_FILTERS.map((f) => (
           <button
             key={f.key}
-            onClick={() => setFilter(f.key)}
+            onClick={() => {
+              setView(f.key);
+              setCompanyFilter("todas");
+            }}
             className={`rounded-full px-3 py-1 text-sm font-medium ${
-              filter === f.key
+              view === f.key
                 ? "bg-brand-500 text-white"
                 : "bg-white text-gray-600 border border-gray-200"
             }`}
@@ -151,82 +184,57 @@ export default function Rascunhos() {
         ))}
       </div>
 
-      {/* Filtros em cascata: categoria → tipo (se operadora) → parceiro */}
-      {drafts.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-3">
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
-            Filtrar:
-          </span>
-          <select
-            value={catFilter}
-            onChange={(e) => {
-              setCatFilter(e.target.value);
-              setTipoFilter("todos");
+      {/* Linha 2: tipo (captação / relacionamento) + parceiro específico */}
+      <div className="flex flex-wrap items-center gap-2">
+        {TIPO_FILTERS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => {
+              setTipo(t.key);
               setCompanyFilter("todas");
             }}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
+              tipo === t.key
+                ? "bg-brand-700 text-white"
+                : "bg-white text-gray-500 border border-gray-200"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+        {parceiros.length > 1 && (
+          <select
+            value={companyFilter}
+            onChange={(e) => setCompanyFilter(e.target.value)}
             className="rounded-md border border-gray-300 px-2 py-1 text-sm"
           >
-            <option value="todas">Todas as frentes</option>
-            {categoriasPresentes.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_LABELS[c as keyof typeof CATEGORY_LABELS] ?? c}
+            <option value="todas">Todos os parceiros</option>
+            {parceiros.map(([id, nome]) => (
+              <option key={id} value={id}>
+                {nome}
               </option>
             ))}
           </select>
+        )}
+        <span className="ml-auto text-xs text-gray-400">
+          {visiveis.length}
+          {view === "enviado"
+            ? " assunto(s)"
+            : view === "proximos"
+              ? " agendado(s)"
+              : " e-mail(s)"}
+        </span>
+      </div>
 
-          {catFilter === "operadora" && (
-            <select
-              value={tipoFilter}
-              onChange={(e) => {
-                setTipoFilter(e.target.value);
-                setCompanyFilter("todas");
-              }}
-              className="rounded-md border border-gray-300 px-2 py-1 text-sm"
-            >
-              <option value="todos">Captação e relacionamento</option>
-              <option value="nova">Captação (novas)</option>
-              <option value="ativa">Relacionamento (ativas)</option>
-            </select>
-          )}
-
-          {parceiros.length > 1 && (
-            <select
-              value={companyFilter}
-              onChange={(e) => setCompanyFilter(e.target.value)}
-              className="rounded-md border border-gray-300 px-2 py-1 text-sm"
-            >
-              <option value="todas">Todos os parceiros</option>
-              {parceiros.map(([id, nome]) => (
-                <option key={id} value={id}>
-                  {nome}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {(catFilter !== "todas" ||
-            tipoFilter !== "todos" ||
-            companyFilter !== "todas") && (
-            <button
-              onClick={() => {
-                setCatFilter("todas");
-                setTipoFilter("todos");
-                setCompanyFilter("todas");
-              }}
-              className="text-xs text-gray-500 underline hover:text-gray-700"
-            >
-              limpar
-            </button>
-          )}
-
-          <span className="ml-auto text-xs text-gray-400">
-            {visiveis.length}
-            {filter === "enviado" ? " assunto(s)" : " e-mail(s)"}
-          </span>
-        </div>
+      {view === "proximos" && (
+        <p className="text-xs text-gray-400">
+          Envios já programados pela cadência (follow-up) e pela Agenda Aberta,
+          por data. Nada sai sozinho — na data, cada um vira um rascunho para o
+          seu clique.
+        </p>
       )}
 
-      {filter === "enviado" && visiveis.length > 0 && (
+      {view === "enviado" && visiveis.length > 0 && (
         <p className="text-xs text-gray-400">
           Mostrando só o último e-mail de cada assunto (o histórico completo de
           cada conversa fica na aba do seu e-mail).

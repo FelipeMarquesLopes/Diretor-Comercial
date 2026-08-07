@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { revealPerson } from "@/lib/apollo";
+import { revealPerson, isEmailVerified } from "@/lib/apollo";
+import { verifierConfigured, verifyEmail, isSendable } from "@/lib/emailVerify";
+import { getSuppressedSet } from "@/lib/suppression";
 import { ensureSequences, generateDraftForSequence } from "@/lib/outreach";
 import type { Company, Contact, MessageHook, Sequence } from "@/lib/types";
+
+// Export para maxDuration (revelar + validar + IA pode passar do padrão).
+export const maxDuration = 60;
 
 // POST /api/prospect/abordar
 // Fluxo de "abordar uma empresa" num clique:
@@ -119,6 +124,32 @@ export async function POST(req: Request) {
       },
       { status: 422 },
     );
+  }
+
+  // MESMA proteção das operadoras — vale para empresas, médicos e escolas:
+  // 1) nunca abordar quem está na lista de bloqueio (retorno/descadastro).
+  const suprimidos = await getSuppressedSet(supabase, [target.email]);
+  if (suprimidos.has(target.email.toLowerCase())) {
+    return NextResponse.json(
+      {
+        error:
+          "O e-mail deste decisor está na lista de bloqueio (retornou antes / pediu descadastro). Escolha outro contato.",
+      },
+      { status: 409 },
+    );
+  }
+  // 2) se não é verificado pelo Apollo e há verificador, confirma a caixa antes
+  //    de gerar rascunho — evita bounce (e não queima a conta de envio).
+  if (!isEmailVerified(target.email_status) && verifierConfigured()) {
+    const vr = await verifyEmail(target.email);
+    if (!isSendable(vr)) {
+      return NextResponse.json(
+        {
+          error: `O e-mail revelado (${target.email}) não passou na validação (${vr}) — provável caixa inativa. Tente outro contato desta empresa ou cadastre o e-mail certo.`,
+        },
+        { status: 422 },
+      );
+    }
   }
 
   // Cria a sequência de e-mail e gera o rascunho (entra no follow-up).
