@@ -11,6 +11,7 @@ import {
   verifyEmail,
   isSendable,
 } from "@/lib/emailVerify";
+import { getSuppressedSet } from "@/lib/suppression";
 import type { Company, Contact } from "@/lib/types";
 
 // Revelar até 25 e-mails no Apollo é pesado — sem isto a função roda no
@@ -41,6 +42,7 @@ export async function POST(
     apolloId?: string;
     name?: string;
     title?: string;
+    email?: string;
     // Para a ação "usar_todos": a lista de contatos a revelar de uma vez.
     people?: {
       apolloId: string;
@@ -351,6 +353,91 @@ export async function POST(
     });
   }
 
+  // --- Ação: E-MAIL MANUAL — o CEO achou o e-mail (ex: no LinkedIn) ----------
+  // Valida (verificador + supressão) e salva como destinatário: vira o Para se
+  // ainda não houver, senão entra no CC. Resolve as operadoras catch-all.
+  if (body.action === "email_manual") {
+    const email = (body.email ?? "").trim().toLowerCase();
+    if (!email.includes("@")) {
+      return NextResponse.json({ error: "E-mail inválido." }, { status: 400 });
+    }
+
+    // Não deixa cadastrar um e-mail já bloqueado (retornou/descadastro).
+    const suprimidos = await getSuppressedSet(supabase, [email]);
+    if (suprimidos.has(email)) {
+      return NextResponse.json(
+        { error: "Este e-mail está na lista de bloqueio (retornou ou pediu descadastro). Não usei." },
+        { status: 409 },
+      );
+    }
+
+    // Se há verificador, confirma que a caixa existe antes de aceitar.
+    if (verifierConfigured()) {
+      const vr = await verifyEmail(email);
+      if (!isSendable(vr)) {
+        return NextResponse.json(
+          { error: `O e-mail não passou na verificação (${vr}) — provável caixa inativa. Confira o endereço.` },
+          { status: 422 },
+        );
+      }
+    }
+
+    const { data: existing } = await supabase
+      .from("contacts")
+      .select("*")
+      .eq("company_id", id);
+    const contatos = (existing as Contact[] | null) ?? [];
+    const nome = body.name?.trim() || "Credenciamento";
+    const principalAtual = contatos.find((c) => c.email);
+
+    if (!principalAtual) {
+      // Vira o destinatário principal (Para).
+      const vazio = contatos[0];
+      if (vazio) {
+        await supabase
+          .from("contacts")
+          .update({ name: nome, title: body.title ?? vazio.title, email })
+          .eq("id", vazio.id);
+      } else {
+        await supabase.from("contacts").insert({
+          company_id: id,
+          name: nome,
+          title: body.title ?? null,
+          email,
+          is_decision_maker: true,
+        });
+      }
+      await supabase.from("activities").insert({
+        company_id: id,
+        type: "cadastro",
+        description: `E-mail manual (LinkedIn/externo) definido como destinatário: ${nome} · ${email}.`,
+      });
+      return NextResponse.json({ ok: true, mode: "principal", email, name: nome });
+    }
+
+    // Já há destinatário → entra em cópia (CC), sem duplicar.
+    const ccExistente = (company.cc_emails ?? "")
+      .split(/[\s,;]+/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+    const jaTem = new Set(
+      [principalAtual.email?.toLowerCase(), ...ccExistente.map((e) => e.toLowerCase())].filter(
+        Boolean,
+      ) as string[],
+    );
+    if (!jaTem.has(email)) ccExistente.push(email);
+    await supabase
+      .from("companies")
+      .update({ cc_emails: ccExistente.join(", ") || null })
+      .eq("id", id);
+    await supabase.from("activities").insert({
+      company_id: id,
+      type: "cadastro",
+      description: `E-mail manual (LinkedIn/externo) adicionado em cópia (CC): ${nome} · ${email}.`,
+    });
+    return NextResponse.json({ ok: true, mode: "cc", email, name: nome });
+  }
+
   // --- Ação: BUSCAR (padrão) — acha os contatos de credenciamento ------------
   // 1) Resolve o domínio: usa o já salvo ou descobre pelo nome no Apollo.
   let domain = company.domain;
@@ -410,6 +497,9 @@ export async function POST(
       title: p.title,
       emailStatus: p.emailStatus,
       alreadyEmail: Boolean(p.email),
+      // "Quem contatar": link do LinkedIn para pegar o e-mail por fora quando
+      // o Apollo não confirma (operadoras catch-all).
+      linkedinUrl: p.linkedinUrl,
     })),
   });
 }

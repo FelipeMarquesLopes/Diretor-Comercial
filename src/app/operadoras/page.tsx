@@ -257,6 +257,7 @@ type ApolloPerson = {
   title: string | null;
   emailStatus: string | null;
   alreadyEmail: boolean;
+  linkedinUrl: string | null;
 };
 
 // Só "verified" é seguro de enviar. Adivinhados (guessed/unverified) voltam
@@ -280,6 +281,55 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
   // Verificador de e-mail ligado? (permite enviar também para não-verificados
   // que passem na checagem).
   const [verifierAtivo, setVerifierAtivo] = useState(false);
+  // Cadastro manual de e-mail (achado no LinkedIn) por contato.
+  const [manualFor, setManualFor] = useState<string | null>(null);
+  const [manualEmail, setManualEmail] = useState("");
+
+  async function salvarEmailManual(p: ApolloPerson) {
+    const email = manualEmail.trim();
+    if (!email.includes("@")) return;
+    setApolloBusy(true);
+    setApolloNote("Validando e salvando o e-mail…");
+    try {
+      const r = await fetch(`/api/operadoras/${op.id}/apollo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "email_manual",
+          name: p.name,
+          title: p.title,
+          email,
+        }),
+      });
+      const txt = await r.text();
+      let d: { ok?: boolean; error?: string; mode?: string; email?: string } = {};
+      try {
+        d = txt ? JSON.parse(txt) : {};
+      } catch {
+        setApolloNote(`Erro: o servidor respondeu ${r.status}.`);
+        return;
+      }
+      if (!r.ok || d.error) {
+        setApolloNote(`Erro: ${d.error ?? `resposta ${r.status}`}`);
+        return;
+      }
+      // Se virou o destinatário principal, já gera o rascunho.
+      let draftMsg = "";
+      if (d.mode === "principal") draftMsg = await gerarRascunho();
+      setApolloNote(
+        d.mode === "principal"
+          ? `${p.name} definido como destinatário (${d.email}).${draftMsg}`
+          : `${p.name} (${d.email}) adicionado em cópia (CC).`,
+      );
+      setManualFor(null);
+      setManualEmail("");
+      onChanged();
+    } catch (err) {
+      setApolloNote(String(err));
+    } finally {
+      setApolloBusy(false);
+    }
+  }
 
   async function buscarCredenciamento() {
     setShowApollo(true);
@@ -786,61 +836,106 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
                     // Com verificador ligado, um "não verificado" do Apollo não
                     // é beco sem saída: ele vai ser CHECADO no clique.
                     const aValidar = !ok && verifierAtivo;
+                    const manualOpen = manualFor === p.apolloId;
+                    const linkedin =
+                      p.linkedinUrl ||
+                      `https://www.google.com/search?q=${encodeURIComponent(
+                        `${p.name} ${op.name} LinkedIn`,
+                      )}`;
                     return (
                       <div
                         key={p.apolloId}
-                        className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                        className="rounded-md border border-gray-100 bg-white p-2"
                       >
-                        <div className="min-w-0">
-                          <span className="font-medium text-gray-800">{p.name}</span>
-                          {p.title && (
-                            <span className="text-xs text-gray-500"> · {p.title}</span>
-                          )}
-                          <span
-                            className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                              ok
-                                ? "bg-green-100 text-green-700"
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <div className="min-w-0">
+                            <span className="font-medium text-gray-800">{p.name}</span>
+                            {p.title && (
+                              <span className="text-xs text-gray-500"> · {p.title}</span>
+                            )}
+                            <span
+                              className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                ok
+                                  ? "bg-green-100 text-green-700"
+                                  : aValidar
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "bg-amber-100 text-amber-700"
+                              }`}
+                              title={
+                                ok
+                                  ? "E-mail verificado pelo Apollo — seguro de enviar"
+                                  : aValidar
+                                    ? "Vai ser checado no verificador ao clicar — só entra se existir"
+                                    : "Não verificado (adivinhado) — risco de retorno (bounce)"
+                              }
+                            >
+                              {ok
+                                ? "✓ verificado"
                                 : aValidar
-                                  ? "bg-blue-100 text-blue-700"
-                                  : "bg-amber-100 text-amber-700"
+                                  ? "• a validar"
+                                  : "⚠ não verificado"}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => usarCredenciamento(p)}
+                            disabled={apolloBusy}
+                            className={`rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50 ${
+                              ok || aValidar
+                                ? "border-brand-300 text-brand-700 hover:bg-brand-50"
+                                : "border-amber-300 text-amber-700 hover:bg-amber-50"
                             }`}
                             title={
                               ok
-                                ? "E-mail verificado pelo Apollo — seguro de enviar"
+                                ? "Revela o e-mail (1 crédito) e define como destinatário"
                                 : aValidar
-                                  ? "Vai ser checado no verificador ao clicar — só entra se existir"
-                                  : "Não verificado (adivinhado) — risco de retorno (bounce)"
+                                  ? "Revela, valida no verificador e usa só se existir"
+                                  : "E-mail não verificado — pode voltar (bounce). Use só se tiver certeza."
                             }
                           >
                             {ok
-                              ? "✓ verificado"
+                              ? "Usar (revelar e-mail)"
                               : aValidar
-                                ? "• a validar"
-                                : "⚠ não verificado"}
-                          </span>
+                                ? "Usar (validar e-mail)"
+                                : "Usar mesmo assim"}
+                          </button>
                         </div>
-                        <button
-                          onClick={() => usarCredenciamento(p)}
-                          disabled={apolloBusy}
-                          className={`rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50 ${
-                            ok || aValidar
-                              ? "border-brand-300 text-brand-700 hover:bg-brand-50"
-                              : "border-amber-300 text-amber-700 hover:bg-amber-50"
-                          }`}
-                          title={
-                            ok
-                              ? "Revela o e-mail (1 crédito) e define como destinatário"
-                              : aValidar
-                                ? "Revela, valida no verificador e usa só se existir"
-                                : "E-mail não verificado — pode voltar (bounce). Use só se tiver certeza."
-                          }
-                        >
-                          {ok
-                            ? "Usar (revelar e-mail)"
-                            : aValidar
-                              ? "Usar (validar e-mail)"
-                              : "Usar mesmo assim"}
-                        </button>
+                        {/* "Quem contatar": LinkedIn + cadastro do e-mail achado */}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
+                          <a
+                            href={linkedin}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-brand-600 hover:underline"
+                          >
+                            {p.linkedinUrl ? "🔗 Ver no LinkedIn" : "🔍 Buscar no Google"}
+                          </a>
+                          <button
+                            onClick={() => {
+                              setManualFor(manualOpen ? null : p.apolloId);
+                              setManualEmail("");
+                            }}
+                            className="text-gray-500 underline hover:text-gray-700"
+                          >
+                            {manualOpen ? "cancelar" : "＋ já tenho o e-mail dele(a)"}
+                          </button>
+                        </div>
+                        {manualOpen && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <input
+                              value={manualEmail}
+                              onChange={(e) => setManualEmail(e.target.value)}
+                              placeholder="nome@operadora.com.br"
+                              className="w-56 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                            />
+                            <button
+                              onClick={() => salvarEmailManual(p)}
+                              disabled={apolloBusy || !manualEmail.includes("@")}
+                              className="rounded-md bg-brand-500 px-2 py-1 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+                            >
+                              {apolloBusy ? "Validando…" : "Validar e usar"}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
