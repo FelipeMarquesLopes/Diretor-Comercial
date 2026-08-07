@@ -16,6 +16,13 @@
 import nodemailer from "nodemailer";
 import { EMAIL_FONT_FAMILY, EMAIL_FONT_SIZE } from "./branding";
 
+// Rodapé de descadastro (LGPD — legítimo interesse em outreach B2B). Anexado
+// automaticamente a TODO envio, para o destinatário poder pedir para sair.
+// Ao responder "SAIR", o leitor de caixa capta e bloqueia o e-mail sozinho.
+const OPTOUT_TEXT =
+  'Se não deseja mais receber nossos contatos, responda este e-mail com "SAIR" ' +
+  "e removeremos seu endereço.";
+
 // Converte o texto do rascunho em HTML com a fonte pedida (Arial 13),
 // preservando as quebras de linha.
 function toHtml(text: string): string {
@@ -91,13 +98,20 @@ export async function sendEmail(opts: {
     seen.add(key);
     ccList.push(addr);
   }
+  // Corpo em texto + rodapé de descadastro (LGPD).
+  const textComOptout = `${opts.text}\n\n—\n${OPTOUT_TEXT}`;
+  const htmlOptout =
+    `<p style="font-family:${EMAIL_FONT_FAMILY};font-size:11px;` +
+    `color:#9aa0a6;margin-top:18px;border-top:1px solid #eee;padding-top:10px;">` +
+    OPTOUT_TEXT +
+    `</p>`;
   const info = await getTransporter().sendMail({
     from: `${fromName} <${user}>`,
     to: opts.to,
     cc: ccList.length > 0 ? ccList : undefined, // CEO + extras em cópia
     subject: opts.subject || "(sem assunto)",
-    text: opts.text, // fallback em texto puro
-    html: toHtml(opts.text), // versão com a fonte Arial 13
+    text: textComOptout, // fallback em texto puro + opt-out
+    html: toHtml(opts.text) + htmlOptout, // versão Arial 13 + rodapé opt-out
     attachments:
       opts.attachments && opts.attachments.length > 0
         ? opts.attachments

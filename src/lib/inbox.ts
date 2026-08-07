@@ -170,6 +170,52 @@ export async function checkInbox(
           continue;
         }
 
+        // Pedido de DESCADASTRO (LGPD): se a resposta pede para sair, bloqueia
+        // o e-mail, encerra a cadência e nem gasta IA classificando.
+        const respLower = (
+          parsed.text?.trim() ||
+          parsed.subject ||
+          ""
+        )
+          .toLowerCase()
+          .slice(0, 500);
+        const curto = respLower.length <= 40;
+        const pediuSair =
+          /\bunsubscribe\b|descadastr|remover?\s+(meu|o)\s+(e-?mail|contato|cadastro)|me\s+(remov|retir|tir)|não\s+quero\s+(mais\s+)?receber|nao\s+quero\s+(mais\s+)?receber|parar?\s+de\s+(me\s+)?(receber|enviar)|pare\s+de\s+(me\s+)?enviar|cancelar\s+(o\s+)?recebimento/i.test(
+            respLower,
+          ) ||
+          (curto && /\bsair\b/.test(respLower));
+
+        if (pediuSair && match.email) {
+          await suppressEmail(supabase, {
+            email: match.email,
+            reason: "unsubscribe",
+            source: "inbox_reply",
+            companyId: match.company_id,
+            subject: parsed.subject ?? null,
+          });
+          await supabase
+            .from("sequences")
+            .update({ status: "pausada_negativa", next_action_at: null, resume_at: null })
+            .eq("company_id", match.company_id);
+          await supabase.from("responses").insert({
+            company_id: match.company_id,
+            channel: "email",
+            sentiment: "negativo",
+            summary: "Pediu descadastro (opt-out) — e-mail bloqueado.",
+            raw_text: (parsed.text ?? parsed.subject ?? "").slice(0, 2000),
+            message_id: parsed.messageId ?? null,
+          });
+          await supabase.from("activities").insert({
+            company_id: match.company_id,
+            type: "unsubscribe",
+            description: `Descadastro solicitado por ${match.email}. Bloqueado para novos envios.`,
+          });
+          await client.messageFlagsAdd(uid, ["\\Seen"], { uid: true });
+          processadas++;
+          continue;
+        }
+
         // Lê o corpo: texto puro; se vier vazio, usa o HTML sem as tags;
         // por último, o assunto. Assim o agente não "vê só o assunto".
         const htmlStripped = parsed.html
