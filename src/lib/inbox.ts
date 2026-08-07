@@ -11,6 +11,54 @@ import { simpleParser } from "mailparser";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { classifyResponse } from "./anthropic";
 import { resumeAtAfterNegative } from "./followup";
+import { suppressEmail } from "./suppression";
+
+// Detecta se a mensagem é um RETORNO (NDR / bounce) e extrai os endereços que
+// falharam. Bounces chegam nesta mesma caixa, vindos de mailer-daemon/
+// postmaster, no formato multipart/report (delivery-status).
+function detectBounce(
+  fromAddr: string | undefined,
+  subject: string,
+  rawSource: string,
+): { isBounce: boolean; failed: string[] } {
+  const from = (fromAddr ?? "").toLowerCase();
+  const looksLikeDaemon =
+    from.includes("mailer-daemon") ||
+    from.includes("postmaster") ||
+    from === "" ||
+    from.startsWith("no-reply") ||
+    from.startsWith("noreply");
+  const subjectHit =
+    /undeliverable|delivery (status|failure|has failed)|failure notice|returned mail|mail delivery|not delivered|não (foi )?entregue|devolv|falha na entrega/i.test(
+      subject,
+    );
+  const hasDsn =
+    /message\/delivery-status|Final-Recipient|Diagnostic-Code|Status:\s*5\.\d/i.test(
+      rawSource,
+    );
+
+  if (!(looksLikeDaemon || subjectHit || hasDsn)) {
+    return { isBounce: false, failed: [] };
+  }
+
+  // Extrai os endereços que falharam dos campos oficiais do DSN.
+  const failed = new Set<string>();
+  const patterns = [
+    /X-Failed-Recipients:\s*([^\r\n]+)/gi,
+    /Final-Recipient:\s*rfc822;\s*([^\r\n;]+)/gi,
+    /Original-Recipient:\s*rfc822;\s*([^\r\n;]+)/gi,
+  ];
+  for (const re of patterns) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(rawSource))) {
+      for (const part of m[1].split(/[,\s;]+/)) {
+        const e = part.trim().toLowerCase().replace(/[<>]/g, "");
+        if (e.includes("@")) failed.add(e);
+      }
+    }
+  }
+  return { isBounce: true, failed: Array.from(failed) };
+}
 
 function imapConfig() {
   const host =
@@ -41,9 +89,9 @@ const MAX_POR_RODADA = 8;
 
 export async function checkInbox(
   supabase: SupabaseClient,
-): Promise<{ processadas: number; positivas: string[] }> {
+): Promise<{ processadas: number; positivas: string[]; bounces: number }> {
   const { host, port, user, pass } = imapConfig();
-  if (!user || !pass) return { processadas: 0, positivas: [] };
+  if (!user || !pass) return { processadas: 0, positivas: [], bounces: 0 };
 
   const client = new ImapFlow({
     host,
@@ -55,13 +103,14 @@ export async function checkInbox(
 
   const positivas: string[] = [];
   let processadas = 0;
+  let bounces = 0;
 
   await client.connect();
   try {
     const lock = await client.getMailboxLock("INBOX");
     try {
       const uids = await client.search({ seen: false }, { uid: true });
-      if (!uids || uids.length === 0) return { processadas, positivas };
+      if (!uids || uids.length === 0) return { processadas, positivas, bounces };
 
       for (const uid of uids.slice(0, MAX_POR_RODADA)) {
         const msg = await client.fetchOne(uid, { source: true }, { uid: true });
@@ -71,6 +120,42 @@ export async function checkInbox(
         const fromAddr = Array.isArray(parsed.from?.value)
           ? parsed.from?.value[0]?.address?.toLowerCase()
           : undefined;
+
+        // 1) RETORNO (bounce): captura antes de tudo. Marca o(s) endereço(s)
+        //    que falharam na lista de supressão — nunca mais disparamos p/ eles.
+        const rawSource = (msg.source as Buffer).toString("utf8");
+        const bounce = detectBounce(fromAddr, parsed.subject ?? "", rawSource);
+        if (bounce.isBounce) {
+          for (const email of bounce.failed) {
+            // Tenta vincular ao cadastro (para contexto), sem exigir.
+            const { data: c } = await supabase
+              .from("contacts")
+              .select("company_id")
+              .ilike("email", email)
+              .limit(1);
+            const companyId =
+              (c as { company_id: string }[] | null)?.[0]?.company_id ?? null;
+            await suppressEmail(supabase, {
+              email,
+              reason: "bounce",
+              bounceType: "hard",
+              source: "inbox_ndr",
+              companyId,
+              subject: parsed.subject ?? null,
+            });
+            if (companyId) {
+              await supabase.from("activities").insert({
+                company_id: companyId,
+                type: "bounce",
+                description: `E-mail retornou (bounce): ${email}. Bloqueado para novos envios.`,
+              });
+            }
+            bounces++;
+          }
+          await client.messageFlagsAdd(uid, ["\\Seen"], { uid: true });
+          continue;
+        }
+
         if (!fromAddr) continue;
 
         // Só processa se o remetente estiver no nosso cadastro.
@@ -165,5 +250,5 @@ export async function checkInbox(
     await client.logout();
   }
 
-  return { processadas, positivas };
+  return { processadas, positivas, bounces };
 }

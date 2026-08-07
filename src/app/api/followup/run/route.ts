@@ -51,13 +51,16 @@ async function run() {
   const now = new Date().toISOString();
 
   // 0. Ler as respostas por e-mail (só de contatos cadastrados) e classificar.
+  //    Também captura RETORNOS (bounce) e bloqueia esses e-mails.
   let respostas = 0;
   let positivas: string[] = [];
+  let bounces = 0;
   if (isInboxConfigured()) {
     try {
       const r = await checkInbox(supabase);
       respostas = r.processadas;
       positivas = r.positivas;
+      bounces = r.bounces;
     } catch {
       // se o IMAP falhar numa rodada, segue o resto do motor
     }
@@ -135,6 +138,7 @@ async function run() {
 
   return NextResponse.json({
     respostas_lidas: respostas,
+    bounces_bloqueados: bounces,
     positivas,
     reativadas,
     rascunhos_gerados: gerados,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { advanceSequenceAfterSend } from "@/lib/outreach";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
+import { getSuppressedSet } from "@/lib/suppression";
 import type { DraftStatus } from "@/lib/types";
 
 // PATCH /api/drafts/[id]
@@ -84,10 +85,25 @@ export async function PATCH(
       // CCs opcionais (informados no cadastro): separados por vírgula/;/espaço.
       const ccRaw =
         (pre?.companies as { cc_emails?: string } | null)?.cc_emails ?? "";
-      const extraCc = ccRaw
+      let extraCc = ccRaw
         .split(/[\s,;]+/)
         .map((s) => s.trim())
         .filter((s) => s.includes("@"));
+
+      // SUPRESSÃO: nunca disparar para quem já retornou (bounce) ou foi
+      // bloqueado. Protege a reputação e a conta de envio (Titan).
+      const suprimidos = await getSuppressedSet(supabase, [to, ...extraCc]);
+      if (suprimidos.has(to.toLowerCase())) {
+        return NextResponse.json(
+          {
+            error:
+              "Este destinatário está na lista de bloqueio (retornou antes / bounce). Troque o e-mail do destinatário antes de enviar.",
+          },
+          { status: 409 },
+        );
+      }
+      // Remove do CC qualquer endereço suprimido (segue o envio sem eles).
+      extraCc = extraCc.filter((e) => !suprimidos.has(e.toLowerCase()));
       // Baixa os anexos do Storage para irem junto no e-mail.
       const anexos =
         (pre?.attachments as { path: string; name: string }[] | null) ?? [];
