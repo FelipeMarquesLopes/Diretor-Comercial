@@ -196,6 +196,7 @@ export async function POST(
       status: "pendente",
       sequence_id: newSeq?.id ?? null,
       step: 0,
+      is_reply: true,
     });
 
     await supabase

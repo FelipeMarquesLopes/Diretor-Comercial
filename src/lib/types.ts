@@ -131,6 +131,7 @@ export interface Draft {
   attachments: DraftAttachment[];
   sequence_id: string | null;
   step: number;
+  is_reply: boolean;
   approved_by: string | null;
   approved_at: string | null;
   sent_at: string | null;

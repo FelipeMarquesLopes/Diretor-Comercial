@@ -407,16 +407,23 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <div className="mb-2 flex items-start justify-between gap-3">
         <div>
-          <p className="font-medium text-gray-900">
+          <p className="flex items-center gap-2 font-medium text-gray-900">
             {draft.companies?.name ?? "Empresa"}
+            {draft.is_reply && (
+              <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                ↩️ Réplica
+              </span>
+            )}
           </p>
           <p className="text-xs text-gray-500">
             {draft.channel === "email" ? "E-mail" : "WhatsApp"} ·{" "}
-            {draft.companies?.category === "agenda_aberta"
-              ? CATEGORY_LABELS.agenda_aberta
-              : draft.companies?.category === "reajuste"
-                ? CATEGORY_LABELS.reajuste
-                : HOOK_LABELS[draft.hook]}
+            {draft.is_reply
+              ? "Réplica (resposta ao retorno recebido)"
+              : draft.companies?.category === "agenda_aberta"
+                ? CATEGORY_LABELS.agenda_aberta
+                : draft.companies?.category === "reajuste"
+                  ? CATEGORY_LABELS.reajuste
+                  : HOOK_LABELS[draft.hook]}
           </p>
           {/* Destinatário — para o CEO ver PRA QUEM vai antes de disparar */}
           {draft.channel === "email" ? (
@@ -491,8 +498,11 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
           {draft.sequences?.status === "ativa" &&
             draft.sequences.next_action_at && (
               <p className="mt-0.5 text-xs font-medium text-amber-700">
-                🔁 Próximo envio (se ninguém responder):{" "}
-                {fmtData(draft.sequences.next_action_at)}
+                🔁{" "}
+                {draft.is_reply
+                  ? "Réplica em cobrança automática — próximo follow-up"
+                  : "Em cobrança automática — próximo envio"}{" "}
+                {fmtData(draft.sequences.next_action_at)} (se não responderem)
               </p>
             )}
           {/* Agenda Aberta: informativo recorrente a cada 15 dias. */}
