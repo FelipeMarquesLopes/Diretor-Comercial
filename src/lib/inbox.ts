@@ -234,28 +234,50 @@ export async function checkInbox(
         ).slice(0, 4000);
         let sentiment: "positivo" | "negativo" | "neutro" = "neutro";
         let summary = "";
+        let intent: string | null = null;
+        let followUpDate: string | null = null;
         try {
           const c = await classifyResponse(text, match.companies.category);
           sentiment = c.sentiment;
           summary = c.summary;
+          intent = c.intent;
+          followUpDate = c.followUpDate;
         } catch {
           // se a IA falhar, guarda como neutro para revisão manual
         }
+
+        // "Me procure em outubro" → data concreta da retomada automática.
+        const nextActionIso =
+          intent === "followup_futuro" && followUpDate
+            ? new Date(`${followUpDate}T12:00:00Z`).toISOString()
+            : null;
 
         await supabase.from("responses").insert({
           company_id: match.company_id,
           channel: "email",
           sentiment,
+          intent,
+          next_action_at: nextActionIso,
           summary,
           raw_text: text,
           message_id: parsed.messageId ?? null, // p/ responder na mesma thread
         });
 
-        // QUALQUER resposta PARA a cobrança automática (a de 72h só corre no
-        // silêncio). A bola vai para o CEO decidir: responder (a réplica
-        // reinicia o relógio), seguir cobrando, adiar ou encerrar.
-        if (sentiment === "negativo") {
-          // Negativa: pausa e agenda uma retomada automática em 30 dias.
+        // A partir da INTENÇÃO, o motor decide o próximo passo (Nível 1 —
+        // apoio automático). Disparo de mensagem continua sendo Nível 2.
+        if (nextActionIso) {
+          // Follow-up futuro: pausa a cobrança e AGENDA a retomada na data
+          // pedida (o motor reativa sozinho quando a data chegar).
+          await supabase
+            .from("sequences")
+            .update({
+              status: "agendada",
+              next_action_at: null,
+              resume_at: nextActionIso,
+            })
+            .eq("company_id", match.company_id);
+        } else if (sentiment === "negativo") {
+          // Sem interesse: pausa e agenda retomada automática em 30 dias.
           await supabase
             .from("sequences")
             .update({
@@ -265,7 +287,7 @@ export async function checkInbox(
             })
             .eq("company_id", match.company_id);
         } else {
-          // Positiva ou neutra ("vamos analisar"): aguarda decisão do CEO.
+          // Oportunidade ativa / dúvida / neutra: aguarda decisão do CEO.
           await supabase
             .from("sequences")
             .update({ status: "aguardando_ceo", next_action_at: null })

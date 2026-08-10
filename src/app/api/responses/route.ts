@@ -20,7 +20,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("responses")
     .select(
-      "id, company_id, sentiment, summary, raw_text, channel, created_at, companies(name, category)",
+      "id, company_id, sentiment, intent, next_action_at, summary, raw_text, channel, created_at, companies(name, category)",
     )
     .is("dismissed_at", null) // só as respostas ainda abertas (não arquivadas)
     .order("created_at", { ascending: false })
@@ -74,27 +74,42 @@ export async function POST(req: Request) {
   // Classifica (a menos que já venha classificado).
   let sentiment: ResponseSentiment = body.sentiment ?? "neutro";
   let summary = "";
+  let intent: string | null = null;
+  let followUpDate: string | null = null;
   if (!body.sentiment) {
     try {
       const c = await classifyResponse(text);
       sentiment = c.sentiment;
       summary = c.summary;
+      intent = c.intent;
+      followUpDate = c.followUpDate;
     } catch {
       // se a IA falhar, guarda como neutro para o CEO revisar
     }
   }
 
+  const nextActionIso =
+    intent === "followup_futuro" && followUpDate
+      ? new Date(`${followUpDate}T12:00:00Z`).toISOString()
+      : null;
+
   await supabase.from("responses").insert({
     company_id: companyId,
     channel,
     sentiment,
+    intent,
+    next_action_at: nextActionIso,
     summary,
     raw_text: text,
   });
 
-  // Qualquer resposta PARA a cobrança automática (só corre no silêncio); o CEO
-  // decide os próximos passos no dashboard.
-  if (sentiment === "negativo") {
+  // A intenção decide o próximo passo (Nível 1 — apoio automático).
+  if (nextActionIso) {
+    await supabase
+      .from("sequences")
+      .update({ status: "agendada", next_action_at: null, resume_at: nextActionIso })
+      .eq("company_id", companyId);
+  } else if (sentiment === "negativo") {
     await supabase
       .from("sequences")
       .update({

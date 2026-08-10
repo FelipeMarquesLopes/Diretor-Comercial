@@ -66,11 +66,12 @@ async function run() {
     }
   }
 
-  // 1. Reativar sequências cujo prazo de retomada (30 dias) venceu.
+  // 1. Reativar sequências cuja data de retomada chegou — tanto as pausadas por
+  //    negativa (30 dias) quanto as AGENDADAS ("me procure em outubro").
   const { data: toResume } = await supabase
     .from("sequences")
     .select("id")
-    .eq("status", "pausada_negativa")
+    .in("status", ["pausada_negativa", "agendada"])
     .lte("resume_at", now);
 
   let reativadas = 0;

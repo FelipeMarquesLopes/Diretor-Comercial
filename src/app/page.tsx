@@ -29,12 +29,26 @@ interface ResponseRow {
   id: string;
   company_id: string;
   sentiment: "positivo" | "negativo" | "neutro";
+  intent: string | null;
+  next_action_at: string | null;
   summary: string | null;
   raw_text: string | null;
   channel: string;
   created_at: string;
   companies: { name: string; category: string | null } | null;
 }
+
+// Rótulo curto da intenção detectada pela IA (Fase 1.1).
+const INTENT_LABEL: Record<string, string> = {
+  oportunidade_ativa: "🔥 Oportunidade ativa",
+  documentos_solicitados: "📎 Pediu documentos",
+  encaminhamento_setor: "➡️ Encaminhou ao setor",
+  duvida: "❓ Fez uma pergunta",
+  followup_futuro: "⏰ Follow-up futuro",
+  sem_interesse: "🚫 Sem interesse",
+  auto_resposta: "🤖 Resposta automática",
+  sem_sinal: "• Sem sinal claro",
+};
 
 // Assunto em cobrança automática (aguardando retorno; o robô cobra na data).
 interface Cobranca {
@@ -379,6 +393,29 @@ function ResponseItem({
             </span>
           </p>
           {r.summary && <p className="text-xs text-gray-500">{r.summary}</p>}
+
+          {/* Intenção detectada + próxima ação (Fase 1.1) */}
+          {(r.intent || r.next_action_at) && (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {r.intent && INTENT_LABEL[r.intent] && (
+                <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
+                  {INTENT_LABEL[r.intent]}
+                </span>
+              )}
+              {r.next_action_at && (
+                <span className="text-[11px] font-medium text-amber-700">
+                  ⏰ Retomada agendada:{" "}
+                  {new Date(r.next_action_at).toLocaleDateString("pt-BR", {
+                    timeZone: "America/Sao_Paulo",
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                  })}{" "}
+                  — o sistema retoma sozinho nessa data
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Ações — para nada cair no esquecimento */}
           <div className="mt-2 flex flex-wrap gap-2">

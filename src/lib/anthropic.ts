@@ -500,11 +500,43 @@ sobre a clínica, considere POSITIVO.
 Se for encaminhamento, no resumo diga para quem/qual setor foi repassado, se \
 essa informação aparecer.
 
+Além do sentimento, identifique a INTENÇÃO (o que a resposta pede como próximo \
+passo). Use exatamente uma destas:
+- "oportunidade_ativa" = quer avançar: pede reunião, proposta, credenciamento, \
+  demonstra interesse claro. (positivo)
+- "documentos_solicitados" = pede CNPJ, apresentação, valores, alvará, contrato \
+  ou qualquer documento/informação da clínica. (positivo)
+- "encaminhamento_setor" = repassou para outro setor/pessoa (ex: credenciamento) \
+  ou indicou outro contato. (positivo)
+- "duvida" = fez uma pergunta específica a ser respondida. (positivo)
+- "followup_futuro" = pede para procurar depois, numa data/época ("me procure \
+  em outubro", "retome no próximo trimestre", "ano que vem"). (neutro)
+- "sem_interesse" = recusa, não credencia, não tem interesse. (negativo)
+- "auto_resposta" = resposta automática (férias, "recebemos seu e-mail"). (neutro)
+- "sem_sinal" = nada claro. (neutro)
+
+Quando a intenção for "followup_futuro", preencha "followUpDate" com a data \
+concreta no formato YYYY-MM-DD, calculada a partir de HOJE (informada abaixo). \
+Ex: "me procure em outubro" e hoje é agosto → primeiro dia de outubro deste ano; \
+se o mês já passou, use o próximo ano. Nos demais casos, "followUpDate": null.
+
 FORMATO: responda SOMENTE com JSON válido:
-{"sentiment": "positivo|negativo|neutro", "summary": "<resumo em 1 frase>"}`;
+{"sentiment": "positivo|negativo|neutro", "intent": "<uma das intenções>", "followUpDate": "YYYY-MM-DD ou null", "summary": "<resumo em 1 frase>"}`;
+
+export type ResponseIntent =
+  | "oportunidade_ativa"
+  | "documentos_solicitados"
+  | "encaminhamento_setor"
+  | "duvida"
+  | "followup_futuro"
+  | "sem_interesse"
+  | "auto_resposta"
+  | "sem_sinal";
 
 export interface ClassifiedResponse {
   sentiment: ResponseSentiment;
+  intent: ResponseIntent | null;
+  followUpDate: string | null; // YYYY-MM-DD quando intent = followup_futuro
   summary: string;
 }
 
@@ -529,11 +561,25 @@ export async function classifyResponse(
     category === "reajuste"
       ? CLASSIFY_SYSTEM + REAJUSTE_CLASSIFY_EXTRA
       : CLASSIFY_SYSTEM;
-  const raw = await ask(system, `Resposta recebida:\n"""${text}"""`, 300);
+  const hoje = new Date().toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
+  const raw = await ask(
+    system,
+    `Hoje é ${hoje}.\nResposta recebida:\n"""${text}"""`,
+    300,
+  );
   const parsed = parseJsonObject(raw) as Partial<ClassifiedResponse>;
   const sentiment: ResponseSentiment =
     parsed.sentiment === "positivo" || parsed.sentiment === "negativo"
       ? parsed.sentiment
       : "neutro";
-  return { sentiment, summary: parsed.summary ?? "" };
+  const intent = (parsed.intent as ResponseIntent | undefined) ?? null;
+  // Só aceita data no formato YYYY-MM-DD.
+  const followUpDate =
+    typeof parsed.followUpDate === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(parsed.followUpDate)
+      ? parsed.followUpDate
+      : null;
+  return { sentiment, intent, followUpDate, summary: parsed.summary ?? "" };
 }

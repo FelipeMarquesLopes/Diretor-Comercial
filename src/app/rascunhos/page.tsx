@@ -507,6 +507,13 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
                 {fmtData(draft.sequences.resume_at)}
               </p>
             )}
+          {draft.sequences?.status === "agendada" &&
+            draft.sequences.resume_at && (
+              <p className="mt-0.5 text-xs font-medium text-amber-700">
+                ⏰ Retomada agendada (o parceiro pediu) — o sistema retoma em{" "}
+                {fmtData(draft.sequences.resume_at)}
+              </p>
+            )}
           {draft.sequences?.status === "ativa" &&
             draft.sequences.next_action_at && (
               <p className="mt-0.5 text-xs font-medium text-amber-700">

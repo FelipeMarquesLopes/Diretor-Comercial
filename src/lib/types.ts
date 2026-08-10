@@ -32,6 +32,7 @@ export type SequenceStatus =
   | "ativa"
   | "aguardando_ceo"
   | "pausada_negativa"
+  | "agendada"
   | "encerrada";
 
 export type ResponseSentiment = "positivo" | "negativo" | "neutro";
@@ -176,5 +177,6 @@ export const SEQUENCE_STATUS_LABELS: Record<SequenceStatus, string> = {
   ativa: "Cutucando",
   aguardando_ceo: "Aguardando você",
   pausada_negativa: "Pausada (retoma em 30 dias)",
+  agendada: "Retomada agendada",
   encerrada: "Encerrada",
 };
