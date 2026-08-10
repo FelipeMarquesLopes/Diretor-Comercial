@@ -172,7 +172,7 @@ export async function POST(
     const semRe = (generated.subject ?? "")
       .replace(/^\s*(re:\s*)+/i, "")
       .trim();
-    const { data: newSeq } = await supabase
+    const { data: newSeq, error: seqErr } = await supabase
       .from("sequences")
       .insert({
         company_id: companyId,
@@ -186,7 +186,17 @@ export async function POST(
       .select("id")
       .single<{ id: string }>();
 
-    await supabase.from("drafts").insert({
+    if (seqErr || !newSeq) {
+      // NÃO arquiva a resposta — ela segue no painel para você tentar de novo.
+      return NextResponse.json(
+        {
+          error: `Não consegui preparar a réplica (${seqErr?.message ?? "sequência"}). A resposta continua no painel.`,
+        },
+        { status: 500 },
+      );
+    }
+
+    const { error: draftErr } = await supabase.from("drafts").insert({
       company_id: companyId,
       contact_id: contact?.id ?? null,
       channel: "email",
@@ -194,11 +204,23 @@ export async function POST(
       subject: generated.subject || null,
       body: generated.body,
       status: "pendente",
-      sequence_id: newSeq?.id ?? null,
+      sequence_id: newSeq.id,
       step: 0,
       is_reply: true,
     });
 
+    if (draftErr) {
+      // Desfaz a sequência órfã e MANTÉM a resposta no painel (não arquiva).
+      await supabase.from("sequences").delete().eq("id", newSeq.id);
+      return NextResponse.json(
+        {
+          error: `Não consegui criar o rascunho da réplica (${draftErr.message}). A resposta continua no painel — tente de novo.`,
+        },
+        { status: 500 },
+      );
+    }
+
+    // Só agora que a réplica existe: atualiza status, registra e arquiva.
     await supabase
       .from("companies")
       .update({ status: "em_negociacao" })
