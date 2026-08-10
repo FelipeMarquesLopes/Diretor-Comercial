@@ -71,12 +71,19 @@ export async function POST(req: Request) {
     return 2;
   }
   // Quão "alcançável" é o e-mail deste contato (menor = melhor).
+  // Prioriza quem já foi VALIDADO (verdict) e evita os conhecidos como inválidos.
   function reachRank(c: Contact): number {
-    if (c.email) return 0; // já revelado
+    const v = (c.email_verdict ?? "").toLowerCase();
+    if (c.email) {
+      if (v === "valid") return 0; // revelado e validado — o melhor
+      if (v === "catch_all") return 1;
+      if (v === "invalid") return 8; // conhecido ruim — evita
+      return 0.5; // tem e-mail, ainda sem veredito (será validado no abordar)
+    }
     const s = (c.email_status ?? "").toLowerCase();
-    if (s.includes("verified") || s.includes("likely")) return 1; // revelável
-    if (c.apollo_id && s !== "unavailable") return 2; // vale tentar revelar
-    return 3; // Apollo não tem e-mail
+    if (s.includes("verified") || s.includes("likely")) return 2; // revelável
+    if (c.apollo_id && s !== "unavailable") return 3; // vale tentar revelar
+    return 9; // Apollo não tem e-mail
   }
   const target = [...contacts].sort((a, b) => {
     // 1º prioriza quem tem e-mail alcançável (senão não adianta o cargo);

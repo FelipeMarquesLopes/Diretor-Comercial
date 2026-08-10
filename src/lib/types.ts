@@ -109,6 +109,9 @@ export interface Contact {
   phone: string | null;
   linkedin_url: string | null;
   email_status: string | null;
+  // Veredito da validação do e-mail (ZeroBounce): valid | catch_all | invalid |
+  // unknown | null (não verificado).
+  email_verdict: string | null;
   is_decision_maker: boolean;
   is_whatsapp: boolean;
   created_at: string;

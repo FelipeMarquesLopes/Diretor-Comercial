@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { revealPerson } from "@/lib/apollo";
+import { revealPerson, isEmailVerified } from "@/lib/apollo";
+import { verifierConfigured, verifyEmail } from "@/lib/emailVerify";
+import { getSuppressedSet } from "@/lib/suppression";
 import type { Contact } from "@/lib/types";
+
+export const maxDuration = 60;
 
 // POST /api/contacts/[id]/reveal
 // "Revela" (enriquece) o e-mail/telefone do contato via Apollo. Consome 1
@@ -48,11 +52,30 @@ export async function POST(
   }
 
   const update: Record<string, unknown> = {};
-  if (revealed.email) update.email = revealed.email;
   if (revealed.phone) update.phone = revealed.phone;
-  // Se o Apollo não devolveu e-mail, marca como indisponível para o painel
-  // não oferecer "Revelar" de novo (não gasta crédito à toa).
-  if (!revealed.email) update.email_status = "unavailable";
+
+  let verdict: string | null = null;
+  if (revealed.email) {
+    update.email = revealed.email;
+
+    // MESMO rigor das operadoras: valida a caixa antes de deixar enviar.
+    const email = revealed.email.toLowerCase();
+    const suprimidos = await getSuppressedSet(supabase, [email]);
+    if (suprimidos.has(email)) {
+      verdict = "invalid"; // já retornou/descadastrou antes
+    } else if (isEmailVerified(revealed.emailStatus)) {
+      verdict = "valid"; // Apollo já garante
+    } else if (verifierConfigured()) {
+      verdict = await verifyEmail(email); // 'valid'|'catch_all'|'invalid'|'unknown'
+    } else {
+      verdict = "unknown"; // sem verificador configurado
+    }
+    update.email_verdict = verdict;
+  } else {
+    // Se o Apollo não devolveu e-mail, marca como indisponível para o painel
+    // não oferecer "Revelar" de novo (não gasta crédito à toa).
+    update.email_status = "unavailable";
+  }
 
   if (Object.keys(update).length > 0) {
     await supabase.from("contacts").update(update).eq("id", id);
@@ -61,6 +84,8 @@ export async function POST(
   return NextResponse.json({
     email: revealed.email,
     phone: revealed.phone,
+    verdict,
+    sendable: verdict === "valid",
     revealed: Boolean(revealed.email || revealed.phone),
   });
 }

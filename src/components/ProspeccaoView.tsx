@@ -12,6 +12,24 @@ function emailUnavailable(status: string | null): boolean {
   return (status ?? "").toLowerCase() === "unavailable";
 }
 
+// Selo do veredito de validação do e-mail (ZeroBounce).
+function verdictInfo(
+  v: string | null,
+): { label: string; cls: string } | null {
+  switch ((v ?? "").toLowerCase()) {
+    case "valid":
+      return { label: "✓ válido", cls: "bg-green-100 text-green-700" };
+    case "catch_all":
+      return { label: "• catch-all", cls: "bg-amber-100 text-amber-700" };
+    case "invalid":
+      return { label: "⚠ inválido", cls: "bg-red-100 text-red-700" };
+    case "unknown":
+      return { label: "? não confirmado", cls: "bg-gray-100 text-gray-600" };
+    default:
+      return null;
+  }
+}
+
 export function ProspeccaoView({
   mode = "empresa",
 }: {
@@ -615,8 +633,49 @@ function CompanyCard({
       });
       const d = await r.json();
       if (d.error) setNote(`Erro ao revelar: ${d.error}`);
-      else if (!d.revealed) setNote("O Apollo não tinha e-mail/telefone deste contato.");
+      else if (!d.revealed)
+        setNote("O Apollo não tinha e-mail/telefone deste contato.");
+      else if (d.verdict && d.verdict !== "valid")
+        setNote(
+          `E-mail revelado, mas a validação deu "${d.verdict}" — melhor não enviar (risco de retorno). Tente outro contato.`,
+        );
       onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Revela + valida TODOS os decisores de uma vez (para ver quais têm e-mail
+  // realmente válido). Mesmo rigor das operadoras.
+  async function revelarTodos() {
+    const alvos = (company.contacts ?? []).filter(
+      (c) => !c.email && c.apollo_id && !emailUnavailable(c.email_status),
+    );
+    if (alvos.length === 0) {
+      setNote("Nada novo para revelar (contatos já resolvidos).");
+      return;
+    }
+    if (
+      !confirm(
+        `Revelar e VALIDAR ${alvos.length} contato(s) de uma vez? Consome até ${alvos.length} créditos do Apollo + as verificações. Você verá quais e-mails são válidos.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setNote("Revelando e validando… pode levar alguns segundos.");
+    try {
+      const r = await fetch(`/api/companies/${company.id}/reveal-contacts`, {
+        method: "POST",
+      });
+      const d = await r.json();
+      if (d.error) setNote(`Erro: ${d.error}`);
+      else
+        setNote(
+          `${d.revelados} revelado(s): ✓ ${d.validos} válido(s) · ${d.catchAll} catch-all · ${d.invalidos} inválido(s). O "Abordar" já prioriza os válidos.`,
+        );
+      onChanged();
+    } catch (e) {
+      setNote(String(e));
     } finally {
       setBusy(false);
     }
@@ -698,47 +757,75 @@ function CompanyCard({
       {/* Decisores (RH, dono, diretor, sócio) */}
       {company.contacts?.length > 0 && (
         <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 p-2">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Decisores
-          </p>
-          <div className="space-y-1.5">
-            {company.contacts.map((c) => (
-              <div
-                key={c.id}
-                className="flex flex-wrap items-center justify-between gap-2 text-sm"
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Decisores
+            </p>
+            {company.contacts.some(
+              (c) => !c.email && c.apollo_id && !emailUnavailable(c.email_status),
+            ) && (
+              <button
+                onClick={revelarTodos}
+                disabled={busy}
+                className="rounded-md border border-brand-300 px-2 py-0.5 text-[11px] font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                title="Revela e valida o e-mail de todos os decisores (mostra quais são válidos)"
               >
-                <div className="min-w-0">
-                  <span className="font-medium text-gray-800">{c.name}</span>
-                  {c.title && (
-                    <span className="text-xs text-gray-500"> · {c.title}</span>
-                  )}
-                  <div className="text-xs text-gray-500">
-                    {c.email ? (
-                      <span className="text-brand-700">{c.email}</span>
-                    ) : emailUnavailable(c.email_status) ? (
-                      <span className="italic text-gray-400">
-                        sem e-mail no Apollo (já tentamos revelar)
-                      </span>
-                    ) : (
-                      <span className="italic text-gray-500">
-                        e-mail revelado ao Abordar (1 crédito)
-                      </span>
+                🔎 Revelar e validar todos
+              </button>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            {company.contacts.map((c) => {
+              const vb = verdictInfo(c.email_verdict);
+              return (
+                <div
+                  key={c.id}
+                  className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <span className="font-medium text-gray-800">{c.name}</span>
+                    {c.title && (
+                      <span className="text-xs text-gray-500"> · {c.title}</span>
                     )}
-                    {c.phone ? ` · ${c.phone}` : ""}
+                    <div className="text-xs text-gray-500">
+                      {c.email ? (
+                        <>
+                          <span className="text-brand-700">{c.email}</span>
+                          {vb && (
+                            <span
+                              className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${vb.cls}`}
+                            >
+                              {vb.label}
+                            </span>
+                          )}
+                        </>
+                      ) : emailUnavailable(c.email_status) ? (
+                        <span className="italic text-gray-400">
+                          sem e-mail no Apollo (já tentamos revelar)
+                        </span>
+                      ) : (
+                        <span className="italic text-gray-500">
+                          e-mail revelado ao Abordar (1 crédito)
+                        </span>
+                      )}
+                      {c.phone ? ` · ${c.phone}` : ""}
+                    </div>
                   </div>
+                  {!c.email &&
+                    c.apollo_id &&
+                    !emailUnavailable(c.email_status) && (
+                      <button
+                        onClick={() => revelar(c.id)}
+                        disabled={busy}
+                        className="rounded-md border border-brand-300 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                        title="Revela e VALIDA o e-mail via Apollo + ZeroBounce (consome 1 crédito)"
+                      >
+                        Revelar e validar
+                      </button>
+                    )}
                 </div>
-                {!c.email && c.apollo_id && !emailUnavailable(c.email_status) && (
-                  <button
-                    onClick={() => revelar(c.id)}
-                    disabled={busy}
-                    className="rounded-md border border-brand-300 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
-                    title="Revela e-mail/telefone via Apollo (consome 1 crédito)"
-                  >
-                    Revelar e-mail
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
