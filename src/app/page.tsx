@@ -30,12 +30,29 @@ interface ResponseRow {
   companies: { name: string; category: string | null } | null;
 }
 
+// Assunto em cobrança automática (aguardando retorno; o robô cobra na data).
+interface Cobranca {
+  key: string;
+  name: string;
+  date: string;
+  isReply: boolean;
+}
+
+function fmtDataCurta(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
+  const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
 
   function loadStats() {
     fetch("/api/stats")
@@ -45,6 +62,44 @@ export default function Dashboard() {
     fetch("/api/responses")
       .then((r) => r.json())
       .then((d) => setResponses(d.responses ?? []))
+      .catch(() => {});
+    // Assuntos em cobrança automática (sequência ativa com data futura).
+    fetch("/api/drafts")
+      .then((r) => r.json())
+      .then((d) => {
+        const rows = (d.drafts ?? []) as {
+          id: string;
+          sequence_id: string | null;
+          subject: string | null;
+          is_reply?: boolean;
+          companies: { name: string } | null;
+          sequences: { status: string; next_action_at: string | null } | null;
+        }[];
+        const vistos = new Set<string>();
+        const list: Cobranca[] = rows
+          .filter(
+            (x) =>
+              x.sequences?.status === "ativa" && x.sequences.next_action_at,
+          )
+          .filter((x) => {
+            const k = x.sequence_id ?? x.id;
+            if (vistos.has(k)) return false;
+            vistos.add(k);
+            return true;
+          })
+          .sort((a, b) =>
+            (a.sequences!.next_action_at ?? "").localeCompare(
+              b.sequences!.next_action_at ?? "",
+            ),
+          )
+          .map((x) => ({
+            key: x.sequence_id ?? x.id,
+            name: x.companies?.name ?? "Parceiro",
+            date: x.sequences!.next_action_at!,
+            isReply: Boolean(x.is_reply),
+          }));
+        setCobrancas(list);
+      })
       .catch(() => {});
   }
 
@@ -107,6 +162,50 @@ export default function Dashboard() {
           <Card label="Aprovados (prontos p/ disparar)" value={stats.aprovados} />
         </div>
       </section>
+
+      {cobrancas.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+              Em cobrança automática ({cobrancas.length})
+            </h2>
+            <Link
+              href="/rascunhos"
+              className="text-xs text-brand-600 hover:underline"
+            >
+              ver em Rascunhos →
+            </Link>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+            {cobrancas.slice(0, 8).map((c) => (
+              <div
+                key={c.key}
+                className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="font-medium text-gray-800 truncate">
+                    {c.name}
+                  </span>
+                  {c.isReply && (
+                    <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-brand-700">
+                      ↩️ Réplica
+                    </span>
+                  )}
+                </span>
+                <span className="shrink-0 text-xs font-medium text-amber-700">
+                  🔁 cobra {fmtDataCurta(c.date)} se não responderem
+                </span>
+              </div>
+            ))}
+            {cobrancas.length > 8 && (
+              <p className="px-4 py-2 text-xs text-gray-400">
+                +{cobrancas.length - 8} outro(s) — veja todos em “Próximos
+                envios”.
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">

@@ -108,6 +108,18 @@ export async function PATCH(
       // Remove do CC qualquer endereço suprimido (segue o envio sem eles).
       extraCc = extraCc.filter((e) => !suprimidos.has(e.toLowerCase()));
 
+      // TRAVA DE CÓPIAS (CC): muita gente em cópia parece disparo em massa e
+      // aumenta o risco de spam/bloqueio. Limite configurável (padrão 5).
+      const ccMax = Number(process.env.EMAIL_CC_MAX ?? "5");
+      if (extraCc.length > ccMax) {
+        return NextResponse.json(
+          {
+            error: `Muitas pessoas em cópia (${extraCc.length}). O limite é ${ccMax} para reduzir risco de spam/bloqueio. Edite a lista de cópia (CC) do cadastro e deixe só os contatos-chave.`,
+          },
+          { status: 422 },
+        );
+      }
+
       // TRAVA DE VOLUME DIÁRIO: protege a conta de envio de um disparo em massa
       // acidental. Conta os e-mails enviados nas últimas 24h; acima do limite,
       // bloqueia (o rascunho fica pendente para o dia seguinte).

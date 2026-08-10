@@ -456,11 +456,23 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
           )}
 
           {/* Em cópia (CC) — outras pessoas que também recebem o e-mail. */}
-          {draft.channel === "email" && draft.companies?.cc_emails && (
-            <p className="mt-0.5 text-xs text-gray-500">
-              Em cópia: {draft.companies.cc_emails}
-            </p>
-          )}
+          {draft.channel === "email" &&
+            draft.companies?.cc_emails &&
+            (() => {
+              const ccCount = draft.companies.cc_emails
+                .split(/[\s,;]+/)
+                .filter((e) => e.includes("@")).length;
+              const demais = ccCount > 5;
+              return (
+                <p
+                  className={`mt-0.5 text-xs ${demais ? "font-medium text-amber-700" : "text-gray-500"}`}
+                >
+                  Em cópia ({ccCount})
+                  {demais ? " ⚠️ muitos — risco de spam, reduza no cadastro" : ""}:{" "}
+                  {draft.companies.cc_emails}
+                </p>
+              );
+            })()}
 
           {/* Assunto — para distinguir (nova operadora, relacionamento, etc.).
               No pendente o assunto já aparece editável abaixo. */}
