@@ -69,8 +69,41 @@ function getTransporter(): nodemailer.Transporter {
     port,
     secure: port === 465, // 465 = SSL; 587 = STARTTLS
     auth: { user, pass },
+    // Timeouts explícitos: falha rápido e limpo (em vez de pendurar a função)
+    // quando o servidor demora ou derruba a conexão.
+    connectionTimeout: 20000,
+    greetingTimeout: 15000,
+    socketTimeout: 25000,
   });
   return transporter;
+}
+
+// Erros de CONEXÃO transitórios (o servidor derrubou/expirou) — vale retentar.
+function isTransient(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /connection closed|econnreset|etimedout|epipe|esocket|socket close|timeout|greeting never received|closed unexpectedly/i.test(
+    msg,
+  );
+}
+
+// Envia com até 3 tentativas e espera crescente (2s, 4s). Em falha de conexão,
+// descarta o transporte para reconectar do zero na próxima tentativa.
+async function sendMailWithRetry(
+  mailOptions: Parameters<nodemailer.Transporter["sendMail"]>[0],
+): Promise<{ messageId?: string }> {
+  const maxTentativas = 3;
+  let ultimoErro: unknown;
+  for (let i = 0; i < maxTentativas; i++) {
+    try {
+      return await getTransporter().sendMail(mailOptions);
+    } catch (err) {
+      ultimoErro = err;
+      if (!isTransient(err) || i === maxTentativas - 1) throw err;
+      transporter = null; // força reconexão limpa
+      await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
+    }
+  }
+  throw ultimoErro;
 }
 
 export async function sendEmail(opts: {
@@ -105,7 +138,7 @@ export async function sendEmail(opts: {
     `color:#9aa0a6;margin-top:18px;border-top:1px solid #eee;padding-top:10px;">` +
     OPTOUT_TEXT +
     `</p>`;
-  const info = await getTransporter().sendMail({
+  const info = await sendMailWithRetry({
     from: `${fromName} <${user}>`,
     to: opts.to,
     cc: ccList.length > 0 ? ccList : undefined, // CEO + extras em cópia

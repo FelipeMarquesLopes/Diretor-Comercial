@@ -5,6 +5,9 @@ import { isEmailConfigured, sendEmail } from "@/lib/email";
 import { getSuppressedSet } from "@/lib/suppression";
 import type { DraftStatus } from "@/lib/types";
 
+// Enviar pode incluir retentativas de SMTP (conexão instável) — dá folga.
+export const maxDuration = 60;
+
 // PATCH /api/drafts/[id]
 // Aprova, rejeita, envia, ou edita o corpo de um rascunho.
 // Body: { action: "aprovar" | "rejeitar" | "enviar" | "enviar_email" | "editar",
