@@ -184,6 +184,14 @@ que ele **é** e do que **não é** — para não sugerir fora do escopo:
 - **NÃO é** sistema clínico: sem prontuário, faturamento, dado de paciente ou
   dado sensível de saúde. LGPD aqui é a versão **leve de outreach B2B**
   (legítimo interesse + opt-out), não a de dado sensível.
+- **FOCO INVIOLÁVEL (princípio permanente do CEO):** a pergunta que guia toda
+  funcionalidade é *"quem podemos contatar que vai trazer mais pacientes?"* —
+  ou seja, **encontrar e abordar DECISORES** (RH/saúde ocupacional em empresas;
+  credenciamento/rede em operadoras, seguradoras e autogestões; direção e
+  coordenação em escolas; pastor/liderança em igrejas; médicos encaminhadores).
+  **NUNCA** cadastrar, tratar ou controlar dado de paciente. Se um dia medirmos
+  encaminhamento por parceiro, será agregado e sem identificar paciente. O
+  Portal de Parceiros com dado de paciente está **fora de escopo**.
 - **Stack atual:** Next.js 15 (App Router) na Vercel; Supabase (Postgres +
   Storage); Apollo (dados de contato) + ZeroBounce (validação de e-mail, só
   `valid`); envio por **Titan/HostGator** via SMTP (SES foi descartado — decisão

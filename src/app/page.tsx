@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  AUTONOMY_LABELS,
+  AUTONOMY_DESC,
+  actionsByLevel,
+  type AutonomyLevel,
+} from "@/lib/governance";
 
 interface Stats {
   empresas: number;
@@ -276,6 +282,8 @@ export default function Dashboard() {
         </div>
       </section>
 
+      <GovernanceCard />
+
       <section className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
         <p className="font-medium text-gray-800">Como funciona</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
@@ -440,6 +448,66 @@ function ResponseItem({
         </button>
       </div>
     </div>
+  );
+}
+
+// Governança da automação (Fase 1.5): mostra ao CEO o que a IA faz sozinha,
+// o que ela prepara para aprovação e o que é sempre 100% humano.
+function GovernanceCard() {
+  const [open, setOpen] = useState(false);
+  const cor: Record<AutonomyLevel, string> = {
+    1: "border-green-200 bg-green-50",
+    2: "border-brand-200 bg-brand-50",
+    3: "border-gray-300 bg-gray-50",
+  };
+  const dot: Record<AutonomyLevel, string> = {
+    1: "bg-green-500",
+    2: "bg-brand-500",
+    3: "bg-gray-500",
+  };
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-4">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <div>
+          <p className="text-sm font-medium text-gray-800">
+            🛡️ Governança da automação
+          </p>
+          <p className="text-xs text-gray-500">
+            O que a IA faz sozinha, o que ela prepara p/ você aprovar, e o que é
+            sempre 100% humano. Nada sai sem o seu clique.
+          </p>
+        </div>
+        <span className="shrink-0 text-xs text-brand-600 underline">
+          {open ? "ocultar" : "ver níveis"}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {([1, 2, 3] as AutonomyLevel[]).map((lvl) => (
+            <div key={lvl} className={`rounded-lg border p-3 ${cor[lvl]}`}>
+              <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-700">
+                <span className={`h-2 w-2 rounded-full ${dot[lvl]}`} />
+                Nível {lvl}
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-gray-800">
+                {AUTONOMY_LABELS[lvl]}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-500">{AUTONOMY_DESC[lvl]}</p>
+              <ul className="mt-2 space-y-1">
+                {actionsByLevel(lvl).map((a) => (
+                  <li key={a.key} className="text-xs text-gray-600">
+                    • {a.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
