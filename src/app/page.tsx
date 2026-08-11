@@ -73,6 +73,9 @@ export default function Dashboard() {
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
+  const [reativar, setReativar] = useState<
+    { id: string; name: string; category: string; dias: number | null }[]
+  >([]);
 
   function loadStats() {
     fetch("/api/stats")
@@ -120,6 +123,11 @@ export default function Dashboard() {
           }));
         setCobrancas(list);
       })
+      .catch(() => {});
+    // Oportunidades abandonadas (interesse sem interação há muitos dias).
+    fetch("/api/reactivation")
+      .then((r) => r.json())
+      .then((d) => setReativar(d.oportunidades ?? []))
       .catch(() => {});
   }
 
@@ -223,6 +231,23 @@ export default function Dashboard() {
                 envios”.
               </p>
             )}
+          </div>
+        </section>
+      )}
+
+      {reativar.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+            Reativar oportunidades ({reativar.length})
+          </h2>
+          <p className="mb-2 text-xs text-gray-500">
+            Demonstraram interesse mas ficaram sem interação. Reative para a IA
+            gerar uma retomada já com o histórico — você aprova antes de enviar.
+          </p>
+          <div className="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+            {reativar.map((o) => (
+              <ReativarItem key={o.id} o={o} onChanged={loadStats} />
+            ))}
           </div>
         </section>
       )}
@@ -484,6 +509,57 @@ function ResponseItem({
           ✕ Fechar
         </button>
       </div>
+    </div>
+  );
+}
+
+// Oportunidade abandonada: reativar gera um rascunho de retomada (Fase 1.4).
+function ReativarItem({
+  o,
+  onChanged,
+}: {
+  o: { id: string; name: string; category: string; dias: number | null };
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  async function reativar() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await fetch("/api/reactivation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: o.id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.error) setNote(`Erro: ${d.error}`);
+      else {
+        setNote("Rascunho de retomada gerado — veja em Rascunhos.");
+        onChanged();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+      <span className="min-w-0">
+        <span className="font-medium text-gray-800">{o.name}</span>
+        {o.dias != null && (
+          <span className="ml-2 text-xs text-gray-500">
+            parado há {o.dias} dias
+          </span>
+        )}
+        {note && <span className="ml-2 text-xs text-brand-600">{note}</span>}
+      </span>
+      <button
+        onClick={reativar}
+        disabled={busy}
+        className="shrink-0 rounded-md border border-brand-300 px-3 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+      >
+        {busy ? "Reativando…" : "🔄 Reativar"}
+      </button>
     </div>
   );
 }
