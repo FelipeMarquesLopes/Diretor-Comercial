@@ -269,11 +269,12 @@ export function ProspeccaoView({
           ))}
         </div>
 
-        {/* Fase 4.1 — buscar PERTO de uma unidade (proximidade = mais paciente).
-            Preenche estado + cidades da região de captação da unidade. */}
+        {/* Fase 4.1/4.3-lite — buscar no RAIO de ~20 km de uma unidade
+            (proximidade = mais paciente). Preenche estado + os municípios
+            dentro do raio para o Apollo filtrar por localização. */}
         <div className="mb-3">
           <span className="mb-1 block text-xs font-medium text-brand-800/70">
-            📍 Buscar perto de uma unidade
+            📍 Buscar no raio de ~20&nbsp;km de uma unidade
           </span>
           <div className="flex flex-wrap gap-2">
             {UNITS.map((u) => {
@@ -303,6 +304,18 @@ export function ProspeccaoView({
               );
             })}
           </div>
+          {unidade && (
+            <p className="mt-1.5 text-[11px] text-brand-800/50">
+              Raio ~
+              {UNITS.find((u) => u.id === unidade)?.radiusKm ?? 20}&nbsp;km — busca
+              nos municípios:{" "}
+              <span className="text-brand-700">
+                {UNITS.find((u) => u.id === unidade)?.cities.join(" · ")}
+              </span>
+              . O Apollo filtra por município (não por km exato); ajuste as
+              cidades abaixo se quiser.
+            </p>
+          )}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">
