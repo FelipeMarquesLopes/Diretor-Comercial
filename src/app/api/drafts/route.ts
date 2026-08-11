@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { generateDraft } from "@/lib/anthropic";
+import { buildCommercialContext } from "@/lib/memory";
+import { buildPersonalizationAngle } from "@/lib/personalize";
 import type { Company, Contact, DraftChannel, MessageHook } from "@/lib/types";
 
 // GET /api/drafts?status=pendente
@@ -78,9 +80,13 @@ export async function POST(req: Request) {
     .limit(1);
   const contact = (contacts?.[0] as Contact | undefined) ?? null;
 
+  // Memória comercial (Fase 1.2) + ângulo de personalização (Fase 2.2).
+  const history = await buildCommercialContext(supabase, companyId);
+  const angle = buildPersonalizationAngle(company);
+
   let generated;
   try {
-    generated = await generateDraft({ company, contact, hook, channel });
+    generated = await generateDraft({ company, contact, hook, channel, history, angle });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Erro na IA" },

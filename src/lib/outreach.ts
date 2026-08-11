@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateDraft, generateAgendaInformativo } from "./anthropic";
 import { buildCommercialContext } from "./memory";
+import { buildPersonalizationAngle } from "./personalize";
 import { nextActionAt } from "./followup";
 import type {
   Company,
@@ -103,6 +104,8 @@ export async function generateDraftForSequence(
 
   // Memória comercial: histórico real com este parceiro (Fase 1.2).
   const history = await buildCommercialContext(supabase, company.id);
+  // Ângulo de personalização (Fase 2.2): só pesa na 1ª abordagem (step 0).
+  const angle = sequence.step === 0 ? buildPersonalizationAngle(company) : undefined;
 
   let generated;
   try {
@@ -113,6 +116,7 @@ export async function generateDraftForSequence(
       channel: sequence.channel,
       step: sequence.step,
       history,
+      angle,
     });
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erro na IA" };

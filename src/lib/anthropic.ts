@@ -174,8 +174,9 @@ export async function generateDraft(opts: {
   channel: DraftChannel;
   step?: number;
   history?: string; // memória comercial (Fase 1.2)
+  angle?: string; // ângulo de personalização (Fase 2.2)
 }): Promise<GeneratedDraft> {
-  const { company, contact, hook, channel, step = 0, history } = opts;
+  const { company, contact, hook, channel, step = 0, history, angle } = opts;
 
   const contactLine = contact
     ? `Contato: ${contact.name}${contact.title ? `, ${contact.title}` : ""}.`
@@ -201,6 +202,15 @@ export async function generateDraft(opts: {
       `com naturalidade — ex: "retomando nosso contato"):\n${history.trim()}`
     : "";
 
+  // Ângulo de personalização (Fase 2.2): por que ESTA organização conversaria
+  // conosco. É um FIO CONDUTOR — a IA incorpora com naturalidade, sem copiar.
+  const angleLine =
+    step === 0 && angle?.trim()
+      ? `\n\nÂNGULO DE PERSONALIZAÇÃO (por que ESTA organização conversaria ` +
+        `conosco — use como fio condutor para NÃO soar genérico; incorpore com ` +
+        `naturalidade, sem copiar as frases nem listar tudo):\n${angle.trim()}`
+      : "";
+
   const userPrompt = `Escreva o rascunho.
 
 Canal: ${channel === "email" ? "E-mail" : "WhatsApp"}
@@ -209,7 +219,7 @@ Parceiro: ${company.name}${company.industry ? ` (${company.industry})` : ""}${
   }.
 ${contactLine}
 
-${categoryBriefing(company, hook)}${briefingLine}${historyLine}${followUpLine}
+${categoryBriefing(company, hook)}${briefingLine}${historyLine}${angleLine}${followUpLine}
 
 Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
 
