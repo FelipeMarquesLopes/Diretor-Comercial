@@ -88,6 +88,9 @@ export interface Company {
   logo_url: string | null;
   phone: string | null;
   status: CompanyStatus;
+  // Estágio fino do pipeline por segmento (Fase 2.1). Ver src/lib/pipelines.ts.
+  // null = ainda não posicionado; a UI deriva o estágio do `status`.
+  stage: string | null;
   qualification_score: number;
   qualified: boolean;
   qualification_notes: string | null;

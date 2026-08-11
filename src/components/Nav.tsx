@@ -10,7 +10,10 @@ import { usePathname } from "next/navigation";
 //   4. Recorrente    → Agenda Aberta
 //   5. Enviar        → Rascunhos (aprovar e disparar)
 const GROUPS: { href: string; label: string }[][] = [
-  [{ href: "/", label: "Dashboard" }],
+  [
+    { href: "/", label: "Dashboard" },
+    { href: "/pipeline", label: "Pipeline" },
+  ],
   [
     { href: "/prospeccao", label: "Empresas" },
     { href: "/medicos", label: "Médicos" },
