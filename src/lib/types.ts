@@ -91,6 +91,10 @@ export interface Company {
   // Estágio fino do pipeline por segmento (Fase 2.1). Ver src/lib/pipelines.ts.
   // null = ainda não posicionado; a UI deriva o estágio do `status`.
   stage: string | null;
+  // Fase 5 — este parceiro é fonte de encaminhamento? Quantas indicações gerou?
+  // (Agregado, sem PII — nunca há dado de paciente.)
+  is_referral_source: boolean;
+  referral_count: number;
   qualification_score: number;
   qualified: boolean;
   qualification_notes: string | null;

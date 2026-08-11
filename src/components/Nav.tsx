@@ -12,6 +12,7 @@ import { usePathname } from "next/navigation";
 const GROUPS: { href: string; label: string }[][] = [
   [
     { href: "/", label: "Dashboard" },
+    { href: "/funil", label: "Funil" },
     { href: "/pipeline", label: "Pipeline" },
   ],
   [
@@ -19,6 +20,7 @@ const GROUPS: { href: string; label: string }[][] = [
     { href: "/medicos", label: "Médicos" },
     { href: "/escolas", label: "Escolas" },
     { href: "/igrejas", label: "Igrejas" },
+    { href: "/territorio", label: "Territórios" },
   ],
   [
     { href: "/operadoras", label: "Operadoras" },
@@ -27,6 +29,7 @@ const GROUPS: { href: string; label: string }[][] = [
   [
     { href: "/agenda", label: "Agenda Aberta" },
     { href: "/tarefas", label: "Tarefas" },
+    { href: "/encaminhamentos", label: "Encaminhamentos" },
   ],
   [{ href: "/rascunhos", label: "Rascunhos" }],
 ];
