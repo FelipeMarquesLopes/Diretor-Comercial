@@ -161,8 +161,9 @@ export async function generateDraft(opts: {
   hook: MessageHook;
   channel: DraftChannel;
   step?: number;
+  history?: string; // memória comercial (Fase 1.2)
 }): Promise<GeneratedDraft> {
-  const { company, contact, hook, channel, step = 0 } = opts;
+  const { company, contact, hook, channel, step = 0, history } = opts;
 
   const contactLine = contact
     ? `Contato: ${contact.name}${contact.title ? `, ${contact.title}` : ""}.`
@@ -181,6 +182,13 @@ export async function generateDraft(opts: {
       `comunicar):\n"""${company.briefing.trim()}"""`
     : "";
 
+  // Memória comercial: histórico real com este parceiro (Fase 1.2).
+  const historyLine = history?.trim()
+    ? `\n\nHISTÓRICO com este parceiro (use para dar CONTINUIDADE e NÃO repetir ` +
+      `o que já foi dito; se estamos retomando após um tempo, reconheça isso ` +
+      `com naturalidade — ex: "retomando nosso contato"):\n${history.trim()}`
+    : "";
+
   const userPrompt = `Escreva o rascunho.
 
 Canal: ${channel === "email" ? "E-mail" : "WhatsApp"}
@@ -189,7 +197,7 @@ Parceiro: ${company.name}${company.industry ? ` (${company.industry})` : ""}${
   }.
 ${contactLine}
 
-${categoryBriefing(company, hook)}${briefingLine}${followUpLine}
+${categoryBriefing(company, hook)}${briefingLine}${historyLine}${followUpLine}
 
 Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
 
@@ -245,16 +253,21 @@ export async function generateReply(opts: {
   incomingText: string;
   instruction: string;
   channel: DraftChannel;
+  history?: string; // memória comercial (Fase 1.2)
 }): Promise<GeneratedDraft> {
-  const { company, contact, incomingText, instruction, channel } = opts;
+  const { company, contact, incomingText, instruction, channel, history } = opts;
   const contactLine = contact
     ? `Contato: ${contact.name}${contact.title ? `, ${contact.title}` : ""}.`
     : "Contato: responda de forma cordial e geral.";
 
+  const historyLine = history?.trim()
+    ? `\n\nHISTÓRICO com este parceiro (para contexto — não repita o que já foi tratado):\n${history.trim()}`
+    : "";
+
   const userPrompt = `Escreva a réplica.
 
 Canal: ${channel === "email" ? "E-mail" : "WhatsApp"}
-Parceiro: ${company.name}. ${contactLine}
+Parceiro: ${company.name}. ${contactLine}${historyLine}
 
 MENSAGEM QUE O PARCEIRO ENVIOU (responda a isto):
 """${incomingText.slice(0, 3000)}"""

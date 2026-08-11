@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { generateReply } from "@/lib/anthropic";
+import { buildCommercialContext } from "@/lib/memory";
 import { resumeAtAfterNegative } from "@/lib/followup";
 import type { Company, Contact } from "@/lib/types";
 
@@ -147,6 +148,8 @@ export async function POST(
     const list = (contacts as Contact[] | null) ?? [];
     const contact = list.find((c) => c.email) ?? list[0] ?? null;
 
+    const history = await buildCommercialContext(supabase, companyId);
+
     let generated;
     try {
       generated = await generateReply({
@@ -155,6 +158,7 @@ export async function POST(
         incomingText: resp.raw_text ?? "",
         instruction: body.instruction,
         channel: "email",
+        history,
       });
     } catch (err) {
       return NextResponse.json(

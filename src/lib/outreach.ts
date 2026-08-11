@@ -3,6 +3,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateDraft, generateAgendaInformativo } from "./anthropic";
+import { buildCommercialContext } from "./memory";
 import { nextActionAt } from "./followup";
 import type {
   Company,
@@ -100,6 +101,9 @@ export async function generateDraftForSequence(
       ? list.find((c) => c.is_whatsapp) ?? null
       : list.find((c) => c.email) ?? list[0] ?? null;
 
+  // Memória comercial: histórico real com este parceiro (Fase 1.2).
+  const history = await buildCommercialContext(supabase, company.id);
+
   let generated;
   try {
     generated = await generateDraft({
@@ -108,6 +112,7 @@ export async function generateDraftForSequence(
       hook,
       channel: sequence.channel,
       step: sequence.step,
+      history,
     });
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erro na IA" };
