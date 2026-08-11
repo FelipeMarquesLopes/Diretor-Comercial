@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Company, Contact, MessageHook } from "@/lib/types";
 import { HOOK_LABELS, STATUS_LABELS } from "@/lib/types";
+import { UNITS } from "@/lib/units";
 
 type CompanyWithContacts = Company & { contacts: Contact[] };
 
@@ -159,6 +160,8 @@ export function ProspeccaoView({
   const [nome, setNome] = useState("");
   const [estado, setEstado] = useState("Sao Paulo");
   const [cidades, setCidades] = useState("");
+  // Fase 4.1 — unidade selecionada para busca por região (proximidade).
+  const [unidade, setUnidade] = useState<string | null>(null);
   const [minEmployees, setMinEmployees] = useState(cfg.minEmployees);
   const [maxEmployees, setMaxEmployees] = useState<string>("");
   const [perPage, setPerPage] = useState(25);
@@ -264,6 +267,42 @@ export function ProspeccaoView({
               {label}
             </button>
           ))}
+        </div>
+
+        {/* Fase 4.1 — buscar PERTO de uma unidade (proximidade = mais paciente).
+            Preenche estado + cidades da região de captação da unidade. */}
+        <div className="mb-3">
+          <span className="mb-1 block text-xs font-medium text-brand-800/70">
+            📍 Buscar perto de uma unidade
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {UNITS.map((u) => {
+              const active = unidade === u.id;
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => {
+                    if (active) {
+                      setUnidade(null);
+                      setCidades("");
+                    } else {
+                      setUnidade(u.id);
+                      setEstado(u.estado);
+                      setCidades(u.cities.join(", "));
+                    }
+                  }}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                    active
+                      ? "bg-brand-600 text-white"
+                      : "border border-brand-200 bg-white text-brand-700 hover:bg-brand-50"
+                  }`}
+                >
+                  {u.name.replace("MenthalHelp — ", "")}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">
