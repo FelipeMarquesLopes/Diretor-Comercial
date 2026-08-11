@@ -93,6 +93,18 @@ function categoryBriefing(company: Company, hook: MessageHook): string {
         "neuropediatra ou geriatra). Objetivo: rede de encaminhamento mútuo. " +
         "Tom colega-a-colega, técnico e cordial."
       );
+    case "igreja":
+      return (
+        "Alvo: uma IGREJA/comunidade — falar com a liderança (pastor, " +
+        "secretaria, coordenação de ação social). Objetivo: PARCERIA " +
+        "INSTITUCIONAL de REDE DE APOIO ÀS FAMÍLIAS. A igreja segue com seu " +
+        "trabalho pastoral e de aconselhamento; quando identificar situações " +
+        "que precisam de acompanhamento profissional (psicologia, " +
+        "fonoaudiologia, terapia ocupacional, psicopedagogia, avaliação " +
+        "neuropsicológica, entre outros), pode indicar a clínica. Tom " +
+        "acolhedor, respeitoso e institucional — JAMAIS comercial agressivo, " +
+        "nunca invasivo. É uma oferta de cuidado, não uma venda."
+      );
     default:
       // empresa
       return `Alvo: uma EMPRESA (falar com o RH). ${HOOK_BRIEFING[hook]}`;

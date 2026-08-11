@@ -310,6 +310,36 @@ const DECISION_TITLES = {
     "Sócio",
     "Fundador",
   ],
+  igreja: [
+    // Liderança (decide a parceria institucional / rede de apoio)
+    "Pastor",
+    "Pastora",
+    "Pastor Presidente",
+    "Pastor Titular",
+    "Reverendo",
+    "Padre",
+    "Bispo",
+    "Ministro",
+    "Apóstolo",
+    "Líder",
+    "Liderança",
+    "Presbítero",
+    "Diácono",
+    // Administração / secretaria / tesouraria
+    "Secretário",
+    "Secretário Executivo",
+    "Administrador",
+    "Administrador Eclesiástico",
+    "Tesoureiro",
+    "Gestor",
+    "Diretor",
+    // Assistência / ação social (a porta do cuidado às famílias)
+    "Coordenador de Ação Social",
+    "Coordenador de Assistência Social",
+    "Assistente Social",
+    "Coordenador de Família",
+    "Coordenador de Aconselhamento",
+  ],
 } as const;
 
 const DECISION_SENIORITIES = {
@@ -349,6 +379,8 @@ const DECISION_SENIORITIES = {
     "head",
     "manager",
   ],
+  // Igreja: liderança e administração (pastor, secretaria, ação social).
+  igreja: ["owner", "founder", "c_suite", "director", "head", "manager"],
 } as const;
 
 /**
@@ -361,7 +393,7 @@ const DECISION_SENIORITIES = {
 export async function searchDecisionMakers(
   organizationDomain: string,
   perPage = 10,
-  category: "empresa" | "medico" | "escola" | "operadora" = "empresa",
+  category: "empresa" | "medico" | "escola" | "operadora" | "igreja" = "empresa",
 ): Promise<ApolloContact[]> {
   const body = {
     page: 1,

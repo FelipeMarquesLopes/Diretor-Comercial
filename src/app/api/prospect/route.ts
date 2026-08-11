@@ -37,12 +37,14 @@ export async function POST(req: Request) {
   // "Só com decisor" exige buscar os decisores (é de graça no Apollo).
   const onlyWithContact = body.onlyWithContact !== false;
   const withContacts = body.withContacts !== false || onlyWithContact;
-  const category: "empresa" | "medico" | "escola" =
+  const category: "empresa" | "medico" | "escola" | "igreja" =
     body.category === "medico"
       ? "medico"
       : body.category === "escola"
         ? "escola"
-        : "empresa";
+        : body.category === "igreja"
+          ? "igreja"
+          : "empresa";
   // Numa escola queremos TODO o time administrativo (coordenação, direção,
   // orientação, secretaria), não só um contato — puxamos mais decisores.
   const decisoresPorEmpresa = category === "escola" ? 25 : 10;

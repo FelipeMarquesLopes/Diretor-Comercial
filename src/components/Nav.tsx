@@ -15,6 +15,7 @@ const GROUPS: { href: string; label: string }[][] = [
     { href: "/prospeccao", label: "Empresas" },
     { href: "/medicos", label: "Médicos" },
     { href: "/escolas", label: "Escolas" },
+    { href: "/igrejas", label: "Igrejas" },
   ],
   [
     { href: "/operadoras", label: "Operadoras" },

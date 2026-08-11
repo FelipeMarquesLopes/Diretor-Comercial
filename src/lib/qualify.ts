@@ -136,6 +136,15 @@ export function qualifyCompany(
     return { score, qualified: true, priority: priorityFromScore(score), notes: reasons.join("; ") };
   }
 
+  // ---------- Frente IGREJA: rede de apoio às famílias + proximidade ---------
+  if (category === "igreja") {
+    score += 34; reasons.push("Rede de apoio às famílias");
+    if (prox.pts) { score += prox.pts; reasons.push(prox.note); }
+    if (org.domain) { score += 8; reasons.push("Domínio identificado"); }
+    score = Math.min(100, score);
+    return { score, qualified: true, priority: priorityFromScore(score), notes: reasons.join("; ") };
+  }
+
   // ---------- Operadora e demais segmentos: base + proximidade ---------------
   score += 45; reasons.push("Potencial de credenciamento/parceria");
   if (prox.pts) { score += prox.pts; reasons.push(prox.note); }

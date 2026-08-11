@@ -30,15 +30,123 @@ function verdictInfo(
   }
 }
 
+export type ProspeccaoMode = "empresa" | "medico" | "escola" | "igreja";
+
+interface ModeConfig {
+  noun: string;
+  minEmployees: number;
+  notKeywords: string;
+  heading: string;
+  subtitle: string;
+  presets: readonly (readonly [string, string])[];
+  sectionTitle: string;
+  contactLabel: string;
+  cadRotulo: string;
+  cadNomeLabel: string;
+  cadContatoPlaceholder: string;
+  cadCargoPlaceholder: string;
+}
+
+// Config por segmento — adicionar um novo segmento é só mais uma entrada aqui.
+const MODE_CONFIG: Record<ProspeccaoMode, ModeConfig> = {
+  empresa: {
+    noun: "empresa(s)",
+    minEmployees: 100,
+    notKeywords: "",
+    heading: "Buscar empresas no Apollo",
+    subtitle: "Quanto mais detalhes, melhores os resultados. Atalhos:",
+    presets: [
+      ["🏭 Indústrias", "manufacturing, indústria, metalurgia, fábrica"],
+      ["🚚 Transporte/Logística", "transporte, logística, distribuição"],
+      ["🏫 Escolas/Colégios", "escola, colégio, educação, ensino"],
+      ["🛒 Varejo", "varejo, supermercado, comércio"],
+      ["🏥 Saúde", "hospital, clínica, saúde"],
+    ],
+    sectionTitle: "Empresas qualificadas",
+    contactLabel:
+      "Só trazer empresas com decisor encontrado — RH, saúde ocupacional, dono, diretor (o e-mail é revelado ao Abordar) — recomendado",
+    cadRotulo: "empresa",
+    cadNomeLabel: "Nome da empresa",
+    cadContatoPlaceholder: "ex: Maria (RH)",
+    cadCargoPlaceholder: "ex: Gerente de RH",
+  },
+  medico: {
+    noun: "consultório(s)",
+    minEmployees: 1,
+    notKeywords: "",
+    heading: "Buscar médicos / consultórios no Apollo (rede de encaminhamento)",
+    subtitle:
+      "Médicos prescritores (neuro, psiquiatria, pediatria…) para rede de encaminhamento. Atalhos por especialidade:",
+    presets: [
+      ["🧠 Neuro", "neurologia, neurologista, neuropediatria"],
+      ["🧩 Psiquiatria", "psiquiatria, psiquiatra, saúde mental"],
+      ["👶 Pediatria", "pediatria, pediatra, neuropediatra"],
+      ["🩺 Clínicas", "clínica médica, consultório, ambulatório"],
+      ["👵 Geriatria", "geriatria, geriatra"],
+    ],
+    sectionTitle: "Médicos / consultórios",
+    contactLabel:
+      "Só trazer consultórios com contato encontrado — médico, direção clínica, dono (o e-mail é revelado ao Abordar) — recomendado",
+    cadRotulo: "médico / consultório",
+    cadNomeLabel: "Nome do consultório/médico",
+    cadContatoPlaceholder: "ex: Dr. Paulo",
+    cadCargoPlaceholder: "ex: Diretor Clínico",
+  },
+  escola: {
+    noun: "escola(s)",
+    minEmployees: 1,
+    notKeywords:
+      "prefeitura, municipal, estadual, secretaria de educação, federal, público, pública",
+    heading: "Buscar escolas / colégios no Apollo (parceria clínica ↔ escola)",
+    subtitle:
+      "Escolas particulares (rede pública já vem excluída). Buscamos TODO o time administrativo — coordenação, direção, orientação, secretaria. Atalhos por segmento:",
+    presets: [
+      ["🏫 Colégios particulares", "colégio particular, escola particular, ensino privado"],
+      ["🎒 Ed. Infantil", "educação infantil, creche, pré-escola, berçário"],
+      ["📚 Fundamental/Médio", "ensino fundamental, ensino médio, colégio"],
+      ["🌱 Bilíngue/Montessori", "escola bilíngue, montessoriana, escola construtivista"],
+      ["🧩 Inclusiva/Especial", "escola inclusiva, educação especial, inclusão"],
+    ],
+    sectionTitle: "Escolas / colégios",
+    contactLabel:
+      "Só trazer escolas com contato encontrado — coordenação, direção, orientação (o e-mail é revelado ao Abordar) — recomendado",
+    cadRotulo: "escola / colégio",
+    cadNomeLabel: "Nome da escola",
+    cadContatoPlaceholder: "ex: Ana (coordenação)",
+    cadCargoPlaceholder: "ex: Coordenadora Pedagógica",
+  },
+  igreja: {
+    noun: "igreja(s)",
+    minEmployees: 1,
+    notKeywords: "",
+    heading: "Buscar igrejas no Apollo (rede de apoio às famílias)",
+    subtitle:
+      "Igrejas e comunidades para parceria institucional — a clínica como apoio às famílias em situações que vão além do acolhimento pastoral. Falamos com a liderança e a assistência social. Atalhos:",
+    presets: [
+      ["⛪ Igrejas", "igreja, comunidade, paróquia, congregação"],
+      ["🙏 Assistência social", "ação social, assistência social, projeto social"],
+      ["👨‍👩‍👧 Família", "ministério de família, aconselhamento familiar"],
+      ["✝️ Católica", "paróquia, diocese, pastoral"],
+      ["📖 Evangélica", "igreja evangélica, ministério, congregação"],
+    ],
+    sectionTitle: "Igrejas / comunidades",
+    contactLabel:
+      "Só trazer igrejas com contato encontrado — pastor, liderança, assistência social (o e-mail é revelado ao Abordar) — recomendado",
+    cadRotulo: "igreja / comunidade",
+    cadNomeLabel: "Nome da igreja",
+    cadContatoPlaceholder: "ex: Pr. João (liderança)",
+    cadCargoPlaceholder: "ex: Pastor / Coord. de ação social",
+  },
+};
+
 export function ProspeccaoView({
   mode = "empresa",
 }: {
-  mode?: "empresa" | "medico" | "escola";
+  mode?: ProspeccaoMode;
 }) {
-  const isMedico = mode === "medico";
-  const isEscola = mode === "escola";
+  const cfg = MODE_CONFIG[mode];
   const category = mode;
-  const noun = isEscola ? "escola(s)" : isMedico ? "consultório(s)" : "empresa(s)";
+  const noun = cfg.noun;
 
   const [companies, setCompanies] = useState<CompanyWithContacts[]>([]);
   const [loading, setLoading] = useState(false);
@@ -46,17 +154,12 @@ export function ProspeccaoView({
 
   // formulário de busca
   const [keywords, setKeywords] = useState("");
-  // Escola: já exclui rede pública por padrão (foco em particulares).
-  const [notKeywords, setNotKeywords] = useState(
-    isEscola
-      ? "prefeitura, municipal, estadual, secretaria de educação, federal, público, pública"
-      : "",
-  );
+  // Alguns segmentos já vêm com exclusões (ex: escola exclui rede pública).
+  const [notKeywords, setNotKeywords] = useState(cfg.notKeywords);
   const [nome, setNome] = useState("");
   const [estado, setEstado] = useState("Sao Paulo");
   const [cidades, setCidades] = useState("");
-  // Consultórios/médicos e escolas são pequenos/variados: não filtra por porte.
-  const [minEmployees, setMinEmployees] = useState(mode === "empresa" ? 100 : 1);
+  const [minEmployees, setMinEmployees] = useState(cfg.minEmployees);
   const [maxEmployees, setMaxEmployees] = useState<string>("");
   const [perPage, setPerPage] = useState(25);
   const [onlyWithContact, setOnlyWithContact] = useState(true);
@@ -147,46 +250,11 @@ export function ProspeccaoView({
         onSubmit={runProspect}
         className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
       >
-        <h2 className="mb-1 font-semibold text-gray-800">
-          {isEscola
-            ? "Buscar escolas / colégios no Apollo (parceria clínica ↔ escola)"
-            : isMedico
-              ? "Buscar médicos / consultórios no Apollo (iscas de marketing)"
-              : "Buscar empresas no Apollo"}
-        </h2>
-        <p className="mb-3 text-xs text-gray-500">
-          {isEscola
-            ? "Escolas particulares (rede pública já vem excluída). Buscamos TODO o time administrativo — coordenação, direção, orientação, secretaria. Atalhos por segmento:"
-            : isMedico
-              ? "Médicos prescritores (neuro, psiquiatria, pediatria…) para rede de encaminhamento. Atalhos por especialidade:"
-              : "Quanto mais detalhes, melhores os resultados. Atalhos:"}
-        </p>
+        <h2 className="mb-1 font-semibold text-gray-800">{cfg.heading}</h2>
+        <p className="mb-3 text-xs text-gray-500">{cfg.subtitle}</p>
         {/* Atalhos de preenchimento rápido */}
         <div className="mb-3 flex flex-wrap gap-2">
-          {(isEscola
-            ? ([
-                ["🏫 Colégios particulares", "colégio particular, escola particular, ensino privado"],
-                ["🎒 Ed. Infantil", "educação infantil, creche, pré-escola, berçário"],
-                ["📚 Fundamental/Médio", "ensino fundamental, ensino médio, colégio"],
-                ["🌱 Bilíngue/Montessori", "escola bilíngue, montessoriana, escola construtivista"],
-                ["🧩 Inclusiva/Especial", "escola inclusiva, educação especial, inclusão"],
-              ] as const)
-            : isMedico
-              ? ([
-                  ["🧠 Neuro", "neurologia, neurologista, neuropediatria"],
-                  ["🧩 Psiquiatria", "psiquiatria, psiquiatra, saúde mental"],
-                  ["👶 Pediatria", "pediatria, pediatra, neuropediatra"],
-                  ["🩺 Clínicas", "clínica médica, consultório, ambulatório"],
-                  ["👵 Geriatria", "geriatria, geriatra"],
-                ] as const)
-              : ([
-                  ["🏭 Indústrias", "manufacturing, indústria, metalurgia, fábrica"],
-                  ["🚚 Transporte/Logística", "transporte, logística, distribuição"],
-                  ["🏫 Escolas/Colégios", "escola, colégio, educação, ensino"],
-                  ["🛒 Varejo", "varejo, supermercado, comércio"],
-                  ["🏥 Saúde", "hospital, clínica, saúde"],
-                ] as const)
-          ).map(([label, kw]) => (
+          {cfg.presets.map(([label, kw]) => (
             <button
               key={label}
               type="button"
@@ -283,13 +351,7 @@ export function ProspeccaoView({
               checked={onlyWithContact}
               onChange={(e) => setOnlyWithContact(e.target.checked)}
             />
-            <span className="text-gray-600">
-              {isEscola
-                ? "Só trazer escolas com contato encontrado — coordenação, direção, orientação (o e-mail é revelado ao Abordar) — recomendado"
-                : isMedico
-                  ? "Só trazer consultórios com contato encontrado — médico, direção clínica, dono (o e-mail é revelado ao Abordar) — recomendado"
-                  : "Só trazer empresas com decisor encontrado — RH, dono, diretor, sócio (o e-mail é revelado ao Abordar) — recomendado"}
-            </span>
+            <span className="text-gray-600">{cfg.contactLabel}</span>
           </label>
         </div>
         <button
@@ -302,21 +364,11 @@ export function ProspeccaoView({
         {msg && <p className="mt-3 text-sm text-gray-600">{msg}</p>}
       </form>
 
-      <ManualCadastro
-        category={category}
-        isMedico={isMedico}
-        isEscola={isEscola}
-        onCreated={loadCompanies}
-      />
+      <ManualCadastro mode={mode} onCreated={loadCompanies} />
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-          {isEscola
-            ? "Escolas / colégios"
-            : isMedico
-              ? "Médicos / consultórios"
-              : "Empresas qualificadas"}{" "}
-          ({companies.length})
+          {cfg.sectionTitle} ({companies.length})
         </h2>
         <div className="space-y-3">
           {companies.length === 0 && (
@@ -336,16 +388,13 @@ export function ProspeccaoView({
 // Cadastro manual: quando o Apollo não acha, mas o CEO já tem o contato.
 // Cria a empresa/consultório/escola já qualificada; o CEO clica "Abordar".
 function ManualCadastro({
-  category,
-  isMedico,
-  isEscola,
+  mode,
   onCreated,
 }: {
-  category: string;
-  isMedico: boolean;
-  isEscola: boolean;
+  mode: ProspeccaoMode;
   onCreated: () => void;
 }) {
+  const cfg = MODE_CONFIG[mode];
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -358,11 +407,7 @@ function ManualCadastro({
   const [city, setCity] = useState("");
   const [notes, setNotes] = useState("");
 
-  const rotulo = isEscola
-    ? "escola / colégio"
-    : isMedico
-      ? "médico / consultório"
-      : "empresa";
+  const rotulo = cfg.cadRotulo;
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
@@ -375,7 +420,7 @@ function ManualCadastro({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          category,
+          category: mode,
           contactName,
           title,
           email,
@@ -436,9 +481,7 @@ function ManualCadastro({
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-sm sm:col-span-2">
-              <span className="text-gray-600">
-                Nome {isEscola ? "da escola" : isMedico ? "do consultório/médico" : "da empresa"} *
-              </span>
+              <span className="text-gray-600">{cfg.cadNomeLabel} *</span>
               <input
                 required
                 value={name}
@@ -451,13 +494,7 @@ function ManualCadastro({
               <input
                 value={contactName}
                 onChange={(e) => setContactName(e.target.value)}
-                placeholder={
-                  isEscola
-                    ? "ex: Ana (coordenação)"
-                    : isMedico
-                      ? "ex: Dr. Paulo"
-                      : "ex: Maria (RH)"
-                }
+                placeholder={cfg.cadContatoPlaceholder}
                 className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
               />
             </label>
@@ -466,13 +503,7 @@ function ManualCadastro({
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={
-                  isEscola
-                    ? "ex: Coordenadora Pedagógica"
-                    : isMedico
-                      ? "ex: Diretor Clínico"
-                      : "ex: Gerente de RH"
-                }
+                placeholder={cfg.cadCargoPlaceholder}
                 className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
               />
             </label>
