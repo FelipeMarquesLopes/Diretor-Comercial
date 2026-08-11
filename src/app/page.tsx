@@ -8,6 +8,7 @@ import {
   actionsByLevel,
   type AutonomyLevel,
 } from "@/lib/governance";
+import { nextActionForIntent } from "@/lib/nextAction";
 
 interface Stats {
   empresas: number;
@@ -418,6 +419,29 @@ function ResponseItem({
             </span>
           </p>
           {r.summary && <p className="text-xs text-gray-500">{r.summary}</p>}
+
+          {/* Ação sugerida pela máquina de estados (Fase 3.1) */}
+          {r.intent &&
+            (() => {
+              const rec = nextActionForIntent(r.intent);
+              return (
+                <p className="mt-1 text-[11px] text-brand-800/70">
+                  <span
+                    className={`mr-1.5 rounded px-1.5 py-0.5 font-bold ${
+                      rec.level === 1
+                        ? "bg-emerald-100 text-emerald-700"
+                        : rec.level === 2
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-red-100 text-red-700"
+                    }`}
+                    title={AUTONOMY_LABELS[rec.level]}
+                  >
+                    N{rec.level}
+                  </span>
+                  <span className="font-medium">Ação sugerida:</span> {rec.label}
+                </p>
+              );
+            })()}
 
           {/* Intenção detectada + próxima ação (Fase 1.1) */}
           {(r.intent || r.next_action_at) && (

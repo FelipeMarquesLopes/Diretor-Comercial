@@ -13,6 +13,8 @@ import { classifyResponse } from "./anthropic";
 import { resumeAtAfterNegative } from "./followup";
 import { suppressEmail } from "./suppression";
 import { recomputeCompanyScore } from "./scoring";
+import { nextActionForIntent } from "./nextAction";
+import { createTask } from "./tasks";
 
 // Detecta se a mensagem é um RETORNO (NDR / bounce) e extrai os endereços que
 // falharam. Bounces chegam nesta mesma caixa, vindos de mailer-daemon/
@@ -310,6 +312,23 @@ export async function checkInbox(
 
         // Lead scoring v2 (Fase 2.3): a resposta muda a temperatura do lead.
         await recomputeCompanyScore(supabase, match.company_id).catch(() => {});
+
+        // Máquina de estados (Fase 3.1): se a ação recomendada pede uma tarefa
+        // humana (ex: cadastrar o contato do setor indicado), a IA a cria (N1).
+        const rec = nextActionForIntent(intent);
+        if (rec.autoTaskTitle) {
+          await createTask(
+            supabase,
+            {
+              companyId: match.company_id,
+              title: rec.autoTaskTitle,
+              detail: summary || null,
+              level: 1,
+              createdBy: "ia",
+            },
+            { dedupeOpen: true },
+          ).catch(() => {});
+        }
 
         // Marca como lida para não processar de novo.
         await client.messageFlagsAdd(uid, ["\\Seen"], { uid: true });

@@ -24,7 +24,10 @@ const GROUPS: { href: string; label: string }[][] = [
     { href: "/operadoras", label: "Operadoras" },
     { href: "/reajustes", label: "Reajustes" },
   ],
-  [{ href: "/agenda", label: "Agenda Aberta" }],
+  [
+    { href: "/agenda", label: "Agenda Aberta" },
+    { href: "/tarefas", label: "Tarefas" },
+  ],
   [{ href: "/rascunhos", label: "Rascunhos" }],
 ];
 

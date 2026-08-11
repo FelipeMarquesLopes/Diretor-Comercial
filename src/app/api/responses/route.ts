@@ -3,6 +3,8 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { classifyResponse } from "@/lib/anthropic";
 import { resumeAtAfterNegative } from "@/lib/followup";
 import { recomputeCompanyScore } from "@/lib/scoring";
+import { nextActionForIntent } from "@/lib/nextAction";
+import { createTask } from "@/lib/tasks";
 import type { ResponseSentiment, SequenceChannel } from "@/lib/types";
 
 // GET /api/responses — respostas recebidas (mais recentes), com o nome da
@@ -140,6 +142,22 @@ export async function POST(req: Request) {
 
   // Lead scoring v2 (Fase 2.3): a resposta muda a temperatura do lead.
   await recomputeCompanyScore(supabase, companyId).catch(() => {});
+
+  // Máquina de estados (Fase 3.1): cria tarefa humana quando a ação pede (N1).
+  const rec = nextActionForIntent(intent);
+  if (rec.autoTaskTitle) {
+    await createTask(
+      supabase,
+      {
+        companyId,
+        title: rec.autoTaskTitle,
+        detail: summary || null,
+        level: 1,
+        createdBy: "ia",
+      },
+      { dedupeOpen: true },
+    ).catch(() => {});
+  }
 
   return NextResponse.json({ sentiment, summary });
 }

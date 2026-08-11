@@ -159,11 +159,12 @@ export async function advanceSequenceAfterSend(
 ): Promise<void> {
   const { data } = await supabase
     .from("sequences")
-    .select("*")
+    .select("*, companies(category)")
     .eq("id", sequenceId)
-    .single<Sequence>();
+    .single<Sequence & { companies: { category: string } | null }>();
   if (!data) return;
 
+  const category = data.companies?.category;
   const newStep = data.step + 1;
   const now = new Date();
   await supabase
@@ -171,7 +172,8 @@ export async function advanceSequenceAfterSend(
     .update({
       step: newStep,
       last_sent_at: now.toISOString(),
-      next_action_at: nextActionAt(data.channel, newStep, now).toISOString(),
+      // Cadência por segmento (Fase 3.2).
+      next_action_at: nextActionAt(data.channel, newStep, now, category).toISOString(),
       status: "ativa",
     })
     .eq("id", sequenceId);

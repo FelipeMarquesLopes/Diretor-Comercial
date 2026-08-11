@@ -16,15 +16,37 @@ const DIA = 24 * HORA;
 // Quantos dias esperar até retomar após uma resposta negativa.
 export const DIAS_RETOMADA_NEGATIVA = 30;
 
+// Cadência de e-mail POR SEGMENTO (Fase 3.2). O ritmo respeita o tom de cada
+// frente: empresa/operadora são mais objetivas; escola e, sobretudo, igreja e
+// médico pedem um contato mais espaçado e nada insistente. Em dias.
+const EMAIL_DIAS_POR_SEGMENTO: Record<string, number> = {
+  empresa: 3,
+  operadora: 3,
+  reajuste: 3,
+  escola: 4,
+  medico: 5,
+  igreja: 7,
+};
+const EMAIL_DIAS_PADRAO = 3;
+
+export function emailIntervalDays(category?: string): number {
+  return (category && EMAIL_DIAS_POR_SEGMENTO[category]) || EMAIL_DIAS_PADRAO;
+}
+
 /**
  * Intervalo (em milissegundos) até a PRÓXIMA mensagem, dado o passo que
  * acabou de sair. `stepJustSent` = quantas mensagens já saíram neste canal
- * (1 = acabou de sair a primeira).
+ * (1 = acabou de sair a primeira). `category` ajusta a cadência de e-mail por
+ * segmento (Fase 3.2).
  */
-export function intervalMs(channel: SequenceChannel, stepJustSent: number): number {
+export function intervalMs(
+  channel: SequenceChannel,
+  stepJustSent: number,
+  category?: string,
+): number {
   if (channel === "email") {
-    // Sempre de 3 em 3 dias.
-    return 3 * DIA;
+    // Cadência por segmento (3 a 7 dias), sem limite, até haver retorno.
+    return emailIntervalDays(category) * DIA;
   }
   // WhatsApp: escalonado 3h, 24h, 48h, depois 72h para sempre.
   switch (stepJustSent) {
@@ -46,8 +68,9 @@ export function nextActionAt(
   channel: SequenceChannel,
   stepJustSent: number,
   lastSent: Date = new Date(),
+  category?: string,
 ): Date {
-  return new Date(lastSent.getTime() + intervalMs(channel, stepJustSent));
+  return new Date(lastSent.getTime() + intervalMs(channel, stepJustSent, category));
 }
 
 /**

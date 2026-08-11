@@ -146,6 +146,22 @@ export interface Draft {
   created_at: string;
 }
 
+// Tarefas para o comercial (Fase 3.2) — ações humanas de relacionamento.
+export type TaskStatus = "aberta" | "concluida";
+
+export interface Task {
+  id: string;
+  company_id: string | null;
+  title: string;
+  detail: string | null;
+  level: number; // governança (1/2/3)
+  due_date: string | null;
+  status: TaskStatus;
+  created_by: string | null; // 'ia' | e-mail do CEO
+  created_at: string;
+  completed_at: string | null;
+}
+
 // Rótulos amigáveis para a UI
 export const HOOK_LABELS: Record<MessageHook, string> = {
   nr1: "NR-1 (riscos psicossociais)",
