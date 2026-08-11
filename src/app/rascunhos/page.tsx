@@ -468,7 +468,10 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
                   className={`mt-0.5 text-xs ${demais ? "font-medium text-amber-700" : "text-gray-500"}`}
                 >
                   Em cópia ({ccCount})
-                  {demais ? " ⚠️ muitos — risco de spam, reduza no cadastro" : ""}:{" "}
+                  {demais
+                    ? " ⚠️ muitos em cópia — risco de spam. Envie assim mesmo se forem contatos reais; senão, enxugue a lista no cadastro."
+                    : ""}
+                  :{" "}
                   {draft.companies.cc_emails}
                 </p>
               );
