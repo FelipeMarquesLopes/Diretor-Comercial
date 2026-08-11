@@ -11,6 +11,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const category = searchParams.get("category");
+  const q = searchParams.get("q"); // busca por nome (ex: seletor de parceiro)
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -30,6 +31,7 @@ export async function GET(req: Request) {
 
   if (status) query = query.eq("status", status);
   if (category) query = query.eq("category", category);
+  if (q && q.trim()) query = query.ilike("name", `%${q.trim()}%`);
 
   const { data, error } = await query;
   if (error) {

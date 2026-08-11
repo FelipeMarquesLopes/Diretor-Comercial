@@ -20,6 +20,11 @@ export default function Encaminhamentos() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Busca para adicionar um parceiro que ainda não está na lista.
+  const [busca, setBusca] = useState("");
+  const [resultados, setResultados] = useState<PartnerRow[]>([]);
+  const [buscando, setBuscando] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -36,6 +41,39 @@ export default function Encaminhamentos() {
       setLoading(false);
     }
   }, []);
+
+  // Busca parceiros por nome (qualquer frente) para incluir na lista.
+  useEffect(() => {
+    const q = busca.trim();
+    if (q.length < 2) {
+      setResultados([]);
+      return;
+    }
+    setBuscando(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/companies?q=${encodeURIComponent(q)}`);
+        const d = await r.json();
+        setResultados((d.companies ?? []).slice(0, 8));
+      } catch {
+        setResultados([]);
+      } finally {
+        setBuscando(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [busca]);
+
+  async function adicionar(id: string) {
+    await fetch(`/api/companies/${id}/referral`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isSource: true }),
+    });
+    setBusca("");
+    setResultados([]);
+    load();
+  }
 
   useEffect(() => {
     load();
@@ -98,6 +136,53 @@ export default function Encaminhamentos() {
           <div className="text-2xl font-semibold text-brand-800">{rows.length}</div>
           <div className="text-xs text-brand-800/50">parcerias ativas na lista</div>
         </div>
+      </div>
+
+      {/* Adicionar um parceiro que ainda não está na lista */}
+      <div className="rounded-2xl border border-brand-100 bg-white p-4 shadow-card">
+        <span className="mb-1 block text-sm font-medium text-brand-800">
+          ＋ Adicionar parceiro que está encaminhando
+        </span>
+        <p className="mb-2 text-xs text-brand-800/50">
+          Um médico, escola, igreja ou empresa já indica pacientes? Busque pelo
+          nome e ele entra na lista para você registrar as indicações.
+        </p>
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar pelo nome do parceiro (ex: Dr. João, Colégio X)…"
+          className="w-full rounded-xl border border-brand-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
+        />
+        {(resultados.length > 0 || (busca.trim().length >= 2 && !buscando)) && (
+          <div className="mt-2 divide-y divide-brand-50 overflow-hidden rounded-xl border border-brand-100">
+            {resultados.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => adicionar(c.id)}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-brand-50"
+              >
+                <span className="truncate text-brand-800">
+                  {c.name}
+                  <span className="ml-2 text-xs text-brand-800/40">
+                    {CATEGORY_LABELS[c.category] ?? c.category}
+                    {[c.city, c.state].filter(Boolean).length
+                      ? ` · ${[c.city, c.state].filter(Boolean).join("/")}`
+                      : ""}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs font-medium text-brand-600">
+                  adicionar →
+                </span>
+              </button>
+            ))}
+            {!resultados.length && busca.trim().length >= 2 && !buscando && (
+              <div className="px-3 py-2 text-xs text-brand-800/40">
+                Nenhum parceiro encontrado com esse nome. (Ele precisa já existir
+                no sistema — cadastre na frente correspondente primeiro.)
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {msg && (
