@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { findStage, statusForStage } from "@/lib/pipelines";
+import { recomputeCompanyScore } from "@/lib/scoring";
 
 // POST /api/companies/[id]/stage  { stage: string }
 // Move o card no Kanban: grava o estágio fino em companies.stage E reconcilia
@@ -64,6 +65,9 @@ export async function POST(
     type: "pipeline",
     description: `Movido no pipeline para "${stage.label}".`,
   });
+
+  // Lead scoring v2 (Fase 2.3): avançar no pipeline aquece o lead.
+  await recomputeCompanyScore(supabase, id).catch(() => {});
 
   return NextResponse.json({ ok: true, stage: stageId, status: newStatus });
 }

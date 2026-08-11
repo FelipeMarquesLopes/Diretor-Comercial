@@ -12,6 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { classifyResponse } from "./anthropic";
 import { resumeAtAfterNegative } from "./followup";
 import { suppressEmail } from "./suppression";
+import { recomputeCompanyScore } from "./scoring";
 
 // Detecta se a mensagem é um RETORNO (NDR / bounce) e extrai os endereços que
 // falharam. Bounces chegam nesta mesma caixa, vindos de mailer-daemon/
@@ -306,6 +307,9 @@ export async function checkInbox(
           type: "resposta",
           description: `Resposta automática (e-mail) classificada como ${sentiment}${summary ? `: ${summary}` : ""}.`,
         });
+
+        // Lead scoring v2 (Fase 2.3): a resposta muda a temperatura do lead.
+        await recomputeCompanyScore(supabase, match.company_id).catch(() => {});
 
         // Marca como lida para não processar de novo.
         await client.messageFlagsAdd(uid, ["\\Seen"], { uid: true });
