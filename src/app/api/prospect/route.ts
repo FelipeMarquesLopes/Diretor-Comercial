@@ -43,8 +43,6 @@ export async function POST(req: Request) {
       : body.category === "escola"
         ? "escola"
         : "empresa";
-  // Médicos e escolas são pequenos/variados — não reprovamos por porte.
-  const ignoreSize = category !== "empresa";
   // Numa escola queremos TODO o time administrativo (coordenação, direção,
   // orientação, secretaria), não só um contato — puxamos mais decisores.
   const decisoresPorEmpresa = category === "escola" ? 25 : 10;
@@ -87,7 +85,7 @@ export async function POST(req: Request) {
   let decisoresEncontrados = 0; // total de decisores achados (antes do filtro)
 
   for (const org of orgs) {
-    const q = qualifyCompany(org, { ignoreSize });
+    const q = qualifyCompany(org, { category });
 
     if (q.qualified && !org.domain) qualificadasSemDominio++;
 
