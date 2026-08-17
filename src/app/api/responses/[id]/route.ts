@@ -167,37 +167,73 @@ export async function POST(
       );
     }
 
-    // Cria uma NOVA sequência (assunto próprio) só para esta réplica. Assim o
-    // controle de automação deste assunto fica INDEPENDENTE dos outros
-    // assuntos da mesma operadora (ex: glosas x extensão contratual).
-    // A nova sequência já nasce amarrada na mensagem que a operadora enviou
-    // (last_message_id = message_id dela) — a réplica responde POR CIMA dela,
-    // então o destinatário vê o histórico da conversa.
+    // Reaproveita a sequência de e-mail EXISTENTE desta empresa. O banco só
+    // permite UMA sequência por empresa+canal (unique(company_id, channel)),
+    // e todo o resto do sistema (seguir/encerrar/adiar) trata a sequência por
+    // company_id — então criar outra aqui esbarrava na trava de unicidade
+    // ("sequences_company_id_channel_key"). A réplica REATIVA o mesmo assunto:
+    // volta a sequência para "ativa" e amarra na mensagem que a empresa enviou
+    // (last_message_id = message_id dela), para a réplica responder por cima e
+    // o destinatário ver o histórico. Se (raro) não existir sequência, cria.
     const semRe = (generated.subject ?? "")
       .replace(/^\s*(re:\s*)+/i, "")
       .trim();
-    const { data: newSeq, error: seqErr } = await supabase
-      .from("sequences")
-      .insert({
-        company_id: companyId,
-        channel: "email",
-        status: "ativa",
-        step: 0,
-        next_action_at: null,
-        last_message_id: resp.message_id ?? null,
-        thread_subject: semRe || null,
-      })
-      .select("id")
-      .single<{ id: string }>();
 
-    if (seqErr || !newSeq) {
-      // NÃO arquiva a resposta — ela segue no painel para você tentar de novo.
-      return NextResponse.json(
-        {
-          error: `Não consegui preparar a réplica (${seqErr?.message ?? "sequência"}). A resposta continua no painel.`,
-        },
-        { status: 500 },
-      );
+    const { data: existing } = await supabase
+      .from("sequences")
+      .select("id, thread_subject")
+      .eq("company_id", companyId)
+      .eq("channel", "email")
+      .maybeSingle<{ id: string; thread_subject: string | null }>();
+
+    let seqId: string;
+    const createdNew = !existing;
+    if (existing) {
+      const { error: upErr } = await supabase
+        .from("sequences")
+        .update({
+          status: "ativa",
+          next_action_at: null,
+          last_message_id: resp.message_id ?? null,
+          // mantém o assunto-raiz da conversa; só define se ainda não houver.
+          thread_subject: existing.thread_subject ?? (semRe || null),
+        })
+        .eq("id", existing.id);
+      if (upErr) {
+        // NÃO arquiva a resposta — ela segue no painel para tentar de novo.
+        return NextResponse.json(
+          {
+            error: `Não consegui preparar a réplica (${upErr.message}). A resposta continua no painel.`,
+          },
+          { status: 500 },
+        );
+      }
+      seqId = existing.id;
+    } else {
+      const { data: newSeq, error: seqErr } = await supabase
+        .from("sequences")
+        .insert({
+          company_id: companyId,
+          channel: "email",
+          status: "ativa",
+          step: 0,
+          next_action_at: null,
+          last_message_id: resp.message_id ?? null,
+          thread_subject: semRe || null,
+        })
+        .select("id")
+        .single<{ id: string }>();
+
+      if (seqErr || !newSeq) {
+        // NÃO arquiva a resposta — ela segue no painel para você tentar de novo.
+        return NextResponse.json(
+          {
+            error: `Não consegui preparar a réplica (${seqErr?.message ?? "sequência"}). A resposta continua no painel.`,
+          },
+          { status: 500 },
+        );
+      }
+      seqId = newSeq.id;
     }
 
     const { error: draftErr } = await supabase.from("drafts").insert({
@@ -208,14 +244,18 @@ export async function POST(
       subject: generated.subject || null,
       body: generated.body,
       status: "pendente",
-      sequence_id: newSeq.id,
+      sequence_id: seqId,
       step: 0,
       is_reply: true,
     });
 
     if (draftErr) {
-      // Desfaz a sequência órfã e MANTÉM a resposta no painel (não arquiva).
-      await supabase.from("sequences").delete().eq("id", newSeq.id);
+      // Só desfaz a sequência se ela foi CRIADA agora (não apaga a sequência
+      // real da empresa quando reaproveitamos a existente). Mantém a resposta
+      // no painel (não arquiva) para nova tentativa.
+      if (createdNew) {
+        await supabase.from("sequences").delete().eq("id", seqId);
+      }
       return NextResponse.json(
         {
           error: `Não consegui criar o rascunho da réplica (${draftErr.message}). A resposta continua no painel — tente de novo.`,
