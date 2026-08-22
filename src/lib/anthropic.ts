@@ -105,6 +105,21 @@ function categoryBriefing(company: Company, hook: MessageHook): string {
         "acolhedor, respeitoso e institucional — JAMAIS comercial agressivo, " +
         "nunca invasivo. É uma oferta de cuidado, não uma venda."
       );
+    case "sindicato":
+      return (
+        "Alvo: um SINDICATO — falar com a diretoria (presidente, diretores) ou " +
+        "com o setor de convênios/benefícios/administrativo. Objetivo: PARCERIA " +
+        "de CONVÊNIO que ofereça saúde mental e neurodesenvolvimento (forte em " +
+        "TEA/ABA) aos ASSOCIADOS e suas FAMÍLIAS. Apresente os DOIS modelos " +
+        "possíveis, deixando o sindicato escolher: (1) CONVÊNIO COM DESCONTO — " +
+        "o associado é atendido em condição especial e paga direto à clínica, e " +
+        "o sindicato divulga o benefício; (2) REPASSE — o associado paga ao " +
+        "sindicato (mensalidade/plano da entidade) e o sindicato repassa os " +
+        "atendimentos à clínica. Enfatize que é um BENEFÍCIO valioso para a base " +
+        "associada, sem custo de estrutura para a entidade, e que a clínica tem " +
+        "capacidade real (3.000+ atendimentos/mês, várias unidades). Tom " +
+        "institucional, cordial e de parceria — nunca vendedor agressivo."
+      );
     default:
       // empresa
       return `Alvo: uma EMPRESA (falar com o RH). ${HOOK_BRIEFING[hook]}`;

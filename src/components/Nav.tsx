@@ -20,6 +20,7 @@ const GROUPS: { href: string; label: string }[][] = [
     { href: "/medicos", label: "Médicos" },
     { href: "/escolas", label: "Escolas" },
     { href: "/igrejas", label: "Igrejas" },
+    { href: "/sindicatos", label: "Sindicatos" },
     { href: "/territorio", label: "Territórios" },
   ],
   [

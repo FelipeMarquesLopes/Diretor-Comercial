@@ -340,6 +340,56 @@ const DECISION_TITLES = {
     "Coordenador de Família",
     "Coordenador de Aconselhamento",
   ],
+  sindicato: [
+    // Liderança (quem fecha a parceria institucional)
+    "Presidente",
+    "Presidente do Sindicato",
+    "Vice-Presidente",
+    "Diretor",
+    "Diretora",
+    "Diretor Geral",
+    "Diretor Executivo",
+    "Diretor Administrativo",
+    "Diretor Financeiro",
+    "Diretor Social",
+    "Diretor de Benefícios",
+    "Diretor de Relações",
+    "President",
+    "Director",
+    // Secretaria / administração (o dia a dia que operacionaliza convênios)
+    "Secretário-Geral",
+    "Secretário Geral",
+    "Secretário",
+    "Secretária",
+    "Secretário Executivo",
+    "Gerente Administrativo",
+    "Coordenador Administrativo",
+    "Administrador",
+    "Gestor",
+    // Convênios / benefícios / parcerias — a porta de entrada do que vendemos
+    "Coordenador de Convênios",
+    "Coordenadora de Convênios",
+    "Responsável por Convênios",
+    "Convênios",
+    "Gerente de Convênios",
+    "Analista de Convênios",
+    "Coordenador de Benefícios",
+    "Benefícios",
+    "Coordenador de Parcerias",
+    "Gerente de Parcerias",
+    "Relações Institucionais",
+    // Comercial / social (fecham ou encaminham a parceria)
+    "Diretor Comercial",
+    "Gerente Comercial",
+    "Coordenador Comercial",
+    "Comercial",
+    "Assistente Social",
+    "Coordenador de Ação Social",
+    // Direção (fallback)
+    "Owner",
+    "Founder",
+    "Sócio",
+  ],
 } as const;
 
 const DECISION_SENIORITIES = {
@@ -381,6 +431,19 @@ const DECISION_SENIORITIES = {
   ],
   // Igreja: liderança e administração (pastor, secretaria, ação social).
   igreja: ["owner", "founder", "c_suite", "director", "head", "manager"],
+  // Sindicato: time enxuto — da diretoria (presidente/diretores) até o
+  // analista/assistente de convênios. Pegamos todos, como na operadora.
+  sindicato: [
+    "owner",
+    "founder",
+    "c_suite",
+    "vp",
+    "director",
+    "head",
+    "manager",
+    "senior",
+    "entry",
+  ],
 } as const;
 
 /**
@@ -393,7 +456,13 @@ const DECISION_SENIORITIES = {
 export async function searchDecisionMakers(
   organizationDomain: string,
   perPage = 10,
-  category: "empresa" | "medico" | "escola" | "operadora" | "igreja" = "empresa",
+  category:
+    | "empresa"
+    | "medico"
+    | "escola"
+    | "operadora"
+    | "igreja"
+    | "sindicato" = "empresa",
 ): Promise<ApolloContact[]> {
   const body = {
     page: 1,

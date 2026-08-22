@@ -145,6 +145,16 @@ export function qualifyCompany(
     return { score, qualified: true, priority: priorityFromScore(score), notes: reasons.join("; ") };
   }
 
+  // ---------- Frente SINDICATO: agregador de associados + proximidade --------
+  if (category === "sindicato") {
+    // Um sindicato dá acesso a MILHARES de associados de uma vez — base alta.
+    score += 40; reasons.push("Agregador de associados (alto alcance)");
+    if (prox.pts) { score += prox.pts; reasons.push(prox.note); }
+    if (org.domain) { score += 8; reasons.push("Domínio identificado"); }
+    score = Math.min(100, score);
+    return { score, qualified: true, priority: priorityFromScore(score), notes: reasons.join("; ") };
+  }
+
   // ---------- Operadora e demais segmentos: base + proximidade ---------------
   score += 45; reasons.push("Potencial de credenciamento/parceria");
   if (prox.pts) { score += prox.pts; reasons.push(prox.note); }

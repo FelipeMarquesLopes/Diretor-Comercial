@@ -20,6 +20,7 @@ const SEG_ORDER: PartnerCategory[] = [
   "medico",
   "escola",
   "igreja",
+  "sindicato",
 ];
 
 export default function Territorio() {

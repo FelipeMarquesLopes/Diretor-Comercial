@@ -66,14 +66,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 });
   }
 
-  const category: "empresa" | "medico" | "escola" | "igreja" =
+  const category: "empresa" | "medico" | "escola" | "igreja" | "sindicato" =
     body.category === "medico"
       ? "medico"
       : body.category === "escola"
         ? "escola"
         : body.category === "igreja"
           ? "igreja"
-          : "empresa";
+          : body.category === "sindicato"
+            ? "sindicato"
+            : "empresa";
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {

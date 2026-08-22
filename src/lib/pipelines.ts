@@ -21,7 +21,13 @@ export interface PipelineStage {
 }
 
 // Categorias que têm pipeline de negociação (Kanban).
-export type PipelineCategory = "operadora" | "empresa" | "escola" | "medico" | "igreja";
+export type PipelineCategory =
+  | "operadora"
+  | "empresa"
+  | "escola"
+  | "medico"
+  | "igreja"
+  | "sindicato";
 
 const OPERADORA: PipelineStage[] = [
   { id: "novo", label: "Mapeada", status: "mapeado" },
@@ -65,12 +71,22 @@ const IGREJA: PipelineStage[] = [
   { id: "parceria", label: "Rede de apoio ativa", status: "parceria_ativa", won: true },
 ];
 
+const SINDICATO: PipelineStage[] = [
+  { id: "novo", label: "Mapeado", status: "mapeado" },
+  { id: "contatado", label: "Contato feito", status: "contato_iniciado" },
+  { id: "em_conversa", label: "Em conversa", status: "em_negociacao" },
+  { id: "reuniao", label: "Reunião com a diretoria", status: "em_negociacao" },
+  { id: "proposta", label: "Proposta de convênio", status: "em_negociacao" },
+  { id: "parceria", label: "Convênio ativo", status: "parceria_ativa", won: true },
+];
+
 export const PIPELINES: Record<PipelineCategory, PipelineStage[]> = {
   operadora: OPERADORA,
   empresa: EMPRESA,
   escola: ESCOLA,
   medico: MEDICO,
   igreja: IGREJA,
+  sindicato: SINDICATO,
 };
 
 export const PIPELINE_LABELS: Record<PipelineCategory, string> = {
@@ -79,6 +95,7 @@ export const PIPELINE_LABELS: Record<PipelineCategory, string> = {
   escola: "Escolas",
   medico: "Médicos",
   igreja: "Igrejas",
+  sindicato: "Sindicatos",
 };
 
 export function hasPipeline(category: string): category is PipelineCategory {

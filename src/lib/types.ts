@@ -24,6 +24,7 @@ export type PartnerCategory =
   | "escola"
   | "medico"
   | "igreja"
+  | "sindicato"
   | "agenda_aberta"
   | "reajuste";
 
@@ -194,6 +195,7 @@ export const CATEGORY_LABELS: Record<PartnerCategory, string> = {
   escola: "Escola",
   medico: "Médico prescritor",
   igreja: "Igreja",
+  sindicato: "Sindicato",
   agenda_aberta: "Agenda Aberta",
   reajuste: "Reajuste",
 };

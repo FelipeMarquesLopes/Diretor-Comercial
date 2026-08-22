@@ -25,6 +25,7 @@ const EMAIL_DIAS_POR_SEGMENTO: Record<string, number> = {
   reajuste: 3,
   escola: 4,
   medico: 5,
+  sindicato: 5,
   igreja: 7,
 };
 const EMAIL_DIAS_PADRAO = 3;

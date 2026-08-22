@@ -51,6 +51,8 @@ function segmentAngle(company: Company): string {
       return "Rede de encaminhamento mútuo entre colegas: agilidade na marcação, retorno ao médico solicitante e continuidade do cuidado numa clínica multidisciplinar próxima.";
     case "igreja":
       return "Rede de apoio às famílias da comunidade: quando o acolhimento pastoral encontra situações que pedem acompanhamento profissional, a igreja tem para onde indicar com confiança.";
+    case "sindicato":
+      return "Benefício de saúde mental e neurodesenvolvimento para os associados e suas famílias — via convênio com desconto e/ou repasse. O sindicato agrega o volume e a clínica entrega o cuidado (forte em TEA/ABA), sem custo de estrutura para a entidade.";
     default:
       return "Parceria que amplia o cuidado às pessoas atendidas por vocês.";
   }

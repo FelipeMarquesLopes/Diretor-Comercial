@@ -31,7 +31,12 @@ function verdictInfo(
   }
 }
 
-export type ProspeccaoMode = "empresa" | "medico" | "escola" | "igreja";
+export type ProspeccaoMode =
+  | "empresa"
+  | "medico"
+  | "escola"
+  | "igreja"
+  | "sindicato";
 
 interface ModeConfig {
   noun: string;
@@ -137,6 +142,30 @@ const MODE_CONFIG: Record<ProspeccaoMode, ModeConfig> = {
     cadNomeLabel: "Nome da igreja",
     cadContatoPlaceholder: "ex: Pr. João (liderança)",
     cadCargoPlaceholder: "ex: Pastor / Coord. de ação social",
+  },
+  sindicato: {
+    noun: "sindicato(s)",
+    minEmployees: 1,
+    notKeywords: "",
+    heading: "Buscar sindicatos no Apollo (convênio para os associados)",
+    subtitle:
+      "Sindicatos agregam milhares de associados — uma parceria vale por centenas de leads. Buscamos a diretoria e o setor de convênios/benefícios. Atalhos por categoria:",
+    presets: [
+      ["🏭 Indústria", "sindicato indústria, sindicato industrial, sindicato dos trabalhadores na indústria"],
+      ["🏪 Comércio", "sindicato comércio, sindicato dos comerciários, sindicato do comércio"],
+      ["👷 Metalúrgicos", "sindicato metalúrgicos, sindicato dos metalúrgicos"],
+      ["🚚 Caminhoneiros/Transporte", "sindicato caminhoneiros, sindicato transporte, sindicato dos motoristas"],
+      ["👩‍🏫 Professores", "sindicato professores, sindicato dos professores, sindicato educação"],
+      ["🏗️ Construção civil", "sindicato construção civil, sindicato dos trabalhadores na construção"],
+      ["⚕️ Servidores/Saúde", "sindicato servidores, sindicato saúde, sindicato dos servidores públicos"],
+    ],
+    sectionTitle: "Sindicatos",
+    contactLabel:
+      "Só trazer sindicatos com contato encontrado — presidente, diretoria, convênios/benefícios, administrativo (o e-mail é revelado ao Abordar) — recomendado",
+    cadRotulo: "sindicato",
+    cadNomeLabel: "Nome do sindicato",
+    cadContatoPlaceholder: "ex: Carlos (convênios)",
+    cadCargoPlaceholder: "ex: Coordenador de Convênios / Presidente",
   },
 };
 
