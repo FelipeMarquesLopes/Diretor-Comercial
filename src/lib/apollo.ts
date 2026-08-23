@@ -48,6 +48,10 @@ export interface CompanySearchParams {
   // Faixa de funcionários
   minEmployees?: number;
   maxEmployees?: number;
+  // Quando true, NÃO filtra por nº de funcionários. Essencial para segmentos
+  // cujo headcount o Apollo raramente conhece (ex: sindicatos) — o filtro de
+  // faixa exclui organizações sem headcount, sumindo com elas dos resultados.
+  skipEmployeeRanges?: boolean;
   page?: number;
   perPage?: number;
 }
@@ -120,6 +124,7 @@ export async function searchCompanies(
     name,
     minEmployees = 100,
     maxEmployees,
+    skipEmployeeRanges = false,
     page = 1,
     perPage = 25,
   } = params;
@@ -127,9 +132,16 @@ export async function searchCompanies(
   const body: Record<string, unknown> = {
     page,
     per_page: perPage,
-    organization_num_employees_ranges: employeeRanges(minEmployees, maxEmployees),
     organization_locations: locations,
   };
+  // Só aplica o filtro de porte quando faz sentido (segmentos com headcount
+  // conhecido). Para sindicatos, mandar faixas excluiria os sem headcount.
+  if (!skipEmployeeRanges) {
+    body.organization_num_employees_ranges = employeeRanges(
+      minEmployees,
+      maxEmployees,
+    );
+  }
   if (keywords.length > 0) {
     body.q_organization_keyword_tags = keywords;
   }

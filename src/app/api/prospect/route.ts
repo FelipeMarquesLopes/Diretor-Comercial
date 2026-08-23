@@ -27,6 +27,9 @@ export async function POST(req: Request) {
     // Categoria em que salvar (empresa por padrão; "medico" para a frente de
     // médicos/consultórios — muda a tese da IA e não filtra por porte).
     category?: string;
+    // Quando true, ignora o filtro de nº de funcionários (ex: sindicatos, que
+    // raramente têm headcount no Apollo).
+    skipEmployees?: boolean;
   };
   try {
     body = await req.json();
@@ -50,6 +53,9 @@ export async function POST(req: Request) {
   // Numa escola queremos TODO o time administrativo (coordenação, direção,
   // orientação, secretaria), não só um contato — puxamos mais decisores.
   const decisoresPorEmpresa = category === "escola" ? 25 : 10;
+  // Sindicato: buscar sempre sem filtro de porte (headcount quase nunca existe
+  // no Apollo). Vale mesmo que o front não peça — evita "não achou nada".
+  const skipEmployees = body.skipEmployees === true || category === "sindicato";
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -70,6 +76,7 @@ export async function POST(req: Request) {
       name: body.name,
       minEmployees: body.minEmployees ?? 100,
       maxEmployees: body.maxEmployees,
+      skipEmployeeRanges: skipEmployees,
       perPage: body.perPage ?? 25,
     });
   } catch (err) {

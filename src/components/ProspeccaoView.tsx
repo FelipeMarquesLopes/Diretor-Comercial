@@ -51,6 +51,12 @@ interface ModeConfig {
   cadNomeLabel: string;
   cadContatoPlaceholder: string;
   cadCargoPlaceholder: string;
+  // Busca por NOME (não por keyword tags) — para segmentos que o Apollo indexa
+  // melhor pelo nome do que por setor (ex: sindicatos têm "Sindicato" no nome).
+  searchByName?: boolean;
+  // Valor inicial do "só com decisor". Sindicato começa desmarcado: muitos não
+  // têm domínio/decisor no Apollo, então mostramos a organização mesmo assim.
+  defaultOnlyWithContact?: boolean;
 }
 
 // Config por segmento — adicionar um novo segmento é só mais uma entrada aqui.
@@ -147,21 +153,24 @@ const MODE_CONFIG: Record<ProspeccaoMode, ModeConfig> = {
     noun: "sindicato(s)",
     minEmployees: 1,
     notKeywords: "",
+    searchByName: true,
+    defaultOnlyWithContact: false,
     heading: "Buscar sindicatos no Apollo (convênio para os associados)",
     subtitle:
-      "Sindicatos agregam milhares de associados — uma parceria vale por centenas de leads. Buscamos a diretoria e o setor de convênios/benefícios. Atalhos por categoria:",
+      "Sindicatos agregam milhares de associados — uma parceria vale por centenas de leads. A busca é por NOME (todo sindicato tem 'Sindicato' no nome) e sem filtro de porte. Escolha um atalho ou digite o termo (ex: 'sindicato metalúrgicos'):",
     presets: [
-      ["🏭 Indústria", "sindicato indústria, sindicato industrial, sindicato dos trabalhadores na indústria"],
-      ["🏪 Comércio", "sindicato comércio, sindicato dos comerciários, sindicato do comércio"],
-      ["👷 Metalúrgicos", "sindicato metalúrgicos, sindicato dos metalúrgicos"],
-      ["🚚 Caminhoneiros/Transporte", "sindicato caminhoneiros, sindicato transporte, sindicato dos motoristas"],
-      ["👩‍🏫 Professores", "sindicato professores, sindicato dos professores, sindicato educação"],
-      ["🏗️ Construção civil", "sindicato construção civil, sindicato dos trabalhadores na construção"],
-      ["⚕️ Servidores/Saúde", "sindicato servidores, sindicato saúde, sindicato dos servidores públicos"],
+      ["🏢 Todos", "sindicato"],
+      ["🏭 Indústria", "sindicato indústria"],
+      ["🏪 Comércio/Comerciários", "sindicato comerciários"],
+      ["👷 Metalúrgicos", "sindicato metalúrgicos"],
+      ["🚚 Caminhoneiros/Transporte", "sindicato transporte"],
+      ["👩‍🏫 Professores", "sindicato professores"],
+      ["🏗️ Construção civil", "sindicato construção civil"],
+      ["⚕️ Servidores/Saúde", "sindicato servidores"],
     ],
     sectionTitle: "Sindicatos",
     contactLabel:
-      "Só trazer sindicatos com contato encontrado — presidente, diretoria, convênios/benefícios, administrativo (o e-mail é revelado ao Abordar) — recomendado",
+      "Só trazer sindicatos com decisor encontrado — presidente, diretoria, convênios/benefícios, administrativo (deixe DESMARCADO para ver também os sem contato no Apollo)",
     cadRotulo: "sindicato",
     cadNomeLabel: "Nome do sindicato",
     cadContatoPlaceholder: "ex: Carlos (convênios)",
@@ -194,7 +203,9 @@ export function ProspeccaoView({
   const [minEmployees, setMinEmployees] = useState(cfg.minEmployees);
   const [maxEmployees, setMaxEmployees] = useState<string>("");
   const [perPage, setPerPage] = useState(25);
-  const [onlyWithContact, setOnlyWithContact] = useState(true);
+  const [onlyWithContact, setOnlyWithContact] = useState(
+    cfg.defaultOnlyWithContact ?? true,
+  );
 
   async function loadCompanies() {
     const r = await fetch(
@@ -225,23 +236,33 @@ export function ProspeccaoView({
             [c, estado.trim(), "Brazil"].filter(Boolean).join(", "),
           )
         : [[estado.trim(), "Brazil"].filter(Boolean).join(", ")];
+    // Modo "busca por nome" (sindicato): o que está no campo de palavras-chave
+    // vira o NOME procurado (o Apollo acha sindicato pelo nome, não por tag), e
+    // não filtramos por porte.
+    const searchByName = cfg.searchByName === true;
+    const nomeBusca = searchByName
+      ? nome.trim() || keywords.trim() || "sindicato"
+      : nome.trim() || undefined;
     try {
       const r = await fetch("/api/prospect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          keywords: keywords
-            .split(",")
-            .map((k) => k.trim())
-            .filter(Boolean),
+          keywords: searchByName
+            ? []
+            : keywords
+                .split(",")
+                .map((k) => k.trim())
+                .filter(Boolean),
           notKeywords: notKeywords
             .split(",")
             .map((k) => k.trim())
             .filter(Boolean),
-          name: nome.trim() || undefined,
+          name: nomeBusca,
           locations,
           minEmployees,
           maxEmployees: maxEmployees.trim() ? Number(maxEmployees) : undefined,
+          skipEmployees: searchByName,
           perPage,
           onlyWithContact,
           category,
@@ -348,11 +369,19 @@ export function ProspeccaoView({
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">
-            <span className="text-gray-600">Setores / palavras-chave — INCLUIR (vírgula)</span>
+            <span className="text-gray-600">
+              {cfg.searchByName
+                ? "Nome / termo a buscar (ex: sindicato metalúrgicos)"
+                : "Setores / palavras-chave — INCLUIR (vírgula)"}
+            </span>
             <input
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
-              placeholder="ex: metalurgia, indústria, transporte"
+              placeholder={
+                cfg.searchByName
+                  ? "ex: sindicato metalúrgicos"
+                  : "ex: metalurgia, indústria, transporte"
+              }
               className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
             />
           </label>
