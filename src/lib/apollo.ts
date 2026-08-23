@@ -476,13 +476,25 @@ export async function searchDecisionMakers(
     | "igreja"
     | "sindicato" = "empresa",
 ): Promise<ApolloContact[]> {
-  const body = {
-    page: 1,
-    per_page: perPage,
-    q_organization_domains_list: [organizationDomain],
-    person_seniorities: DECISION_SENIORITIES[category],
-    person_titles: DECISION_TITLES[category],
-  };
+  // SINDICATO: qualquer pessoa dentro do sindicato serve (o CEO confirmou). O
+  // Apollo raramente tem os cargos "certos" mapeados numa entidade pequena, e
+  // filtrar por cargo+senioridade fazia quase ninguém passar. Então NÃO
+  // filtramos por cargo/senioridade — trazemos TODO mundo que o Apollo tiver
+  // naquele domínio, e o CEO escolhe quem abordar.
+  const body: Record<string, unknown> =
+    category === "sindicato"
+      ? {
+          page: 1,
+          per_page: perPage,
+          q_organization_domains_list: [organizationDomain],
+        }
+      : {
+          page: 1,
+          per_page: perPage,
+          q_organization_domains_list: [organizationDomain],
+          person_seniorities: DECISION_SENIORITIES[category],
+          person_titles: DECISION_TITLES[category],
+        };
 
   // Endpoint NOVO de busca de pessoas (o /mixed_people/search foi descontinuado).
   const data = await apolloPost<{ people?: RawPerson[]; contacts?: RawPerson[] }>(

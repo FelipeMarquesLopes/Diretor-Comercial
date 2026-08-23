@@ -51,8 +51,10 @@ export async function POST(req: Request) {
             ? "sindicato"
             : "empresa";
   // Numa escola queremos TODO o time administrativo (coordenação, direção,
-  // orientação, secretaria), não só um contato — puxamos mais decisores.
-  const decisoresPorEmpresa = category === "escola" ? 25 : 10;
+  // orientação, secretaria), não só um contato — puxamos mais decisores. No
+  // sindicato, qualquer contato serve, então também trazemos bastante gente.
+  const decisoresPorEmpresa =
+    category === "escola" || category === "sindicato" ? 25 : 10;
   // Sindicato: buscar sempre sem filtro de porte (headcount quase nunca existe
   // no Apollo). Vale mesmo que o front não peça — evita "não achou nada".
   const skipEmployees = body.skipEmployees === true || category === "sindicato";
