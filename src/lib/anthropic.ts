@@ -79,19 +79,40 @@ function categoryBriefing(company: Company, hook: MessageHook): string {
       );
     case "escola":
       return (
-        "Alvo: uma ESCOLA/colégio PARTICULAR — falar com o time administrativo " +
-        "(coordenação pedagógica, direção, orientação educacional, secretaria). " +
-        "Objetivo: PARCERIA CLÍNICA↔ESCOLA — a MenthalHelp vira o canal de " +
-        "cuidado da escola para alunos e famílias: avaliação e acompanhamento " +
-        "em saúde mental e neurodesenvolvimento (forte em TEA/ABA), apoio à " +
-        "inclusão, suporte à equipe pedagógica e encaminhamento facilitado. " +
-        "Tom acolhedor, educativo e de parceria institucional — nunca vendedor."
+        "Alvo: uma ESCOLA/colégio PARTICULAR — falar com a direção, a " +
+        "coordenação pedagógica ou a orientação educacional. Abordagem DIRETA e " +
+        "resolutiva (mais comercial que o padrão, sem enrolação). " +
+        "Abra reconhecendo a realidade deles, de preferência com uma PERGUNTA " +
+        "que conecte: cresce a cada ano o número de alunos com dislexia, TDAH, " +
+        "TEA e outras questões de comportamento/neurodesenvolvimento que " +
+        "impactam o aprendizado e o dia a dia em sala. " +
+        "Proposta CONCRETA de parceria clínica↔escola: a MenthalHelp leva " +
+        "profissionais até o colégio para (a) apoiar a identificação e uma " +
+        "avaliação inicial dos alunos sinalizados, (b) orientar a equipe " +
+        "pedagógica no manejo em sala e na inclusão, (c) criar proximidade e " +
+        "acolhimento com os pais e (d) dar encaminhamento facilitado para " +
+        "avaliação e acompanhamento (forte em TEA/ABA). " +
+        "Deixe claro o ganho: a escola passa a oferecer um diferencial real de " +
+        "cuidado às famílias, sem custo de estrutura. Feche convidando para uma " +
+        "conversa rápida ou uma visita à escola. Tom profissional, próximo e " +
+        "seguro — direto ao ponto, nada genérico."
       );
     case "medico":
       return (
         "Alvo: um MÉDICO prescritor (neuro, psiquiatra, pediatra, " +
-        "neuropediatra ou geriatra). Objetivo: rede de encaminhamento mútuo. " +
-        "Tom colega-a-colega, técnico e cordial."
+        "neuropediatra ou geriatra) que atende pacientes do PERFIL que a " +
+        "clínica trata. Abordagem colega-a-colega: técnica, cordial e direta. " +
+        "Objetivo: apresentar a MenthalHelp como RETAGUARDA multidisciplinar " +
+        "para os pacientes dele — colocamo-nos à disposição na(s) cidade(s) " +
+        "onde ele atua (cite a unidade mais próxima quando houver) para receber " +
+        "os encaminhamentos de casos que pedem equipe completa: psicologia, " +
+        "fonoaudiologia, terapia ocupacional, psicopedagogia, ABA para TEA e " +
+        "avaliação neuropsicológica. " +
+        "Ofereça vantagens concretas ao colega: agilidade na marcação, retorno " +
+        "ao médico solicitante sobre a evolução do paciente e continuidade do " +
+        "cuidado. Reforce a reciprocidade (rede de encaminhamento nos dois " +
+        "sentidos). Tom técnico, respeitoso e objetivo — sem parecer que está " +
+        "'vendendo' para um colega."
       );
     case "igreja":
       return (
@@ -108,17 +129,22 @@ function categoryBriefing(company: Company, hook: MessageHook): string {
     case "sindicato":
       return (
         "Alvo: um SINDICATO — falar com a diretoria (presidente, diretores) ou " +
-        "com o setor de convênios/benefícios/administrativo. Objetivo: PARCERIA " +
-        "de CONVÊNIO que ofereça saúde mental e neurodesenvolvimento (forte em " +
-        "TEA/ABA) aos ASSOCIADOS e suas FAMÍLIAS. Apresente os DOIS modelos " +
-        "possíveis, deixando o sindicato escolher: (1) CONVÊNIO COM DESCONTO — " +
-        "o associado é atendido em condição especial e paga direto à clínica, e " +
-        "o sindicato divulga o benefício; (2) REPASSE — o associado paga ao " +
-        "sindicato (mensalidade/plano da entidade) e o sindicato repassa os " +
-        "atendimentos à clínica. Enfatize que é um BENEFÍCIO valioso para a base " +
-        "associada, sem custo de estrutura para a entidade, e que a clínica tem " +
-        "capacidade real (3.000+ atendimentos/mês, várias unidades). Tom " +
-        "institucional, cordial e de parceria — nunca vendedor agressivo."
+        "com o setor de convênios/benefícios/administrativo. Aborde no MESMO " +
+        "espírito de um CREDENCIAMENTO de operadora: chegue PROPONDO, de forma " +
+        "objetiva e institucional, firmar uma parceria em que a MenthalHelp se " +
+        "torna a clínica credenciada/parceira do sindicato em saúde mental e " +
+        "neurodesenvolvimento (forte em TEA/ABA) para os ASSOCIADOS e suas " +
+        "FAMÍLIAS. " +
+        "Apresente os DOIS modelos, deixando o sindicato escolher: (1) CONVÊNIO " +
+        "COM DESCONTO — o associado é atendido em condição especial e paga " +
+        "direto à clínica, e o sindicato divulga o benefício; (2) REPASSE — o " +
+        "associado paga ao sindicato (plano/mensalidade da entidade) e o " +
+        "sindicato repassa os atendimentos à clínica. " +
+        "Argumente com o que o sindicato ganha: um benefício de alto valor e " +
+        "apelo para a base associada, que fortalece a entidade, SEM custo de " +
+        "estrutura — e com capacidade real (3.000+ atendimentos/mês, várias " +
+        "unidades). Tom institucional, seguro e comercial — como quem propõe um " +
+        "credenciamento: cordial, porém assertivo."
       );
     default:
       // empresa
