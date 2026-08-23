@@ -123,7 +123,7 @@ export async function POST(req: Request) {
     .eq("channel", "email")
     .eq("status", "pendente");
 
-  const res = await generateDraftForSequence(supabase, company, emailSeq, "nr1");
+  const res = await generateDraftForSequence(supabase, company, emailSeq, "saude_mental");
   if (!res.ok) {
     return NextResponse.json(
       { error: res.error ?? "Erro ao gerar rascunho" },

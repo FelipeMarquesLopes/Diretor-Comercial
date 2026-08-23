@@ -148,7 +148,32 @@ function categoryBriefing(company: Company, hook: MessageHook): string {
       );
     default:
       // empresa
-      return `Alvo: uma EMPRESA (falar com o RH). ${HOOK_BRIEFING[hook]}`;
+      return (
+        "Alvo: uma EMPRESA — falar com o RH (e, quando fizer sentido, com o " +
+        "dono/diretor). Abordagem SÊNIOR, consultiva e comercial: persuasiva, " +
+        "nunca genérica. NÃO abra com 'você sabia que a NR-1...'. Abra com uma " +
+        "PERGUNTA que toque na dor real do gestor: colaboradores se afastando " +
+        "por questões emocionais/saúde mental, atestados recorrentes e o " +
+        "prejuízo do absenteísmo. " +
+        "TESE CENTRAL (é sempre este o eixo do e-mail): a MenthalHelp é " +
+        "especialista em saúde mental e atua de forma PREVENTIVA junto aos " +
+        "colaboradores. Proposta concreta, em passos: (1) vamos até a empresa " +
+        "fazer uma triagem/avaliação dos colaboradores; (2) sinalizamos ao RH " +
+        "quem precisa de apoio; (3) em conjunto com o RH, encaminhamos esses " +
+        "colaboradores para a clínica e damos sequência ao acompanhamento; " +
+        "(4) enviamos ao RH relatórios periódicos (mensais ou a cada 2 meses) " +
+        "com indicadores de adesão, evolução e impacto no absenteísmo — sempre " +
+        "respeitando o sigilo profissional e a LGPD. " +
+        "GRANDE DIFERENCIAL, que deve aparecer com DESTAQUE: tudo isso com " +
+        "CUSTO ZERO para a empresa — usamos o benefício de CONVÊNIO que os " +
+        "colaboradores já têm, faturando pelo nosso credenciamento com as " +
+        "operadoras de saúde. Ou seja, a empresa reduz afastamentos e cuida da " +
+        "equipe sem nenhum custo novo. " +
+        "Feche com um convite para uma conversa de 15-20 min. Tom profissional, " +
+        "seguro e comercial — de quem entende o problema do RH. " +
+        "Se um ângulo adicional ajudar, use apenas como REFORÇO secundário (não " +
+        `como tema principal): ${HOOK_BRIEFING[hook]}`
+      );
   }
 }
 

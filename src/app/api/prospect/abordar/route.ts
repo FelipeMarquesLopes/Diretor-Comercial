@@ -173,7 +173,7 @@ export async function POST(req: Request) {
       supabase,
       company,
       emailSeq,
-      body.hook ?? "nr1",
+      body.hook ?? "saude_mental",
     );
     if (!res.ok) {
       return NextResponse.json(

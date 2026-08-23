@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
-  const { companyId, hook = "nr1", channel = "email" } = body;
+  const { companyId, hook = "saude_mental", channel = "email" } = body;
   if (!companyId) {
     return NextResponse.json({ error: "companyId é obrigatório" }, { status: 400 });
   }

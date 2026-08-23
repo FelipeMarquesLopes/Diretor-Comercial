@@ -44,7 +44,7 @@ function segmentAngle(company: Company): string {
         ? "Já somos parceiros — o encaixe é operacional (ampliar cobertura/procedimentos e manter o bom atendimento aos beneficiários)."
         : "Rede multidisciplinar com forte expertise em TEA/ABA e capacidade real (3.000+ atendimentos/mês) — pronta para credenciar e absorver demanda dos beneficiários.";
     case "empresa":
-      return "A NR-1 tornou obrigatória a gestão de riscos psicossociais; um programa estruturado de saúde mental reduz afastamentos (CID-F), presenteísmo e turnover — e muitos colaboradores têm filhos no espectro (nossa especialidade).";
+      return "Foco: reduzir os afastamentos e atestados por saúde mental — o custo do absenteísmo para a empresa. A MenthalHelp atua de forma PREVENTIVA: vai à empresa avaliar os colaboradores, sinaliza ao RH quem precisa de apoio, encaminha e acompanha, com relatórios periódicos ao RH. Diferencial decisivo: CUSTO ZERO para a empresa — tudo pelo convênio que os colaboradores já têm, faturado pelo nosso credenciamento com as operadoras.";
     case "escola":
       return "Podemos ser o canal de cuidado da escola: avaliação e acompanhamento em saúde mental e neurodesenvolvimento (forte em TEA/ABA), apoio à inclusão e suporte à equipe pedagógica — encaminhamento facilitado para as famílias.";
     case "medico":

@@ -85,7 +85,7 @@ export async function POST(
     supabase,
     company,
     emailSeq,
-    body.hook ?? "nr1",
+    body.hook ?? "saude_mental",
   );
   if (!res.ok) {
     return NextResponse.json(

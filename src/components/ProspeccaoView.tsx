@@ -674,7 +674,7 @@ function CompanyCard({
   company: CompanyWithContacts;
   onChanged: () => void;
 }) {
-  const [hook, setHook] = useState<MessageHook>("nr1");
+  const [hook, setHook] = useState<MessageHook>("saude_mental");
   const [state, setState] = useState<"idle" | "gerando" | "ok" | "erro">("idle");
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
