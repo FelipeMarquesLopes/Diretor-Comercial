@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { PREFEITURAS, findPrefeitura } from "@/lib/prefeituras";
-import { monitorarMunicipio } from "@/lib/pncp";
+import { monitorarMunicipio, mapLimit } from "@/lib/pncp";
 
 // Buscar no PNCP pode envolver várias páginas/modalidades — dá folga.
 export const maxDuration = 60;
@@ -48,22 +48,22 @@ export async function POST(req: Request) {
   }[] = [];
   let totalNovas = 0;
 
-  // Busca o PNCP de TODAS as prefeituras em paralelo (a parte lenta é a rede).
-  const buscas = await Promise.all(
-    alvo.map(async (pref) => {
-      if (!pref) return null;
-      try {
-        const res = await monitorarMunicipio(pref.ibge, { dias: body.dias });
-        return { pref, res, erro: null as string | null };
-      } catch (err) {
-        return {
-          pref,
-          res: null,
-          erro: err instanceof Error ? err.message : "Falha no PNCP",
-        };
-      }
-    }),
-  );
+  // Busca o PNCP das prefeituras com concorrência LIMITADA (no máx. 2 por vez;
+  // cada município já dispara até 3 modalidades em paralelo). Mais que isso
+  // estourava o limite de conexões do WAF do PNCP e tudo dava timeout.
+  const buscas = await mapLimit(alvo, 2, async (pref) => {
+    if (!pref) return null;
+    try {
+      const res = await monitorarMunicipio(pref.ibge, { dias: body.dias });
+      return { pref, res, erro: null as string | null };
+    } catch (err) {
+      return {
+        pref,
+        res: null,
+        erro: err instanceof Error ? err.message : "Falha no PNCP",
+      };
+    }
+  });
 
   for (const b of buscas) {
     if (!b) continue;

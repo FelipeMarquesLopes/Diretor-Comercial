@@ -234,6 +234,26 @@ export interface MonitorResult {
   erros: string[];
 }
 
+// Executa `fn` sobre os itens com no máximo `limite` em paralelo. O PNCP (WAF
+// do gov.br) derruba rajadas de muitas conexões simultâneas — então limitamos.
+export async function mapLimit<T, R>(
+  items: T[],
+  limite: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let i = 0;
+  async function worker() {
+    while (i < items.length) {
+      const idx = i++;
+      results[idx] = await fn(items[idx], idx);
+    }
+  }
+  const n = Math.max(1, Math.min(limite, items.length));
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  return results;
+}
+
 /**
  * Busca no PNCP as contratações de um município (por IBGE), em várias
  * modalidades, nos últimos `dias`, e devolve só as que casam com o perfil da
@@ -244,14 +264,15 @@ export async function monitorarMunicipio(
   opts?: { dias?: number; maxPaginasPorModalidade?: number },
 ): Promise<MonitorResult> {
   const dias = opts?.dias ?? 180;
-  const maxPaginas = opts?.maxPaginasPorModalidade ?? 2;
+  const maxPaginas = opts?.maxPaginasPorModalidade ?? 1;
   const dataFinal = yyyymmdd(new Date());
   const dataInicial = yyyymmdd(new Date(Date.now() - dias * 24 * 60 * 60 * 1000));
 
-  // Uma tarefa por modalidade (a paginação é sequencial DENTRO da modalidade),
-  // mas as modalidades rodam EM PARALELO — corta o tempo de dezenas de chamadas
-  // em série para poucas rodadas. Erro de uma modalidade não derruba as outras.
-  const tarefas = MODALIDADES.map(async (m) => {
+  // Uma tarefa por modalidade (paginação sequencial DENTRO da modalidade). As
+  // modalidades rodam com concorrência LIMITADA (máx. 3 por vez) — disparar as
+  // 6 de uma vez, junto com outras prefeituras, estourava o limite do WAF do
+  // PNCP e tudo dava timeout. Erro de uma modalidade não derruba as outras.
+  const resultados = await mapLimit(MODALIDADES, 3, async (m) => {
     const rel: PncpOportunidade[] = [];
     let vistas = 0;
     let erro: string | null = null;
@@ -279,8 +300,6 @@ export async function monitorarMunicipio(
     }
     return { rel, vistas, erro };
   });
-
-  const resultados = await Promise.all(tarefas);
 
   let encontradasNoPncp = 0;
   const relevantes: PncpOportunidade[] = [];
