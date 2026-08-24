@@ -24,9 +24,11 @@ export const MODALIDADES: { id: number; nome: string }[] = [
   { id: 10, nome: "Manifestação de Interesse" },
 ];
 
-// Palavras-chave (sem acento, minúsculas) do que a MenthalHelp atende. Termos
-// longos casam por trecho; termos curtos/ambíguos casam por palavra inteira.
-const KW_TRECHO = [
+// Palavras-chave (sem acento, minúsculas) do que a MenthalHelp atende.
+//
+// FORTES: específicas do nosso perfil — se casarem, MANTÊM o edital mesmo que
+// haja alguma palavra negativa (ex: "reabilitação neurológica").
+const KW_FORTE_TRECHO = [
   "autis",
   "espectro",
   "reabilit",
@@ -39,13 +41,34 @@ const KW_TRECHO = [
   "neurolog",
   "neuropediat",
   "neuropsic",
+];
+const KW_FORTE_PALAVRA = ["tea"]; // palavra inteira, senão casa "sistema" etc.
+
+// AMPLAS: sinalizam saúde/terapia, mas são ambíguas — só valem se NÃO houver
+// nenhuma palavra negativa no objeto (senão pegam diálise, oncologia etc.).
+const KW_AMPLA_TRECHO = [
   "multidisciplinar",
   "ambulatorial",
   "transtorno",
   "terapias",
   "terapeutico",
 ];
-const KW_PALAVRA = ["tea"]; // palavra inteira, senão casa "sistema", "proteina"...
+
+// NEGATIVAS: áreas de saúde que NÃO são o nosso perfil. Derrubam um edital que
+// só casou por palavra AMPLA (ex: "terapia renal substitutiva ambulatorial").
+const KW_NEGATIVA = [
+  "renal",
+  "dialise",
+  "hemodialise",
+  "nefrolog",
+  "oncolog",
+  "quimioterap",
+  "radioterap",
+  "hemodinam",
+  "obstetr",
+  "odontolog",
+  "veterinar",
+];
 
 function norm(s: string): string {
   return (s ?? "")
@@ -54,15 +77,27 @@ function norm(s: string): string {
     .toLowerCase();
 }
 
-// Retorna a palavra-chave que casou (para transparência) ou null.
+// Retorna a palavra-chave que casou (para transparência) ou null se está fora
+// do perfil da clínica.
 export function matchKeyword(objeto: string): string | null {
   const o = norm(objeto);
-  for (const kw of KW_TRECHO) {
+
+  // 1) Sinal FORTE vence sempre (mantém, mesmo com palavra negativa junto).
+  for (const kw of KW_FORTE_TRECHO) {
     if (o.includes(kw)) return kw;
   }
-  for (const kw of KW_PALAVRA) {
+  for (const kw of KW_FORTE_PALAVRA) {
     if (new RegExp(`\\b${kw}\\b`).test(o)) return kw;
   }
+
+  // 2) Sinal AMPLO só vale se não houver nenhuma palavra negativa.
+  const temNegativa = KW_NEGATIVA.some((n) => o.includes(n));
+  if (!temNegativa) {
+    for (const kw of KW_AMPLA_TRECHO) {
+      if (o.includes(kw)) return kw;
+    }
+  }
+
   return null;
 }
 

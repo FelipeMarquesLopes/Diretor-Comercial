@@ -51,6 +51,32 @@ function diasAtePrazo(iso: string | null): number | null {
   return Math.ceil((fim - Date.now()) / (24 * 60 * 60 * 1000));
 }
 
+// Ordena: ABERTAS primeiro (prazo mais urgente no topo; sem data no fim das
+// abertas), depois as ENCERRADAS (as que encerraram há menos tempo primeiro).
+function ordenar(rows: Licitacao[]): Licitacao[] {
+  const aberta = (l: Licitacao) => {
+    const d = diasAtePrazo(l.data_encerramento);
+    return d == null || d >= 0;
+  };
+  return [...rows].sort((a, b) => {
+    const aa = aberta(a);
+    const ab = aberta(b);
+    if (aa !== ab) return aa ? -1 : 1; // abertas antes das encerradas
+    const da = diasAtePrazo(a.data_encerramento);
+    const db = diasAtePrazo(b.data_encerramento);
+    if (aa) {
+      // Abertas: menor prazo primeiro; sem data (null) vai para o fim.
+      const va = da == null ? Number.POSITIVE_INFINITY : da;
+      const vb = db == null ? Number.POSITIVE_INFINITY : db;
+      return va - vb;
+    }
+    // Encerradas: a que encerrou há menos tempo primeiro (dias menos negativo).
+    const va = da == null ? Number.NEGATIVE_INFINITY : da;
+    const vb = db == null ? Number.NEGATIVE_INFINITY : db;
+    return vb - va;
+  });
+}
+
 export default function Licitacoes() {
   const [pref, setPref] = useState<string>("todas");
   const [rows, setRows] = useState<Licitacao[]>([]);
@@ -65,7 +91,7 @@ export default function Licitacoes() {
       const r = await fetch(`/api/licitacoes${qs}`);
       const d = await r.json();
       if (d.error) setMsg(d.error);
-      else setRows(d.licitacoes ?? []);
+      else setRows(ordenar(d.licitacoes ?? []));
     } finally {
       setLoading(false);
     }
