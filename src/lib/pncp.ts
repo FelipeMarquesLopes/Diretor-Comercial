@@ -197,6 +197,7 @@ async function fetchPagina(
   dataInicial: string,
   dataFinal: string,
   pagina: number,
+  deadline: number,
 ): Promise<{ registros: RawContratacao[]; paginasRestantes: number }> {
   const url =
     `${PNCP_BASE}/contratacoes/publicacao?dataInicial=${dataInicial}` +
@@ -212,29 +213,33 @@ async function fetchPagina(
       "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
   };
 
-  // O PNCP limita requisições (429 "Limite de Requisições Excedido"). Tentamos
-  // até 3 vezes, com espera crescente (backoff), respeitando o Retry-After.
+  // Rate limit do PNCP (429). Estratégia: FALHAR RÁPIDO. No máximo 2 tentativas,
+  // timeout curto (8s), e uma espera curta no 429 — mas SEMPRE respeitando o
+  // prazo-limite geral (deadline). Assim a função nunca estoura os 60s da Vercel
+  // (que virava 504). Se o tempo acabar, desiste desta modalidade (vira aviso).
   let ultimoErro = "falha";
-  for (let tentativa = 0; tentativa < 3; tentativa++) {
-    if (tentativa > 0) await sleep(1500 * tentativa);
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    if (Date.now() > deadline) throw new Error("tempo esgotado");
+    if (tentativa > 0) await sleep(1200);
+    const restante = deadline - Date.now();
+    if (restante < 1500) throw new Error("tempo esgotado");
     let res: Response;
     try {
-      res = await fetch(url, { headers, signal: AbortSignal.timeout(12000) });
+      res = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(Math.min(8000, restante)),
+      });
     } catch {
       ultimoErro = "sem resposta (timeout)";
-      continue; // rede/timeout → tenta de novo
+      continue;
     }
     // 204 = sem conteúdo naquele filtro; tratamos como vazio (não é erro).
     if (res.status === 204) return { registros: [], paginasRestantes: 0 };
     if (res.status === 429) {
-      const retryAfter = Number(res.headers.get("retry-after"));
-      await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2000);
       ultimoErro = "limite de requisições (429)";
-      continue; // rate limit → espera e tenta de novo
+      continue; // rate limit → uma tentativa a mais (após a espera acima)
     }
-    if (!res.ok) {
-      throw new Error(`PNCP ${res.status}`);
-    }
+    if (!res.ok) throw new Error(`PNCP ${res.status}`);
     const json = (await res.json().catch(() => ({}))) as {
       data?: RawContratacao[];
       paginasRestantes?: number;
@@ -279,28 +284,29 @@ export async function mapLimit<T, R>(
  */
 export async function monitorarMunicipio(
   ibge: string,
-  opts?: { dias?: number; maxPaginasPorModalidade?: number },
+  opts?: { dias?: number; maxPaginasPorModalidade?: number; deadline?: number },
 ): Promise<MonitorResult> {
   const dias = opts?.dias ?? 180;
   const maxPaginas = opts?.maxPaginasPorModalidade ?? 1;
+  // Prazo-limite geral: nunca ultrapassar isto (default ~45s a partir de agora).
+  // Garante que a função retorne ANTES dos 60s da Vercel (evita 504).
+  const deadline = opts?.deadline ?? Date.now() + 45000;
   const dataFinal = yyyymmdd(new Date());
   const dataInicial = yyyymmdd(new Date(Date.now() - dias * 24 * 60 * 60 * 1000));
 
-  // Uma tarefa por modalidade (paginação sequencial DENTRO da modalidade). As
-  // modalidades rodam com concorrência LIMITADA (máx. 3 por vez) — disparar as
-  // 6 de uma vez, junto com outras prefeituras, estourava o limite do WAF do
-  // PNCP e tudo dava timeout. Erro de uma modalidade não derruba as outras.
+  // Modalidades EM SÉRIE (1 por vez, com respiro) — o PNCP tem rate limit (429).
+  // Cada modalidade respeita o deadline; se o tempo acabar, vira aviso e segue.
   const resultados = await mapLimit(MODALIDADES, 1, async (m, idx) => {
-    // Respiro entre modalidades para não estourar o rate limit do PNCP.
-    if (idx > 0) await sleep(500);
     const rel: PncpOportunidade[] = [];
     let vistas = 0;
     let erro: string | null = null;
+    if (Date.now() > deadline) return { rel, vistas, erro: `${m.nome}: tempo esgotado` };
+    if (idx > 0) await sleep(300);
     let pagina = 1;
     for (;;) {
       let page;
       try {
-        page = await fetchPagina(m.id, ibge, dataInicial, dataFinal, pagina);
+        page = await fetchPagina(m.id, ibge, dataInicial, dataFinal, pagina, deadline);
       } catch (err) {
         erro = `${m.nome}: ${err instanceof Error ? err.message : "falha"}`;
         break;

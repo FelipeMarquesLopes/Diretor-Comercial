@@ -51,10 +51,13 @@ export async function POST(req: Request) {
   // Prefeituras UMA POR VEZ (e cada município já pacei as modalidades em série).
   // O PNCP tem rate limit (429); processar em série + com respiro é o que evita
   // "Limite de Requisições Excedido". Erro numa prefeitura não derruba as outras.
+  // Prazo-limite geral compartilhado por TODAS as prefeituras desta busca: a
+  // função devolve o que conseguiu até ~48s e nunca estoura os 60s (evita 504).
+  const deadline = Date.now() + 48000;
   const buscas = await mapLimit(alvo, 1, async (pref) => {
     if (!pref) return null;
     try {
-      const res = await monitorarMunicipio(pref.ibge, { dias: body.dias });
+      const res = await monitorarMunicipio(pref.ibge, { dias: body.dias, deadline });
       return { pref, res, erro: null as string | null };
     } catch (err) {
       return {
