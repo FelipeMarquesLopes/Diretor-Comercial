@@ -15,14 +15,19 @@
 const PNCP_BASE = "https://pncp.gov.br/api/consulta/v1";
 
 // Modalidades relevantes para contratar/credenciar uma clínica (código do PNCP).
+// Enxuto de propósito: o PNCP tem rate limit (429), então cada modalidade a
+// menos é uma requisição a menos. Estas 4 cobrem o que interessa (credenciar,
+// pregão, dispensa e concorrência — que trazem, ex., o "Parque do Autista").
 export const MODALIDADES: { id: number; nome: string }[] = [
   { id: 12, nome: "Credenciamento" },
   { id: 6, nome: "Pregão Eletrônico" },
-  { id: 4, nome: "Concorrência Eletrônica" },
   { id: 8, nome: "Dispensa" },
-  { id: 9, nome: "Inexigibilidade" },
-  { id: 10, nome: "Manifestação de Interesse" },
+  { id: 4, nome: "Concorrência Eletrônica" },
 ];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 // Palavras-chave (sem acento, minúsculas) do que a MenthalHelp atende.
 //
@@ -197,35 +202,48 @@ async function fetchPagina(
     `${PNCP_BASE}/contratacoes/publicacao?dataInicial=${dataInicial}` +
     `&dataFinal=${dataFinal}&codigoModalidadeContratacao=${modalidade}` +
     `&codigoMunicipioIbge=${ibge}&pagina=${pagina}&tamanhoPagina=50`;
-  const res = await fetch(url, {
-    headers: {
-      Accept: "application/json, text/plain, */*",
-      "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-      // O WAF do gov.br DESCARTA (não responde) requisições sem User-Agent de
-      // navegador — o que causava o "aborted due to timeout" em toda chamada.
-      // Enviamos um User-Agent de navegador real para passar pelo WAF.
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    },
-    // Timeout por chamada: se o PNCP travar, esta requisição falha sozinha
-    // (vira diagnóstico) em vez de segurar a busca inteira até o timeout da
-    // função na Vercel.
-    signal: AbortSignal.timeout(12000),
-  });
-  // 204 = sem conteúdo naquele filtro; tratamos como vazio (não é erro).
-  if (res.status === 204) return { registros: [], paginasRestantes: 0 };
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`PNCP ${res.status}: ${txt.slice(0, 160)}`);
-  }
-  const json = (await res.json()) as {
-    data?: RawContratacao[];
-    paginasRestantes?: number;
+  const headers = {
+    Accept: "application/json, text/plain, */*",
+    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+    // O WAF do gov.br DESCARTA (não responde) requisições sem User-Agent de
+    // navegador — o que causava "aborted due to timeout" em toda chamada.
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+      "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
   };
-  const registros = Array.isArray(json?.data) ? json.data : [];
-  const paginasRestantes = Number(json?.paginasRestantes ?? 0);
-  return { registros, paginasRestantes };
+
+  // O PNCP limita requisições (429 "Limite de Requisições Excedido"). Tentamos
+  // até 3 vezes, com espera crescente (backoff), respeitando o Retry-After.
+  let ultimoErro = "falha";
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    if (tentativa > 0) await sleep(1500 * tentativa);
+    let res: Response;
+    try {
+      res = await fetch(url, { headers, signal: AbortSignal.timeout(12000) });
+    } catch {
+      ultimoErro = "sem resposta (timeout)";
+      continue; // rede/timeout → tenta de novo
+    }
+    // 204 = sem conteúdo naquele filtro; tratamos como vazio (não é erro).
+    if (res.status === 204) return { registros: [], paginasRestantes: 0 };
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get("retry-after"));
+      await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2000);
+      ultimoErro = "limite de requisições (429)";
+      continue; // rate limit → espera e tenta de novo
+    }
+    if (!res.ok) {
+      throw new Error(`PNCP ${res.status}`);
+    }
+    const json = (await res.json().catch(() => ({}))) as {
+      data?: RawContratacao[];
+      paginasRestantes?: number;
+    };
+    const registros = Array.isArray(json?.data) ? json.data : [];
+    const paginasRestantes = Number(json?.paginasRestantes ?? 0);
+    return { registros, paginasRestantes };
+  }
+  throw new Error(`PNCP: ${ultimoErro}`);
 }
 
 export interface MonitorResult {
@@ -272,7 +290,9 @@ export async function monitorarMunicipio(
   // modalidades rodam com concorrência LIMITADA (máx. 3 por vez) — disparar as
   // 6 de uma vez, junto com outras prefeituras, estourava o limite do WAF do
   // PNCP e tudo dava timeout. Erro de uma modalidade não derruba as outras.
-  const resultados = await mapLimit(MODALIDADES, 3, async (m) => {
+  const resultados = await mapLimit(MODALIDADES, 1, async (m, idx) => {
+    // Respiro entre modalidades para não estourar o rate limit do PNCP.
+    if (idx > 0) await sleep(500);
     const rel: PncpOportunidade[] = [];
     let vistas = 0;
     let erro: string | null = null;

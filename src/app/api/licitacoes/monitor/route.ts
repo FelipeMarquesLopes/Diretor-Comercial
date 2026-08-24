@@ -48,10 +48,10 @@ export async function POST(req: Request) {
   }[] = [];
   let totalNovas = 0;
 
-  // Busca o PNCP das prefeituras com concorrência LIMITADA (no máx. 2 por vez;
-  // cada município já dispara até 3 modalidades em paralelo). Mais que isso
-  // estourava o limite de conexões do WAF do PNCP e tudo dava timeout.
-  const buscas = await mapLimit(alvo, 2, async (pref) => {
+  // Prefeituras UMA POR VEZ (e cada município já pacei as modalidades em série).
+  // O PNCP tem rate limit (429); processar em série + com respiro é o que evita
+  // "Limite de Requisições Excedido". Erro numa prefeitura não derruba as outras.
+  const buscas = await mapLimit(alvo, 1, async (pref) => {
     if (!pref) return null;
     try {
       const res = await monitorarMunicipio(pref.ibge, { dias: body.dias });
