@@ -84,9 +84,30 @@ export default function Licitacoes() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(pref === "todas" ? {} : { prefeitura: pref }),
       });
-      const d = await r.json();
-      if (d.error) {
-        setMsg(`Erro: ${d.error}`);
+      // Resposta pode não ser JSON (ex: timeout da função na Vercel devolve uma
+      // página de erro). Lemos como texto e tentamos parsear com segurança.
+      const txt = await r.text();
+      let d: {
+        error?: string;
+        totalNovas?: number;
+        porPrefeitura?: {
+          nome: string;
+          novas: number;
+          relevantes: number;
+          encontradasNoPncp: number;
+          erros: string[];
+        }[];
+      } = {};
+      try {
+        d = txt ? JSON.parse(txt) : {};
+      } catch {
+        setMsg(
+          `O servidor não respondeu a tempo (status ${r.status}). A busca em "Todas" pode demorar — tente uma prefeitura por vez.`,
+        );
+        return;
+      }
+      if (!r.ok || d.error) {
+        setMsg(`Erro: ${d.error ?? `status ${r.status}`}`);
       } else {
         const linhas = (d.porPrefeitura ?? [])
           .map(

@@ -167,6 +167,10 @@ async function fetchPagina(
       Accept: "application/json",
       "User-Agent": "GrowthAI-MenthalHelp/1.0",
     },
+    // Timeout por chamada: se o PNCP travar, esta requisição falha sozinha
+    // (vira diagnóstico) em vez de segurar a busca inteira até o timeout da
+    // função na Vercel.
+    signal: AbortSignal.timeout(12000),
   });
   // 204 = sem conteúdo naquele filtro; tratamos como vazio (não é erro).
   if (res.status === 204) return { registros: [], paginasRestantes: 0 };
@@ -199,41 +203,55 @@ export async function monitorarMunicipio(
   opts?: { dias?: number; maxPaginasPorModalidade?: number },
 ): Promise<MonitorResult> {
   const dias = opts?.dias ?? 180;
-  const maxPaginas = opts?.maxPaginasPorModalidade ?? 3;
+  const maxPaginas = opts?.maxPaginasPorModalidade ?? 2;
   const dataFinal = yyyymmdd(new Date());
   const dataInicial = yyyymmdd(new Date(Date.now() - dias * 24 * 60 * 60 * 1000));
 
-  let encontradasNoPncp = 0;
-  const relevantes: PncpOportunidade[] = [];
-  const erros: string[] = [];
-  const vistos = new Set<string>();
-
-  for (const m of MODALIDADES) {
+  // Uma tarefa por modalidade (a paginação é sequencial DENTRO da modalidade),
+  // mas as modalidades rodam EM PARALELO — corta o tempo de dezenas de chamadas
+  // em série para poucas rodadas. Erro de uma modalidade não derruba as outras.
+  const tarefas = MODALIDADES.map(async (m) => {
+    const rel: PncpOportunidade[] = [];
+    let vistas = 0;
+    let erro: string | null = null;
     let pagina = 1;
     for (;;) {
       let page;
       try {
         page = await fetchPagina(m.id, ibge, dataInicial, dataFinal, pagina);
       } catch (err) {
-        erros.push(`${m.nome}: ${err instanceof Error ? err.message : "falha"}`);
+        erro = `${m.nome}: ${err instanceof Error ? err.message : "falha"}`;
         break;
       }
-      encontradasNoPncp += page.registros.length;
+      vistas += page.registros.length;
       for (const r of page.registros) {
-        // Confere o IBGE do registro (defesa: caso a API ignore o filtro).
         const rawIbge =
           r.unidadeOrgao?.codigoIbge != null
             ? String(r.unidadeOrgao.codigoIbge)
             : null;
         if (rawIbge && rawIbge !== ibge) continue;
         const op = mapContratacao(r);
-        if (!op) continue;
-        if (vistos.has(op.numeroControle)) continue;
-        vistos.add(op.numeroControle);
-        relevantes.push(op);
+        if (op) rel.push(op);
       }
       if (page.paginasRestantes <= 0 || pagina >= maxPaginas) break;
       pagina++;
+    }
+    return { rel, vistas, erro };
+  });
+
+  const resultados = await Promise.all(tarefas);
+
+  let encontradasNoPncp = 0;
+  const relevantes: PncpOportunidade[] = [];
+  const erros: string[] = [];
+  const vistos = new Set<string>();
+  for (const res of resultados) {
+    encontradasNoPncp += res.vistas;
+    if (res.erro) erros.push(res.erro);
+    for (const op of res.rel) {
+      if (vistos.has(op.numeroControle)) continue;
+      vistos.add(op.numeroControle);
+      relevantes.push(op);
     }
   }
 

@@ -48,19 +48,34 @@ export async function POST(req: Request) {
   }[] = [];
   let totalNovas = 0;
 
-  for (const pref of alvo) {
-    if (!pref) continue;
-    let res;
-    try {
-      res = await monitorarMunicipio(pref.ibge, { dias: body.dias });
-    } catch (err) {
+  // Busca o PNCP de TODAS as prefeituras em paralelo (a parte lenta é a rede).
+  const buscas = await Promise.all(
+    alvo.map(async (pref) => {
+      if (!pref) return null;
+      try {
+        const res = await monitorarMunicipio(pref.ibge, { dias: body.dias });
+        return { pref, res, erro: null as string | null };
+      } catch (err) {
+        return {
+          pref,
+          res: null,
+          erro: err instanceof Error ? err.message : "Falha no PNCP",
+        };
+      }
+    }),
+  );
+
+  for (const b of buscas) {
+    if (!b) continue;
+    const { pref, res } = b;
+    if (!res) {
       porPrefeitura.push({
         prefeitura: pref.id,
         nome: pref.nome,
         encontradasNoPncp: 0,
         relevantes: 0,
         novas: 0,
-        erros: [err instanceof Error ? err.message : "Falha no PNCP"],
+        erros: [b.erro ?? "Falha no PNCP"],
       });
       continue;
     }
