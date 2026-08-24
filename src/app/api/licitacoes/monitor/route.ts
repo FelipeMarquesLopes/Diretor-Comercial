@@ -6,11 +6,7 @@ import { monitorarMunicipio, mapLimit } from "@/lib/pncp";
 // Buscar no PNCP pode envolver várias páginas/modalidades — dá folga.
 export const maxDuration = 60;
 
-// POST /api/licitacoes/monitor
-// Vasculha o PNCP (base oficial) das prefeituras onde a clínica atua, filtra
-// pelo perfil de saúde (TEA, reabilitação, psicologia, saúde mental...) e salva
-// as oportunidades novas. Dedupe por numero_controle — nunca sobrescreve o
-// nosso `status`/notes de acompanhamento.
+// POST /api/licitacoes/monitor — busca manual (botão), prefeitura ou todas.
 // Body opcional: { prefeitura?: "guarulhos", dias?: 180 }
 export async function POST(req: Request) {
   let body: { prefeitura?: string; dias?: number } = {};
@@ -19,7 +15,29 @@ export async function POST(req: Request) {
   } catch {
     body = {};
   }
+  return runMonitor(body.prefeitura ?? null, body.dias);
+}
 
+// GET /api/licitacoes/monitor — usado pelo CRON diário da Vercel (busca TODAS
+// as prefeituras). Rodando de madrugada, sozinho, evita o rate limit do PNCP.
+export async function GET(req: Request) {
+  // Se CRON_SECRET estiver definido, exige o cabeçalho da Vercel (protege o
+  // endpoint). Sem a variável, roda livre (o cron continua funcionando).
+  const secret = process.env.CRON_SECRET;
+  if (secret) {
+    const auth = req.headers.get("authorization");
+    if (auth !== `Bearer ${secret}`) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+  }
+  return runMonitor(null);
+}
+
+// Núcleo compartilhado: vasculha o PNCP (base oficial) das prefeituras onde a
+// clínica atua, filtra pelo perfil de saúde (TEA, reabilitação, psicologia,
+// saúde mental...) e salva as oportunidades novas. Dedupe por numero_controle —
+// nunca sobrescreve o nosso `status`/notes de acompanhamento.
+async function runMonitor(prefeituraId: string | null, dias?: number) {
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
     supabase = getServerSupabase();
@@ -31,8 +49,8 @@ export async function POST(req: Request) {
   }
 
   // Uma prefeitura específica, ou todas.
-  const alvo = body.prefeitura
-    ? [findPrefeitura(body.prefeitura)].filter(Boolean)
+  const alvo = prefeituraId
+    ? [findPrefeitura(prefeituraId)].filter(Boolean)
     : PREFEITURAS;
   if (alvo.length === 0) {
     return NextResponse.json({ error: "Prefeitura inválida." }, { status: 400 });
@@ -57,7 +75,7 @@ export async function POST(req: Request) {
   const buscas = await mapLimit(alvo, 1, async (pref) => {
     if (!pref) return null;
     try {
-      const res = await monitorarMunicipio(pref.ibge, { dias: body.dias, deadline });
+      const res = await monitorarMunicipio(pref.ibge, { dias, deadline });
       return { pref, res, erro: null as string | null };
     } catch (err) {
       return {
