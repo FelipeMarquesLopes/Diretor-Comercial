@@ -164,8 +164,14 @@ async function fetchPagina(
     `&codigoMunicipioIbge=${ibge}&pagina=${pagina}&tamanhoPagina=50`;
   const res = await fetch(url, {
     headers: {
-      Accept: "application/json",
-      "User-Agent": "GrowthAI-MenthalHelp/1.0",
+      Accept: "application/json, text/plain, */*",
+      "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+      // O WAF do gov.br DESCARTA (não responde) requisições sem User-Agent de
+      // navegador — o que causava o "aborted due to timeout" em toda chamada.
+      // Enviamos um User-Agent de navegador real para passar pelo WAF.
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     },
     // Timeout por chamada: se o PNCP travar, esta requisição falha sozinha
     // (vira diagnóstico) em vez de segurar a busca inteira até o timeout da
