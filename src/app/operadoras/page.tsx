@@ -13,6 +13,9 @@ export default function Operadoras() {
   const [operadoras, setOperadoras] = useState<OperadoraRow[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Seleção múltipla para excluir várias de uma vez.
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [excluindo, setExcluindo] = useState(false);
 
   // filtro: novas / ativas / todas
   const [filtro, setFiltro] = useState<"nova" | "ativa" | "todas">("nova");
@@ -32,7 +35,37 @@ export default function Operadoras() {
     const r = await fetch("/api/operadoras");
     const d = await r.json();
     if (d.error) setMsg(d.error);
-    else setOperadoras(d.operadoras);
+    else {
+      setOperadoras(d.operadoras);
+      setSel(new Set());
+    }
+  }
+
+  function toggleSel(id: string) {
+    setSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  async function excluirSelecionadas() {
+    if (sel.size === 0) return;
+    if (!confirm(`Excluir ${sel.size} operadora(s)? Não dá para desfazer.`))
+      return;
+    setExcluindo(true);
+    try {
+      const r = await fetch("/api/companies/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(sel) }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.error) setMsg(`Erro ao excluir: ${d.error}`);
+      else await load();
+    } finally {
+      setExcluindo(false);
+    }
   }
 
   useEffect(() => {
@@ -229,23 +262,60 @@ export default function Operadoras() {
             );
           })}
         </div>
-        <div className="space-y-3">
-          {(() => {
-            const lista =
-              filtro === "todas"
-                ? operadoras
-                : operadoras.filter((o) => (o.operator_type ?? "nova") === filtro);
-            if (lista.length === 0)
-              return (
-                <p className="text-sm text-gray-500">
-                  Nenhuma operadora nesta aba.
-                </p>
-              );
-            return lista.map((o) => (
-              <OperadoraCard key={o.id} op={o} onChanged={load} />
-            ));
-          })()}
-        </div>
+        {(() => {
+          const lista =
+            filtro === "todas"
+              ? operadoras
+              : operadoras.filter((o) => (o.operator_type ?? "nova") === filtro);
+          const todosSel = lista.length > 0 && lista.every((o) => sel.has(o.id));
+          const toggleTodos = () =>
+            setSel(todosSel ? new Set() : new Set(lista.map((o) => o.id)));
+          return (
+            <>
+              {lista.length > 0 && (
+                <div className="mb-2 flex items-center justify-end gap-3">
+                  <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={todosSel}
+                      onChange={toggleTodos}
+                      className="h-4 w-4"
+                    />
+                    Selecionar todas
+                  </label>
+                  {sel.size > 0 && (
+                    <button
+                      onClick={excluirSelecionadas}
+                      disabled={excluindo}
+                      className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {excluindo
+                        ? "Excluindo…"
+                        : `Excluir selecionadas (${sel.size})`}
+                    </button>
+                  )}
+                </div>
+              )}
+              <div className="space-y-3">
+                {lista.length === 0 ? (
+                  <p className="text-sm text-gray-500">
+                    Nenhuma operadora nesta aba.
+                  </p>
+                ) : (
+                  lista.map((o) => (
+                    <OperadoraCard
+                      key={o.id}
+                      op={o}
+                      onChanged={load}
+                      selected={sel.has(o.id)}
+                      onToggleSelect={toggleSel}
+                    />
+                  ))
+                )}
+              </div>
+            </>
+          );
+        })()}
       </section>
     </div>
   );
@@ -266,7 +336,17 @@ function isVerified(status: string | null): boolean {
   return (status ?? "").toLowerCase().trim() === "verified";
 }
 
-function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => void }) {
+function OperadoraCard({
+  op,
+  onChanged,
+  selected,
+  onToggleSelect,
+}: {
+  op: OperadoraRow;
+  onChanged: () => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+}) {
   const [showResp, setShowResp] = useState(false);
   const [respText, setRespText] = useState("");
   const [respChannel, setRespChannel] = useState<SequenceChannel>("email");
@@ -602,9 +682,21 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+    <div
+      className={`rounded-lg border bg-white p-4 shadow-sm ${
+        selected ? "border-red-300 ring-1 ring-red-200" : "border-gray-200"
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(op.id)}
+            className="mt-1 h-4 w-4 shrink-0"
+            title="Selecionar para excluir"
+          />
+          <div>
           <p className="flex items-center gap-2 font-medium text-gray-900">
             {op.name}
             <span
@@ -630,6 +722,7 @@ function OperadoraCard({ op, onChanged }: { op: OperadoraRow; onChanged: () => v
               Briefing: {op.briefing}
             </p>
           )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">

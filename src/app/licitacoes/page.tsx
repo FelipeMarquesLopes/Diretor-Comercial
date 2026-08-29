@@ -83,6 +83,9 @@ export default function Licitacoes() {
   const [loading, setLoading] = useState(true);
   const [buscando, setBuscando] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // Seleção múltipla para excluir várias de uma vez.
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [excluindo, setExcluindo] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,11 +94,45 @@ export default function Licitacoes() {
       const r = await fetch(`/api/licitacoes${qs}`);
       const d = await r.json();
       if (d.error) setMsg(d.error);
-      else setRows(ordenar(d.licitacoes ?? []));
+      else {
+        setRows(ordenar(d.licitacoes ?? []));
+        setSel(new Set());
+      }
     } finally {
       setLoading(false);
     }
   }, [pref]);
+
+  function toggleSel(id: string) {
+    setSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  const todosSel = rows.length > 0 && sel.size === rows.length;
+  function toggleTodos() {
+    setSel(todosSel ? new Set() : new Set(rows.map((r) => r.id)));
+  }
+  async function excluirSelecionadas() {
+    if (sel.size === 0) return;
+    if (!confirm(`Excluir ${sel.size} licitação(ões)? Não dá para desfazer.`))
+      return;
+    setExcluindo(true);
+    try {
+      const r = await fetch("/api/licitacoes/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(sel) }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.error) setMsg(`Erro ao excluir: ${d.error}`);
+      else await load();
+    } finally {
+      setExcluindo(false);
+    }
+  }
 
   useEffect(() => {
     load();
@@ -229,9 +266,35 @@ export default function Licitacoes() {
       <CadastroManual onCreated={load} />
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-          Oportunidades ({abertas} ativa{abertas === 1 ? "" : "s"})
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+            Oportunidades ({abertas} ativa{abertas === 1 ? "" : "s"})
+          </h2>
+          {rows.length > 0 && (
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={todosSel}
+                  onChange={toggleTodos}
+                  className="h-4 w-4"
+                />
+                Selecionar todas
+              </label>
+              {sel.size > 0 && (
+                <button
+                  onClick={excluirSelecionadas}
+                  disabled={excluindo}
+                  className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {excluindo
+                    ? "Excluindo…"
+                    : `Excluir selecionadas (${sel.size})`}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         {loading && <p className="text-sm text-gray-500">Carregando…</p>}
         {!loading && rows.length === 0 && (
           <div className="rounded-xl border border-dashed border-brand-200 px-4 py-10 text-center text-sm text-brand-800/40">
@@ -240,7 +303,13 @@ export default function Licitacoes() {
           </div>
         )}
         {rows.map((l) => (
-          <LicitacaoCard key={l.id} licitacao={l} onChanged={load} />
+          <LicitacaoCard
+            key={l.id}
+            licitacao={l}
+            onChanged={load}
+            selected={sel.has(l.id)}
+            onToggleSelect={toggleSel}
+          />
         ))}
       </section>
     </div>
@@ -250,9 +319,13 @@ export default function Licitacoes() {
 function LicitacaoCard({
   licitacao,
   onChanged,
+  selected,
+  onToggleSelect,
 }: {
   licitacao: Licitacao;
   onChanged: () => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [openContato, setOpenContato] = useState(false);
@@ -298,10 +371,22 @@ function LicitacaoCard({
   }
 
   return (
-    <div className="rounded-xl border border-brand-100 bg-white p-4 shadow-sm">
+    <div
+      className={`rounded-xl border bg-white p-4 shadow-sm ${
+        selected ? "border-red-300 ring-1 ring-red-200" : "border-brand-100"
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-brand-800">{licitacao.objeto}</p>
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(licitacao.id)}
+            className="mt-1 h-4 w-4 shrink-0"
+            title="Selecionar para excluir"
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-brand-800">{licitacao.objeto}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-brand-800/55">
             {licitacao.modalidade && (
               <span className="rounded bg-brand-50 px-1.5 py-0.5 font-medium">
@@ -343,6 +428,7 @@ function LicitacaoCard({
             ]
               .filter(Boolean)
               .join(" · ")}
+          </div>
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
