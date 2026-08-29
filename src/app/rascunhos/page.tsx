@@ -272,6 +272,7 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
   const [body, setBody] = useState(draft.body);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [novoEmail, setNovoEmail] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const anexos = draft.attachments ?? [];
   const dirty = subject !== (draft.subject ?? "") || body !== draft.body;
@@ -386,6 +387,31 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
     }
   }
 
+  async function salvarEmail() {
+    const e = novoEmail.trim().toLowerCase();
+    if (!e.includes("@")) {
+      setErr("Digite um e-mail válido.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/drafts/${draft.id}/recipient`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.error) setErr(d.error);
+      else {
+        setNovoEmail("");
+        onChanged();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function desbloquear(email: string) {
     if (
       !confirm(
@@ -481,29 +507,54 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
                 </p>
               )}
               {draft.blocked && draft.contacts?.email && (
-                <div className="mt-1 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                  ⛔ <b>{draft.contacts.email}</b> está na{" "}
-                  <b>lista de bloqueio</b> (esse e-mail retornou/bounce antes). O
-                  envio fica travado. Você tem duas saídas:
-                  <ul className="ml-4 mt-1 list-disc space-y-0.5">
-                    <li>
-                      <b>Trocar o e-mail</b> (o correto é outro): vá em{" "}
-                      <b>Operadoras</b> → <b>Editar</b> nesta parceira, corrija e
-                      salve. Vale automaticamente aqui e nos próximos envios.
-                    </li>
-                    <li>
-                      <b>Desbloquear</b> (você tem certeza que este e-mail está
-                      certo e ativo — foi um bounce temporário): use o botão
-                      abaixo.
-                    </li>
-                  </ul>
-                  <button
-                    onClick={() => desbloquear(draft.contacts!.email!)}
-                    disabled={busy}
-                    className="mt-2 rounded-md border border-red-300 bg-white px-2.5 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-                  >
-                    🔓 Desbloquear este e-mail
-                  </button>
+                <div className="mt-1 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+                  <p>
+                    ⛔ <b>{draft.contacts.email}</b> está na{" "}
+                    <b>lista de bloqueio</b> (esse e-mail retornou/bounce antes).
+                    O envio fica travado. Resolva aqui mesmo:
+                  </p>
+
+                  {/* Opção 1: corrigir o e-mail direto no rascunho */}
+                  <div className="mt-2">
+                    <span className="font-medium">✏️ O e-mail certo é outro?</span>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <input
+                        type="email"
+                        value={novoEmail}
+                        onChange={(e) => setNovoEmail(e.target.value)}
+                        placeholder="novo e-mail do contato"
+                        className="w-56 max-w-full rounded-md border border-red-200 px-2 py-1 text-xs text-gray-800 outline-none focus:border-red-400"
+                      />
+                      <button
+                        onClick={salvarEmail}
+                        disabled={busy || !novoEmail.trim()}
+                        className="rounded-md bg-brand-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                      >
+                        Salvar novo e-mail
+                      </button>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-red-700/70">
+                      Vale automaticamente aqui e nos próximos envios.
+                    </p>
+                  </div>
+
+                  {/* Opção 2: desbloquear (o e-mail está certo, foi bounce temporário) */}
+                  <div className="mt-2 border-t border-red-200 pt-2">
+                    <span className="font-medium">
+                      🔓 O e-mail está certo e ativo?
+                    </span>{" "}
+                    Se foi um bounce temporário (caixa cheia/falso-positivo),
+                    desbloqueie:
+                    <div className="mt-1">
+                      <button
+                        onClick={() => desbloquear(draft.contacts!.email!)}
+                        disabled={busy}
+                        className="rounded-md border border-red-300 bg-white px-2.5 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        Desbloquear este e-mail
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </>
