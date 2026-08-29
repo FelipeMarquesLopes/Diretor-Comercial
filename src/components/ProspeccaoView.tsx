@@ -190,6 +190,9 @@ export function ProspeccaoView({
   const [companies, setCompanies] = useState<CompanyWithContacts[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // Seleção múltipla para excluir vários de uma vez.
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [excluindo, setExcluindo] = useState(false);
 
   // formulário de busca
   const [keywords, setKeywords] = useState("");
@@ -213,7 +216,54 @@ export function ProspeccaoView({
     );
     const d = await r.json();
     if (d.error) setMsg(d.error);
-    else setCompanies(d.companies);
+    else {
+      setCompanies(d.companies);
+      setSelecionados(new Set()); // limpa a seleção ao recarregar a lista
+    }
+  }
+
+  function toggleSel(id: string) {
+    setSelecionados((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
+  const todosSelecionados =
+    companies.length > 0 && selecionados.size === companies.length;
+
+  function toggleTodos() {
+    setSelecionados(
+      todosSelecionados ? new Set() : new Set(companies.map((c) => c.id)),
+    );
+  }
+
+  async function excluirSelecionados() {
+    if (selecionados.size === 0) return;
+    if (
+      !confirm(
+        `Excluir ${selecionados.size} ${cfg.noun}? Não dá para desfazer.`,
+      )
+    )
+      return;
+    setExcluindo(true);
+    setMsg(null);
+    try {
+      const r = await fetch("/api/companies/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selecionados) }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.error) setMsg(`Erro ao excluir: ${d.error}`);
+      else await loadCompanies();
+    } catch (e) {
+      setMsg(String(e));
+    } finally {
+      setExcluindo(false);
+    }
   }
 
   useEffect(() => {
@@ -477,9 +527,35 @@ export function ProspeccaoView({
       <ManualCadastro mode={mode} onCreated={loadCompanies} />
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-          {cfg.sectionTitle} ({companies.length})
-        </h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+            {cfg.sectionTitle} ({companies.length})
+          </h2>
+          {companies.length > 0 && (
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={todosSelecionados}
+                  onChange={toggleTodos}
+                  className="h-4 w-4"
+                />
+                Selecionar todos
+              </label>
+              {selecionados.size > 0 && (
+                <button
+                  onClick={excluirSelecionados}
+                  disabled={excluindo}
+                  className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {excluindo
+                    ? "Excluindo…"
+                    : `Excluir selecionados (${selecionados.size})`}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         <div className="space-y-3">
           {companies.length === 0 && (
             <p className="text-sm text-gray-500">
@@ -487,7 +563,13 @@ export function ProspeccaoView({
             </p>
           )}
           {companies.map((c) => (
-            <CompanyCard key={c.id} company={c} onChanged={loadCompanies} />
+            <CompanyCard
+              key={c.id}
+              company={c}
+              onChanged={loadCompanies}
+              selected={selecionados.has(c.id)}
+              onToggleSelect={toggleSel}
+            />
           ))}
         </div>
       </section>
@@ -670,9 +752,13 @@ function ManualCadastro({
 function CompanyCard({
   company,
   onChanged,
+  selected,
+  onToggleSelect,
 }: {
   company: CompanyWithContacts;
   onChanged: () => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
 }) {
   const [hook, setHook] = useState<MessageHook>("saude_mental");
   const [state, setState] = useState<"idle" | "gerando" | "ok" | "erro">("idle");
@@ -860,10 +946,22 @@ function CompanyCard({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+    <div
+      className={`rounded-lg border bg-white p-4 shadow-sm ${
+        selected ? "border-red-300 ring-1 ring-red-200" : "border-gray-200"
+      }`}
+    >
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-medium text-gray-900">{company.name}</p>
+        <div className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(company.id)}
+            className="mt-1 h-4 w-4 shrink-0"
+            title="Selecionar para excluir"
+          />
+          <div>
+            <p className="font-medium text-gray-900">{company.name}</p>
           <p className="text-xs text-gray-500">
             {[
               company.industry,
@@ -877,6 +975,7 @@ function CompanyCard({
           {company.qualification_notes && (
             <p className="mt-1 text-xs text-gray-400">{company.qualification_notes}</p>
           )}
+          </div>
         </div>
         <div className="flex flex-col items-end gap-1">
           <span className="inline-block rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">
