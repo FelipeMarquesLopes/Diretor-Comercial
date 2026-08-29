@@ -74,6 +74,17 @@ export async function getSuppressedSet(
   return new Set((data ?? []).map((r: { email: string }) => r.email));
 }
 
+// Remove um e-mail da lista de bloqueio (o CEO decidiu que está OK reenviar).
+// Se o e-mail voltar a dar bounce, a captura por IMAP o re-suprime sozinha.
+export async function unsuppressEmail(
+  supabase: SupabaseClient,
+  email: string,
+): Promise<void> {
+  const e = normalizeEmail(email);
+  if (!e || !e.includes("@")) return;
+  await supabase.from("suppressed_emails").delete().eq("email", e);
+}
+
 export async function isSuppressed(
   supabase: SupabaseClient,
   email: string,

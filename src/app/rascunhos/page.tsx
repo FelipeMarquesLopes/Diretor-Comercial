@@ -386,6 +386,29 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
     }
   }
 
+  async function desbloquear(email: string) {
+    if (
+      !confirm(
+        `Desbloquear ${email}?\n\nEsse endereço retornou (bounce) em um envio anterior. Só desbloqueie se tiver CERTEZA de que o e-mail está correto e ativo.\n\nSe ele voltar a retornar, o sistema o bloqueia de novo automaticamente (protege sua reputação de envio).`,
+      )
+    )
+      return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/suppression/unblock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.error) setErr(d.error);
+      else onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function excluir() {
     if (!confirm("Excluir este rascunho de vez? Não dá para desfazer.")) return;
     setBusy(true);
@@ -461,12 +484,26 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
                 <div className="mt-1 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                   ⛔ <b>{draft.contacts.email}</b> está na{" "}
                   <b>lista de bloqueio</b> (esse e-mail retornou/bounce antes). O
-                  envio fica travado até você trocar o e-mail.
-                  <br />
-                  👉 Vá em <b>Operadoras</b> → <b>Editar</b> nesta parceira →
-                  corrija o e-mail e salve. A correção vale{" "}
-                  <b>automaticamente</b> para este rascunho e para os próximos
-                  envios (não precisa mexer aqui).
+                  envio fica travado. Você tem duas saídas:
+                  <ul className="ml-4 mt-1 list-disc space-y-0.5">
+                    <li>
+                      <b>Trocar o e-mail</b> (o correto é outro): vá em{" "}
+                      <b>Operadoras</b> → <b>Editar</b> nesta parceira, corrija e
+                      salve. Vale automaticamente aqui e nos próximos envios.
+                    </li>
+                    <li>
+                      <b>Desbloquear</b> (você tem certeza que este e-mail está
+                      certo e ativo — foi um bounce temporário): use o botão
+                      abaixo.
+                    </li>
+                  </ul>
+                  <button
+                    onClick={() => desbloquear(draft.contacts!.email!)}
+                    disabled={busy}
+                    className="mt-2 rounded-md border border-red-300 bg-white px-2.5 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                  >
+                    🔓 Desbloquear este e-mail
+                  </button>
                 </div>
               )}
             </>
