@@ -112,12 +112,19 @@ export default function Rascunhos() {
     load();
   }, [load]);
 
+  // Assuntos ENCERRADOS somem das listas (o CEO clicou "Encerrar assunto").
+  // Só continuam aparecendo na aba "Todos", que serve de histórico.
+  const fonteDrafts =
+    view === "todos"
+      ? drafts
+      : drafts.filter((d) => d.sequences?.status !== "encerrada");
+
   // 1) Recorte por VIEW. "Próximos envios" = só o que tem data agendada,
   //    um por assunto, ordenado pela data.
-  let base = drafts;
+  let base = fonteDrafts;
   if (view === "proximos") {
     const vistos = new Set<string>();
-    base = drafts
+    base = fonteDrafts
       .filter((d) => proximoEnvioDe(d))
       .filter((d) => {
         const chave = d.sequence_id ?? d.company_id ?? d.id;
