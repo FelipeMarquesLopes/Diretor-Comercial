@@ -99,8 +99,7 @@ export async function PATCH(
       if (suprimidos.has(to.toLowerCase())) {
         return NextResponse.json(
           {
-            error:
-              "Este destinatário está na lista de bloqueio (retornou antes / bounce). Troque o e-mail do destinatário antes de enviar.",
+            error: `O e-mail ${to} está na lista de bloqueio (retornou/bounce antes). Edite o e-mail deste contato (em Operadoras → Editar) e salve — a correção vale para este rascunho e os próximos envios.`,
           },
           { status: 409 },
         );

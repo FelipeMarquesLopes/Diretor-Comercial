@@ -3,6 +3,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { generateDraft } from "@/lib/anthropic";
 import { buildCommercialContext } from "@/lib/memory";
 import { buildPersonalizationAngle } from "@/lib/personalize";
+import { getSuppressedSet } from "@/lib/suppression";
 import type { Company, Contact, DraftChannel, MessageHook } from "@/lib/types";
 
 // GET /api/drafts?status=pendente
@@ -34,7 +35,23 @@ export async function GET(req: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ drafts: data ?? [] });
+
+  // Marca cada rascunho cujo DESTINATÁRIO está na lista de bloqueio (retornou/
+  // bounce). Assim a tela aponta QUEM está bloqueado, sem o CEO precisar tentar
+  // enviar. Uma consulta só (getSuppressedSet) para todos os e-mails.
+  const drafts = data ?? [];
+  const emails = drafts
+    .map((d) => (d.contacts as { email?: string } | null)?.email ?? null)
+    .filter((e): e is string => !!e);
+  const suprimidos = emails.length
+    ? await getSuppressedSet(supabase, emails)
+    : new Set<string>();
+  const comBloqueio = drafts.map((d) => {
+    const email = (d.contacts as { email?: string } | null)?.email ?? null;
+    return { ...d, blocked: email ? suprimidos.has(email.toLowerCase()) : false };
+  });
+
+  return NextResponse.json({ drafts: comBloqueio });
 }
 
 // POST /api/drafts

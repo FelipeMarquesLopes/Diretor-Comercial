@@ -20,6 +20,8 @@ type DraftRow = Draft & {
     status: string;
     resume_at: string | null;
   } | null;
+  // true = o e-mail do destinatário está na lista de bloqueio (retornou/bounce).
+  blocked?: boolean;
 };
 
 // Data + hora no formato brasileiro (fuso de São Paulo). Ex: 31/07/2026 14:20
@@ -434,26 +436,40 @@ function DraftCard({ draft, onChanged }: { draft: DraftRow; onChanged: () => voi
           </p>
           {/* Destinatário — para o CEO ver PRA QUEM vai antes de disparar */}
           {draft.channel === "email" ? (
-            draft.contacts?.email ? (
-              <p className="mt-1 text-sm">
-                <span className="text-gray-500">Para: </span>
-                <span className="font-medium text-brand-700">
-                  {draft.contacts.email}
-                </span>
-                {draft.contacts?.name && (
-                  <span className="text-xs text-gray-500">
-                    {" "}
-                    ({draft.contacts.name}
-                    {draft.contacts.title ? ` · ${draft.contacts.title}` : ""})
+            <>
+              {draft.contacts?.email ? (
+                <p className="mt-1 text-sm">
+                  <span className="text-gray-500">Para: </span>
+                  <span className="font-medium text-brand-700">
+                    {draft.contacts.email}
                   </span>
-                )}
-              </p>
-            ) : (
-              <p className="mt-1 text-sm font-medium text-red-600">
-                ⚠️ Sem e-mail do destinatário — revele pelo &quot;Abordar&quot;
-                (empresa) ou cadastre o e-mail (operadora) antes de enviar.
-              </p>
-            )
+                  {draft.contacts?.name && (
+                    <span className="text-xs text-gray-500">
+                      {" "}
+                      ({draft.contacts.name}
+                      {draft.contacts.title ? ` · ${draft.contacts.title}` : ""})
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <p className="mt-1 text-sm font-medium text-red-600">
+                  ⚠️ Sem e-mail do destinatário — revele pelo &quot;Abordar&quot;
+                  (empresa) ou cadastre o e-mail (operadora) antes de enviar.
+                </p>
+              )}
+              {draft.blocked && draft.contacts?.email && (
+                <div className="mt-1 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  ⛔ <b>{draft.contacts.email}</b> está na{" "}
+                  <b>lista de bloqueio</b> (esse e-mail retornou/bounce antes). O
+                  envio fica travado até você trocar o e-mail.
+                  <br />
+                  👉 Vá em <b>Operadoras</b> → <b>Editar</b> nesta parceira →
+                  corrija o e-mail e salve. A correção vale{" "}
+                  <b>automaticamente</b> para este rascunho e para os próximos
+                  envios (não precisa mexer aqui).
+                </div>
+              )}
+            </>
           ) : (
             <p className="mt-1 text-xs text-gray-500">
               {draft.contacts?.name
