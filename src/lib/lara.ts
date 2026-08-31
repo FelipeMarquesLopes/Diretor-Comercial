@@ -17,7 +17,7 @@ import type {
   ToolResultBlockParam,
 } from "@anthropic-ai/sdk/resources/messages";
 
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5";
+import { MODEL } from "./model";
 
 function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {

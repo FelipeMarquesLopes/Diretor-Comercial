@@ -5,6 +5,11 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { CLINIC_SERVICES, EMAIL_SIGNATURE, MENTHAL_UNITS } from "./branding";
+// Modelo mais capaz e atual (mesma tabela de preço do 4.8). O Opus 5 "pensa"
+// (raciocínio adaptativo) antes de responder — por isso os limites de tokens
+// abaixo têm folga, para o raciocínio não truncar a resposta final. Fonte única
+// em src/lib/model.ts (ignora um ANTHROPIC_MODEL antigo/obsoleto na Vercel).
+import { MODEL } from "./model";
 import type {
   Company,
   Contact,
@@ -12,11 +17,6 @@ import type {
   MessageHook,
   ResponseSentiment,
 } from "./types";
-
-// Modelo mais capaz e atual (mesma tabela de preço do 4.8). O Opus 5 "pensa"
-// (raciocínio adaptativo) antes de responder — por isso os limites de tokens
-// abaixo têm folga, para o raciocínio não truncar a resposta final.
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5";
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
