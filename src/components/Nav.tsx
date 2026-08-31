@@ -12,6 +12,7 @@ import { usePathname } from "next/navigation";
 const GROUPS: { href: string; label: string }[][] = [
   [
     { href: "/", label: "Dashboard" },
+    { href: "/lara", label: "✨ Lara" },
     { href: "/funil", label: "Funil" },
     { href: "/pipeline", label: "Pipeline" },
   ],
