@@ -12,11 +12,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type {
   MessageParam,
+  MessageCreateParamsNonStreaming,
   Tool,
   ToolResultBlockParam,
 } from "@anthropic-ai/sdk/resources/messages";
 
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
+const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5";
 
 function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -339,14 +340,17 @@ export async function runLara(
   const acoes: string[] = [];
   const anthropic = client();
 
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 6; i++) {
     const resp = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 1500,
+      max_tokens: 4000,
+      // Esforço médio: a Lara raciocina o suficiente para pedidos vagos, mas
+      // sem "pensar demais" (mantém a resposta rápida no chat).
+      output_config: { effort: "medium" },
       system: SYSTEM,
       tools: TOOLS,
       messages,
-    });
+    } as MessageCreateParamsNonStreaming);
 
     if (resp.stop_reason === "tool_use") {
       messages.push({ role: "assistant", content: resp.content });

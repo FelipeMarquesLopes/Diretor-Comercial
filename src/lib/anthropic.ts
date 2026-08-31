@@ -13,7 +13,10 @@ import type {
   ResponseSentiment,
 } from "./types";
 
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
+// Modelo mais capaz e atual (mesma tabela de preço do 4.8). O Opus 5 "pensa"
+// (raciocínio adaptativo) antes de responder — por isso os limites de tokens
+// abaixo têm folga, para o raciocínio não truncar a resposta final.
+const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5";
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -214,13 +217,24 @@ function parseJsonObject(text: string): Record<string, unknown> {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-async function ask(system: string, user: string, maxTokens = 1024): Promise<string> {
+type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+
+async function ask(
+  system: string,
+  user: string,
+  maxTokens = 4000,
+  effort?: Effort,
+): Promise<string> {
   const response = await getClient().messages.create({
     model: MODEL,
     max_tokens: maxTokens,
+    // O esforço controla o quanto o modelo "pensa": alto para textos (qualidade),
+    // baixo para tarefas simples/frequentes como classificar respostas (rápido
+    // e barato). Sem effort = padrão do modelo (alto).
+    ...(effort ? { output_config: { effort } } : {}),
     system,
     messages: [{ role: "user", content: user }],
-  });
+  } as Anthropic.MessageCreateParamsNonStreaming);
   const text = response.content.find((b) => b.type === "text");
   if (!text || text.type !== "text") {
     throw new Error("Resposta inesperada da IA (sem bloco de texto).");
@@ -668,7 +682,8 @@ export async function classifyResponse(
   const raw = await ask(
     system,
     `Hoje é ${hoje}.\nResposta recebida:\n"""${text}"""`,
-    300,
+    2500,
+    "low", // classificar é simples e frequente → esforço baixo (rápido/barato)
   );
   const parsed = parseJsonObject(raw) as Partial<ClassifiedResponse>;
   const sentiment: ResponseSentiment =
