@@ -4,6 +4,28 @@ import { useEffect, useRef, useState } from "react";
 
 type Msg = { role: "user" | "assistant"; content: string; acoes?: string[] };
 
+// Tipos mínimos do reconhecimento de voz do navegador (Web Speech API).
+interface FalaEvento {
+  results: {
+    length: number;
+    [i: number]: { isFinal: boolean; 0: { transcript: string } };
+  };
+}
+interface Reconhecedor {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((e: FalaEvento) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+interface JanelaComVoz extends Window {
+  SpeechRecognition?: new () => Reconhecedor;
+  webkitSpeechRecognition?: new () => Reconhecedor;
+}
+
 const SUGESTOES = [
   "Como está o funil hoje?",
   "Quantos rascunhos pendentes eu tenho?",
@@ -22,11 +44,53 @@ export default function Lara() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [ouvindo, setOuvindo] = useState(false);
+  const [micOk, setMicOk] = useState(false);
   const fimRef = useRef<HTMLDivElement>(null);
+  const recRef = useRef<Reconhecedor | null>(null);
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, loading]);
+
+  // Verifica se o navegador tem reconhecimento de voz.
+  useEffect(() => {
+    const w = window as JanelaComVoz;
+    setMicOk(!!(w.SpeechRecognition || w.webkitSpeechRecognition));
+  }, []);
+
+  // Botão de áudio: fala → transcreve → dispara direto para a Lara.
+  function toggleMic() {
+    const w = window as JanelaComVoz;
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SR) return;
+    if (ouvindo) {
+      recRef.current?.stop();
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "pt-BR";
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.onresult = (e: FalaEvento) => {
+      let txt = "";
+      for (let i = 0; i < e.results.length; i++) {
+        txt += e.results[i][0].transcript;
+      }
+      setInput(txt);
+      const ultimo = e.results[e.results.length - 1];
+      if (ultimo?.isFinal) {
+        rec.stop();
+        const final = txt.trim();
+        if (final) enviar(final);
+      }
+    };
+    rec.onerror = () => setOuvindo(false);
+    rec.onend = () => setOuvindo(false);
+    recRef.current = rec;
+    setOuvindo(true);
+    rec.start();
+  }
 
   async function enviar(texto: string) {
     const t = texto.trim();
@@ -141,10 +205,25 @@ export default function Lara() {
         }}
         className="mt-2 flex items-center gap-2"
       >
+        {micOk && (
+          <button
+            type="button"
+            onClick={toggleMic}
+            disabled={loading}
+            title={ouvindo ? "Parar de ouvir" : "Falar (áudio → texto)"}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg transition-colors disabled:opacity-50 ${
+              ouvindo
+                ? "animate-pulse bg-red-500 text-white"
+                : "border border-brand-200 bg-white text-brand-700 hover:bg-brand-50"
+            }`}
+          >
+            {ouvindo ? "⏹️" : "🎤"}
+          </button>
+        )}
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Peça algo à Lara…"
+          placeholder={ouvindo ? "Ouvindo… pode falar" : "Peça algo à Lara…"}
           disabled={loading}
           className="flex-1 rounded-full border border-brand-200 px-4 py-2.5 text-sm outline-none focus:border-brand-500 disabled:opacity-60"
         />
