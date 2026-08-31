@@ -51,6 +51,12 @@ diga que "não consegue" sem antes verificar suas ferramentas. Para agir sobre u
 parceiro específico, primeiro descubra o id dele com 'listar_empresas' (busca \
 por nome), depois use a ferramenta de ação com esse id.
 
+MOSTRAR RASCUNHOS: quando o CEO pedir para VER/analisar/ler um rascunho, use \
+'listar_rascunhos' para achar o(s) rascunho(s) e 'ver_rascunho' para pegar o \
+TEXTO COMPLETO, e então mostre na conversa o parceiro, o assunto e o corpo do \
+e-mail (transcreva o texto do rascunho para ele ler). Nunca diga que não \
+consegue puxar o rascunho.
+
 REGRAS INVIOLÁVEIS:
 - Você NUNCA envia e-mail. Você PREPARA rascunhos; o envio é sempre o clique \
 final do Felipe na aba Rascunhos. Se ele pedir para "enviar", prepare o \
@@ -93,10 +99,21 @@ const TOOLS: Tool[] = [
   },
   {
     name: "listar_rascunhos",
-    description: "Lista rascunhos de e-mail. status opcional: pendente|aprovado|enviado|rejeitado.",
+    description:
+      "Lista rascunhos de e-mail (com o parceiro, assunto e uma prévia do texto). status opcional: pendente|aprovado|enviado|rejeitado.",
     input_schema: {
       type: "object",
       properties: { status: { type: "string" } },
+    },
+  },
+  {
+    name: "ver_rascunho",
+    description:
+      "Puxa o TEXTO COMPLETO de um rascunho pelo id (assunto + corpo + destinatário), para mostrar ao CEO no chat quando ele pedir para ver/analisar o rascunho.",
+    input_schema: {
+      type: "object",
+      properties: { draftId: { type: "string" } },
+      required: ["draftId"],
     },
   },
   {
@@ -333,10 +350,37 @@ async function executar(
     case "listar_rascunhos": {
       const p = new URLSearchParams();
       if (input.status) p.set("status", String(input.status));
-      const d = (await api(ctx, "GET", `/api/drafts?${p}`)) as { drafts?: unknown[] };
+      const d = (await api(ctx, "GET", `/api/drafts?${p}`)) as {
+        drafts?: Record<string, unknown>[];
+      };
+      const lista = (d.drafts ?? []).slice(0, 20).map((r) => ({
+        id: r.id,
+        empresa: (r.companies as { name?: string } | null)?.name ?? null,
+        subject: r.subject,
+        status: r.status,
+        channel: r.channel,
+        is_reply: r.is_reply,
+        blocked: r.blocked,
+        previa:
+          typeof r.body === "string" ? r.body.slice(0, 220) : null,
+      }));
+      return { total: d.drafts?.length ?? 0, rascunhos: lista };
+    }
+    case "ver_rascunho": {
+      const d = (await api(ctx, "GET", `/api/drafts/${input.draftId}`)) as {
+        draft?: Record<string, unknown>;
+        error?: string;
+      };
+      if (d.error || !d.draft) return { erro: d.error ?? "Rascunho não encontrado." };
+      const r = d.draft;
       return {
-        total: d.drafts?.length ?? 0,
-        rascunhos: enxugar(d.drafts, ["id", "subject", "status", "channel", "is_reply", "blocked"]),
+        id: r.id,
+        empresa: (r.companies as { name?: string } | null)?.name ?? null,
+        para: (r.contacts as { email?: string } | null)?.email ?? null,
+        assunto: r.subject,
+        corpo: r.body,
+        status: r.status,
+        canal: r.channel,
       };
     }
     case "listar_tarefas": {

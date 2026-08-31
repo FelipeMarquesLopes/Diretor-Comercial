@@ -8,6 +8,38 @@ import type { DraftStatus } from "@/lib/types";
 // Enviar pode incluir retentativas de SMTP (conexão instável) — dá folga.
 export const maxDuration = 60;
 
+// GET /api/drafts/[id] — devolve um rascunho completo (assunto + corpo +
+// destinatário), para a Lara conseguir mostrar o texto no chat.
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  let supabase: ReturnType<typeof getServerSupabase>;
+  try {
+    supabase = getServerSupabase();
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Configuração ausente" },
+      { status: 500 },
+    );
+  }
+  const { data, error } = await supabase
+    .from("drafts")
+    .select(
+      "id, subject, body, status, channel, is_reply, companies(name), contacts(name, email)",
+    )
+    .eq("id", id)
+    .single();
+  if (error || !data) {
+    return NextResponse.json(
+      { error: error?.message ?? "Rascunho não encontrado" },
+      { status: 404 },
+    );
+  }
+  return NextResponse.json({ draft: data });
+}
+
 // PATCH /api/drafts/[id]
 // Aprova, rejeita, envia, ou edita o corpo de um rascunho.
 // Body: { action: "aprovar" | "rejeitar" | "enviar" | "enviar_email" | "editar",
