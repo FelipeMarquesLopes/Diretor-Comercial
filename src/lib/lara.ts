@@ -44,13 +44,21 @@ Estilo: português do Brasil, direta, cordial e eficiente, como uma secretária 
 executiva de confiança. Respostas curtas. Ao concluir uma ação, diga em 1–2 \
 frases o que fez e o resultado.
 
+AUTONOMIA: você tem AUTONOMIA para executar o que o Felipe pedir usando as \
+ferramentas — inclusive AGIR (atualizar estágio/status no funil e pipeline, \
+marcar encaminhamentos, cadastrar, abordar, rejeitar rascunho, excluir). Não \
+diga que "não consegue" sem antes verificar suas ferramentas. Para agir sobre um \
+parceiro específico, primeiro descubra o id dele com 'listar_empresas' (busca \
+por nome), depois use a ferramenta de ação com esse id.
+
 REGRAS INVIOLÁVEIS:
 - Você NUNCA envia e-mail. Você PREPARA rascunhos; o envio é sempre o clique \
 final do Felipe na aba Rascunhos. Se ele pedir para "enviar", prepare o \
 rascunho e avise que está pronto para ele aprovar e disparar.
-- Antes de qualquer ação que EXCLUA dados em massa, confirme com ele antes.
-- Use SEMPRE as ferramentas para obter dados reais — nunca invente números, \
-nomes ou status. Se não tiver certeza, consulte com uma ferramenta.
+- Antes de EXCLUIR dados ou de usar 'abordar' (que gasta 1 crédito do Apollo), \
+confirme com ele antes.
+- Use SEMPRE as ferramentas para obter dados reais e para AGIR — nunca invente \
+números, nomes ou status. Se não tiver certeza, consulte com uma ferramenta.
 - Se faltar informação para executar (ex: qual categoria prospectar, qual \
 cidade), pergunte de forma objetiva em vez de adivinhar.
 - Categorias válidas de parceiro: empresa, medico, escola, igreja, sindicato, \
@@ -168,6 +176,84 @@ const TOOLS: Tool[] = [
       properties: { prefeitura: { type: "string" } },
     },
   },
+  {
+    name: "atualizar_estagio",
+    description:
+      "Move um parceiro no PIPELINE e atualiza o STATUS no funil. Use quando o CEO disser que avançou/fechou/perdeu um parceiro (ex: 'fechamos parceria', 'marcar como parceria ativa'). Estágios válidos por categoria — operadora: novo, contatado, em_conversa, em_credenciamento, implantacao, credenciada(=parceria fechada); empresa: novo, contatado, em_conversa, proposta, contrato, ativa(=fechada); escola/igreja: novo, contatado, em_conversa, reuniao, parceria(=fechada); medico: novo, contatado, em_conversa, visita, encaminhando(=fechada); sindicato: novo, contatado, em_conversa, reuniao, proposta, parceria(=fechada). Para descartar, use stage 'descartado'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        companyId: { type: "string" },
+        stage: { type: "string", description: "id do estágio (ver lista por categoria)" },
+      },
+      required: ["companyId", "stage"],
+    },
+  },
+  {
+    name: "marcar_encaminhamento",
+    description:
+      "Registra que um parceiro é fonte de encaminhamento e/ou soma/subtrai indicações. delta +1 para registrar uma nova indicação.",
+    input_schema: {
+      type: "object",
+      properties: {
+        companyId: { type: "string" },
+        isSource: { type: "boolean" },
+        delta: { type: "number", description: "+1, -1..." },
+      },
+      required: ["companyId"],
+    },
+  },
+  {
+    name: "cadastrar_parceiro",
+    description:
+      "Cadastra manualmente um parceiro (quando o CEO já tem o contato). Entra qualificado, pronto para abordar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        category: { type: "string", description: "empresa|medico|escola|igreja|sindicato" },
+        contactName: { type: "string" },
+        title: { type: "string" },
+        email: { type: "string" },
+        phone: { type: "string" },
+        city: { type: "string" },
+        notes: { type: "string" },
+      },
+      required: ["name", "category"],
+    },
+  },
+  {
+    name: "excluir_parceiros",
+    description:
+      "Exclui um ou mais parceiros pelos ids. Ação destrutiva — confirme com o CEO antes.",
+    input_schema: {
+      type: "object",
+      properties: { ids: { type: "array", items: { type: "string" } } },
+      required: ["ids"],
+    },
+  },
+  {
+    name: "abordar",
+    description:
+      "Revela o e-mail do decisor (GASTA 1 crédito do Apollo), escreve o rascunho e coloca no follow-up. Confirme com o CEO antes de usar, por causa do custo. NÃO envia — o rascunho fica pendente.",
+    input_schema: {
+      type: "object",
+      properties: {
+        companyId: { type: "string" },
+        hook: { type: "string", description: "nr1|saude_mental|tea_aba (opcional)" },
+      },
+      required: ["companyId"],
+    },
+  },
+  {
+    name: "rejeitar_rascunho",
+    description: "Rejeita (descarta) um rascunho pendente pelo id.",
+    input_schema: {
+      type: "object",
+      properties: { draftId: { type: "string" } },
+      required: ["draftId"],
+    },
+  },
 ];
 
 // --- Execução das ferramentas (chamando os próprios endpoints) --------------
@@ -176,7 +262,7 @@ type Ctx = { origin: string; auth: string | null };
 
 async function api(
   ctx: Ctx,
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
 ): Promise<unknown> {
@@ -320,6 +406,37 @@ async function executar(
     case "buscar_licitacoes":
       return api(ctx, "POST", "/api/licitacoes/monitor", {
         prefeitura: input.prefeitura || undefined,
+      });
+    case "atualizar_estagio":
+      return api(ctx, "POST", `/api/companies/${input.companyId}/stage`, {
+        stage: input.stage,
+      });
+    case "marcar_encaminhamento":
+      return api(ctx, "POST", `/api/companies/${input.companyId}/referral`, {
+        isSource: input.isSource,
+        delta: input.delta,
+      });
+    case "cadastrar_parceiro":
+      return api(ctx, "POST", "/api/companies", {
+        name: input.name,
+        category: input.category,
+        contactName: input.contactName,
+        title: input.title,
+        email: input.email,
+        phone: input.phone,
+        city: input.city,
+        notes: input.notes,
+      });
+    case "excluir_parceiros":
+      return api(ctx, "POST", "/api/companies/bulk-delete", { ids: input.ids });
+    case "abordar":
+      return api(ctx, "POST", "/api/prospect/abordar", {
+        companyId: input.companyId,
+        hook: input.hook ?? "saude_mental",
+      });
+    case "rejeitar_rascunho":
+      return api(ctx, "PATCH", `/api/drafts/${input.draftId}`, {
+        action: "rejeitar",
       });
     default:
       return { erro: `Ferramenta desconhecida: ${name}` };
