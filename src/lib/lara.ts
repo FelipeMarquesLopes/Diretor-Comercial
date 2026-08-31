@@ -57,6 +57,17 @@ TEXTO COMPLETO, e então mostre na conversa o parceiro, o assunto e o corpo do \
 e-mail (transcreva o texto do rascunho para ele ler). Nunca diga que não \
 consegue puxar o rascunho.
 
+BUSCA NA WEB (você NÃO depende só do Apollo): você tem a ferramenta de pesquisa \
+na internet (web_search). Quando o Apollo não tiver o e-mail de um decisor, \
+PESQUISE na web (site oficial do parceiro, Google, páginas de contato) para \
+encontrar o e-mail institucional. Ao encontrar um e-mail confiável:
+- Se o parceiro JÁ existe no sistema (ex: veio de uma prospecção): use \
+'definir_contato' (companyId + email) e depois 'preparar_rascunho'.
+- Se ainda NÃO existe: use 'cadastrar_parceiro' (com name, category e email) e \
+depois 'preparar_rascunho' com o id retornado.
+Assim você resolve sozinha e sobe o rascunho. Só não invente e-mail: se a busca \
+não achar um endereço confiável, diga isso e ofereça alternativas.
+
 REGRAS INVIOLÁVEIS:
 - Você NUNCA envia e-mail. Você PREPARA rascunhos; o envio é sempre o clique \
 final do Felipe na aba Rascunhos. Se ele pedir para "enviar", prepare o \
@@ -271,6 +282,22 @@ const TOOLS: Tool[] = [
       required: ["draftId"],
     },
   },
+  {
+    name: "definir_contato",
+    description:
+      "Grava/atualiza o e-mail e contato de um parceiro JÁ existente (pelo id). Use quando você encontrar o e-mail em outra fonte (site/Google) e o parceiro já estiver no sistema. Depois, use 'preparar_rascunho' para subir a abordagem.",
+    input_schema: {
+      type: "object",
+      properties: {
+        companyId: { type: "string" },
+        email: { type: "string" },
+        name: { type: "string", description: "nome do contato/pessoa (opcional)" },
+        title: { type: "string", description: "cargo (opcional)" },
+        phone: { type: "string" },
+      },
+      required: ["companyId", "email"],
+    },
+  },
 ];
 
 // --- Execução das ferramentas (chamando os próprios endpoints) --------------
@@ -482,6 +509,13 @@ async function executar(
       return api(ctx, "PATCH", `/api/drafts/${input.draftId}`, {
         action: "rejeitar",
       });
+    case "definir_contato":
+      return api(ctx, "POST", `/api/companies/${input.companyId}/contact`, {
+        name: input.name,
+        email: input.email,
+        title: input.title,
+        phone: input.phone,
+      });
     default:
       return { erro: `Ferramenta desconhecida: ${name}` };
   }
@@ -510,7 +544,11 @@ export async function runLara(
   const acoes: string[] = [];
   const anthropic = client();
 
-  for (let i = 0; i < 6; i++) {
+  // Busca na web é uma ferramenta de SERVIDOR (rodada pela Anthropic): a Lara
+  // pesquisa no Google/sites quando o Apollo não tem o contato.
+  const webTool = { type: "web_search_20260209", name: "web_search", max_uses: 5 };
+
+  for (let i = 0; i < 8; i++) {
     const resp = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 4000,
@@ -518,9 +556,23 @@ export async function runLara(
       // sem "pensar demais" (mantém a resposta rápida no chat).
       output_config: { effort: "medium" },
       system: SYSTEM,
-      tools: TOOLS,
+      tools: [...TOOLS, webTool],
       messages,
     } as MessageCreateParamsNonStreaming);
+
+    // Registra (transparência) se a Lara pesquisou na web nesta rodada.
+    for (const block of resp.content as { type: string }[]) {
+      if (block.type.includes("web_search")) {
+        if (!acoes.includes("pesquisa_web")) acoes.push("pesquisa_web");
+      }
+    }
+
+    // Ferramenta de servidor (web) pode pausar o turno — retomamos devolvendo
+    // o conteúdo e chamando de novo (a Anthropic já executou a busca).
+    if (resp.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: resp.content });
+      continue;
+    }
 
     if (resp.stop_reason === "tool_use") {
       messages.push({ role: "assistant", content: resp.content });
