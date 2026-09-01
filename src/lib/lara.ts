@@ -18,6 +18,7 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages";
 
 import { MODEL } from "./model";
+import { buscarArquivos, lerArquivo, driveConfigured } from "./drive";
 
 function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -67,6 +68,15 @@ encontrar o e-mail institucional. Ao encontrar um e-mail confiável:
 depois 'preparar_rascunho' com o id retornado.
 Assim você resolve sozinha e sobe o rascunho. Só não invente e-mail: se a busca \
 não achar um endereço confiável, diga isso e ofereça alternativas.
+
+GOOGLE DRIVE (documentos comerciais): quando um parceiro responder PEDINDO \
+documentos ou informações (CNPJ, contrato social, alvará, dados da clínica, \
+apresentação...), use este fluxo: (1) veja o pedido com 'listar_respostas'; \
+(2) ache os documentos com 'buscar_no_drive' e leia o que precisar com \
+'ler_documento_drive'; (3) monte a réplica com 'responder_resposta', \
+preenchendo com as informações REAIS tiradas do Drive (ou citando os documentos \
+a anexar). O Drive só tem documentos COMERCIAIS — nunca há dado de paciente. Se \
+não achar o documento, diga o que faltou. Nunca invente números de documentos.
 
 ENVIO DE E-MAIL (importante): você PODE aprovar e DISPARAR e-mails com \
 'aprovar_e_enviar' — mas SOMENTE quando o Felipe mandar EXPLICITAMENTE (ex: \
@@ -296,6 +306,48 @@ const TOOLS: Tool[] = [
       type: "object",
       properties: { draftId: { type: "string" } },
       required: ["draftId"],
+    },
+  },
+  {
+    name: "listar_respostas",
+    description:
+      "Lista as respostas recebidas dos parceiros (operadoras, empresas...) ainda abertas — com o texto do que eles pediram/responderam. Use para ver o que uma operadora está solicitando.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "responder_resposta",
+    description:
+      "Cria a RÉPLICA (rascunho) a uma resposta recebida, pelo id da resposta, com a sua orientação. Use depois de entender o pedido do parceiro (e, se preciso, de buscar dados no Drive). Não envia — fica pendente.",
+    input_schema: {
+      type: "object",
+      properties: {
+        responseId: { type: "string" },
+        instruction: {
+          type: "string",
+          description:
+            "o que a réplica deve dizer (ex: 'informar CNPJ 39.676.660/0001-22 e anexar contrato social')",
+        },
+      },
+      required: ["responseId", "instruction"],
+    },
+  },
+  {
+    name: "buscar_no_drive",
+    description:
+      "Busca documentos no Google Drive comercial da clínica (CNPJ, contrato social, alvará, apresentações, tabelas...). termo por nome/conteúdo; vazio lista os mais recentes. Só enxerga as pastas comerciais compartilhadas (nunca dado de paciente).",
+    input_schema: {
+      type: "object",
+      properties: { termo: { type: "string" } },
+    },
+  },
+  {
+    name: "ler_documento_drive",
+    description:
+      "Lê o conteúdo de um documento do Drive pelo id (retornado por buscar_no_drive) para extrair as informações que o parceiro pediu.",
+    input_schema: {
+      type: "object",
+      properties: { fileId: { type: "string" } },
+      required: ["fileId"],
     },
   },
   {
@@ -536,6 +588,43 @@ async function executar(
         title: input.title,
         phone: input.phone,
       });
+    case "listar_respostas": {
+      const d = (await api(ctx, "GET", "/api/responses")) as { responses?: unknown[] };
+      return {
+        total: d.responses?.length ?? 0,
+        respostas: enxugar(
+          d.responses,
+          ["id", "sentiment", "intent", "summary", "raw_text"],
+          20,
+        ),
+      };
+    }
+    case "responder_resposta":
+      return api(ctx, "POST", `/api/responses/${input.responseId}`, {
+        action: "responder",
+        instruction: input.instruction,
+      });
+    case "buscar_no_drive": {
+      if (!driveConfigured()) {
+        return { erro: "Google Drive ainda não está conectado (falta a chave na Vercel)." };
+      }
+      try {
+        const arquivos = await buscarArquivos(String(input.termo ?? ""));
+        return { total: arquivos.length, arquivos };
+      } catch (e) {
+        return { erro: e instanceof Error ? e.message : "Falha ao buscar no Drive." };
+      }
+    }
+    case "ler_documento_drive": {
+      if (!driveConfigured()) {
+        return { erro: "Google Drive ainda não está conectado." };
+      }
+      try {
+        return await lerArquivo(String(input.fileId));
+      } catch (e) {
+        return { erro: e instanceof Error ? e.message : "Falha ao ler o documento." };
+      }
+    }
     default:
       return { erro: `Ferramenta desconhecida: ${name}` };
   }
