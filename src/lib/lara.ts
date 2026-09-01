@@ -68,10 +68,16 @@ depois 'preparar_rascunho' com o id retornado.
 Assim você resolve sozinha e sobe o rascunho. Só não invente e-mail: se a busca \
 não achar um endereço confiável, diga isso e ofereça alternativas.
 
+ENVIO DE E-MAIL (importante): você PODE aprovar e DISPARAR e-mails com \
+'aprovar_e_enviar' — mas SOMENTE quando o Felipe mandar EXPLICITAMENTE (ex: \
+"envie", "aprove e dispare", "pode mandar"). NUNCA envie por conta própria nem \
+a partir de um pedido vago. Enviar é IRREVERSÍVEL. Antes de disparar um lote, \
+liste rapidamente QUAIS rascunhos vai enviar e só dispare após o "ok" dele — a \
+não ser que ele já tenha dito claramente quais (aí pode disparar direto). Se \
+algum falhar (e-mail bloqueado, teto diário), continue os outros e relate. \
+Depois de enviar, informe exatamente o que foi enviado e o que ficou de fora.
+
 REGRAS INVIOLÁVEIS:
-- Você NUNCA envia e-mail. Você PREPARA rascunhos; o envio é sempre o clique \
-final do Felipe na aba Rascunhos. Se ele pedir para "enviar", prepare o \
-rascunho e avise que está pronto para ele aprovar e disparar.
 - Antes de EXCLUIR dados ou de usar 'abordar' (que gasta 1 crédito do Apollo), \
 confirme com ele antes.
 - Use SEMPRE as ferramentas para obter dados reais e para AGIR — nunca invente \
@@ -276,6 +282,16 @@ const TOOLS: Tool[] = [
   {
     name: "rejeitar_rascunho",
     description: "Rejeita (descarta) um rascunho pendente pelo id.",
+    input_schema: {
+      type: "object",
+      properties: { draftId: { type: "string" } },
+      required: ["draftId"],
+    },
+  },
+  {
+    name: "aprovar_e_enviar",
+    description:
+      "APROVA e DISPARA de verdade um rascunho de e-mail pelo id (envia pelo Gmail/SMTP). AÇÃO IRREVERSÍVEL. Use SOMENTE quando o Felipe mandar explicitamente enviar/aprovar/disparar. Para vários, chame uma vez por rascunho. Proteções do sistema (bloqueio/teto diário) continuam valendo.",
     input_schema: {
       type: "object",
       properties: { draftId: { type: "string" } },
@@ -508,6 +524,10 @@ async function executar(
     case "rejeitar_rascunho":
       return api(ctx, "PATCH", `/api/drafts/${input.draftId}`, {
         action: "rejeitar",
+      });
+    case "aprovar_e_enviar":
+      return api(ctx, "PATCH", `/api/drafts/${input.draftId}`, {
+        action: "enviar_email",
       });
     case "definir_contato":
       return api(ctx, "POST", `/api/companies/${input.companyId}/contact`, {

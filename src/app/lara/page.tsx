@@ -39,7 +39,7 @@ export default function Lara() {
     {
       role: "assistant",
       content:
-        "Oi, Felipe! Sou a Lara, sua assistente aqui no Growth AI. Posso consultar o funil, prospectar, buscar licitações, criar tarefas e preparar rascunhos — é só pedir. (Lembrando: e-mail eu preparo, mas o envio é sempre o seu clique final.)",
+        "Oi, Felipe! Sou a Lara, sua assistente aqui no Growth AI. Posso consultar o funil, prospectar, buscar licitações, pesquisar contatos na web, criar tarefas, preparar rascunhos e — quando você mandar — aprovar e disparar os e-mails. É só pedir.",
     },
   ]);
   const [input, setInput] = useState("");
