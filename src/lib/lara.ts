@@ -720,13 +720,32 @@ export interface LaraResult {
   acoes: string[]; // nomes das ferramentas que a Lara usou (transparência)
 }
 
+// Garante que NENHUMA mensagem vá com conteúdo vazio (a API rejeita com
+// "messages.N.content: Field required") e que a conversa comece por 'user'.
+function saneiarMensagens(msgs: MessageParam[]): MessageParam[] {
+  const limpos = msgs.map((m) => {
+    const c = m.content;
+    if (typeof c === "string") {
+      return c.trim() ? m : { ...m, content: "(sem conteúdo)" };
+    }
+    if (Array.isArray(c)) {
+      return c.length > 0 ? m : { ...m, content: "(sem conteúdo)" };
+    }
+    return { ...m, content: "(sem conteúdo)" };
+  });
+  let start = 0;
+  while (start < limpos.length && limpos[start].role !== "user") start++;
+  return start > 0 ? limpos.slice(start) : limpos;
+}
+
 // Roda um turno da Lara: recebe o histórico da conversa, deixa o modelo pensar
 // e usar ferramentas (em loop) e devolve a resposta final + as ações feitas.
 export async function runLara(
   ctx: Ctx,
   turns: LaraTurn[],
 ): Promise<LaraResult> {
-  const messages: MessageParam[] = turns.map((t) => ({
+  // Limita o histórico (conversas muito longas ficam caras e frágeis).
+  const messages: MessageParam[] = turns.slice(-24).map((t) => ({
     role: t.role,
     content: t.content,
   }));
@@ -746,7 +765,7 @@ export async function runLara(
       output_config: { effort: "medium" },
       system: SYSTEM,
       tools: [...TOOLS, webTool],
-      messages,
+      messages: saneiarMensagens(messages),
     } as MessageCreateParamsNonStreaming);
 
     // Registra (transparência) se a Lara pesquisou na web nesta rodada.
@@ -759,7 +778,9 @@ export async function runLara(
     // Ferramenta de servidor (web) pode pausar o turno — retomamos devolvendo
     // o conteúdo e chamando de novo (a Anthropic já executou a busca).
     if (resp.stop_reason === "pause_turn") {
-      messages.push({ role: "assistant", content: resp.content });
+      if (resp.content.length > 0) {
+        messages.push({ role: "assistant", content: resp.content });
+      }
       continue;
     }
 
@@ -775,10 +796,12 @@ export async function runLara(
           } catch (e) {
             out = { erro: e instanceof Error ? e.message : "falha na ferramenta" };
           }
+          const bruto = JSON.stringify(out ?? { ok: true });
+          const conteudo = (bruto && bruto !== "undefined" ? bruto : "{}").slice(0, 6000);
           results.push({
             type: "tool_result",
             tool_use_id: block.id,
-            content: JSON.stringify(out).slice(0, 6000),
+            content: conteudo || "{}",
           });
         }
       }
