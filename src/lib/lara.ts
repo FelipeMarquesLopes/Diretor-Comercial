@@ -19,6 +19,8 @@ import type {
 
 import { MODEL } from "./model";
 import { buscarArquivos, lerArquivo, driveConfigured } from "./drive";
+import { listarEmails, lerEmail } from "./mailread";
+import { isInboxConfigured } from "./inbox";
 
 function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -77,6 +79,16 @@ apresentação...), use este fluxo: (1) veja o pedido com 'listar_respostas'; \
 preenchendo com as informações REAIS tiradas do Drive (ou citando os documentos \
 a anexar). O Drive só tem documentos COMERCIAIS — nunca há dado de paciente. Se \
 não achar o documento, diga o que faltou. Nunca invente números de documentos.
+
+CAIXA DE E-MAIL (Titan): você pode ABRIR a caixa credenciamento@clinicamenthalhelp.com.br \
+e ler os e-mails que chegam — inclusive os que NÃO entraram na automação (ex: \
+uma resposta que veio em cópia). Quando o Felipe pedir para ver/analisar um \
+e-mail que ele diz não ter aparecido no painel: use 'ler_caixa_email' (filtre \
+por remetente e/ou termo, ex: o nome da operadora) para achar, e 'ler_email' \
+(pelo uid) para ler o conteúdo. Se ele pedir para responder, ache o parceiro com \
+'listar_empresas' e use 'preparar_replica' (companyId + o texto lido + a \
+orientação) — e, se pedirem documentos, combine com o Drive. Só leitura da \
+caixa; nada é apagado.
 
 ENVIO DE E-MAIL (importante): você PODE aprovar e DISPARAR e-mails com \
 'aprovar_e_enviar' — mas SOMENTE quando o Felipe mandar EXPLICITAMENTE (ex: \
@@ -329,6 +341,43 @@ const TOOLS: Tool[] = [
         },
       },
       required: ["responseId", "instruction"],
+    },
+  },
+  {
+    name: "ler_caixa_email",
+    description:
+      "Abre a CAIXA DE ENTRADA do Titan (credenciamento@clinicamenthalhelp.com.br) e lista e-mails recentes (últimos ~30 dias) — inclusive os que ficaram FORA da automação (ex: resposta que chegou em cópia). Filtros opcionais: remetente (nome/e-mail) e termo (assunto/corpo). Retorna uid, remetente, assunto e data. Só leitura.",
+    input_schema: {
+      type: "object",
+      properties: {
+        remetente: { type: "string", description: "nome ou e-mail do remetente" },
+        termo: { type: "string", description: "palavra no assunto/corpo (ex: nome da operadora)" },
+        max: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "ler_email",
+    description:
+      "Lê o CONTEÚDO completo de um e-mail da caixa pelo uid (retornado por ler_caixa_email): remetente, para, cópia, assunto e corpo.",
+    input_schema: {
+      type: "object",
+      properties: { uid: { type: "number" } },
+      required: ["uid"],
+    },
+  },
+  {
+    name: "preparar_replica",
+    description:
+      "Prepara a resposta (rascunho pendente) a um e-mail recebido, mesmo fora da automação, pelo id do PARCEIRO (use listar_empresas para achar). Passe o texto do e-mail recebido e a orientação do que responder. Não envia.",
+    input_schema: {
+      type: "object",
+      properties: {
+        companyId: { type: "string" },
+        incomingText: { type: "string", description: "o texto do e-mail que você leu" },
+        instruction: { type: "string", description: "o que a resposta deve dizer" },
+      },
+      required: ["companyId", "instruction"],
     },
   },
   {
@@ -602,6 +651,37 @@ async function executar(
     case "responder_resposta":
       return api(ctx, "POST", `/api/responses/${input.responseId}`, {
         action: "responder",
+        instruction: input.instruction,
+      });
+    case "ler_caixa_email": {
+      if (!isInboxConfigured()) {
+        return { erro: "A caixa de e-mail (Titan/IMAP) não está configurada." };
+      }
+      try {
+        const emails = await listarEmails({
+          remetente: input.remetente ? String(input.remetente) : undefined,
+          termo: input.termo ? String(input.termo) : undefined,
+          max: typeof input.max === "number" ? input.max : undefined,
+        });
+        return { total: emails.length, emails };
+      } catch (e) {
+        return { erro: e instanceof Error ? e.message : "Falha ao ler a caixa." };
+      }
+    }
+    case "ler_email": {
+      if (!isInboxConfigured()) {
+        return { erro: "A caixa de e-mail (Titan/IMAP) não está configurada." };
+      }
+      try {
+        const email = await lerEmail(Number(input.uid));
+        return email ?? { erro: "E-mail não encontrado." };
+      } catch (e) {
+        return { erro: e instanceof Error ? e.message : "Falha ao ler o e-mail." };
+      }
+    }
+    case "preparar_replica":
+      return api(ctx, "POST", `/api/companies/${input.companyId}/reply`, {
+        incomingText: input.incomingText,
         instruction: input.instruction,
       });
     case "buscar_no_drive": {

@@ -63,7 +63,7 @@ function detectBounce(
   return { isBounce: true, failed: Array.from(failed) };
 }
 
-function imapConfig() {
+export function imapConfig() {
   const host =
     process.env.IMAP_HOST ??
     (process.env.SMTP_HOST
