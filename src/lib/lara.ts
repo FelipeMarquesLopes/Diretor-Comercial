@@ -21,6 +21,7 @@ import { MODEL } from "./model";
 import { buscarArquivos, lerArquivo, driveConfigured } from "./drive";
 import { listarEmails, lerEmail } from "./mailread";
 import { isInboxConfigured } from "./inbox";
+import { arquivosDaLicitacao } from "./pncp";
 
 function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -77,6 +78,15 @@ encontrar o e-mail institucional. Ao encontrar um e-mail confiável:
 depois 'preparar_rascunho' com o id retornado.
 Assim você resolve sozinha e sobe o rascunho. Só não invente e-mail: se a busca \
 não achar um endereço confiável, diga isso e ofereça alternativas.
+
+APROFUNDAR EM LICITAÇÕES: não pare na descrição curta do edital. Para saber de \
+verdade se um edital cobre saúde mental/psicologia/TEA-ABA/reabilitação, vá aos \
+ANEXOS: use 'documentos_da_licitacao' (passando o link do edital de \
+listar_licitacoes) para pegar os PDFs (termo de referência, tabela de \
+procedimentos SUS/SIGTAP) e LEIA o conteúdo com a leitura de página/PDF \
+(web_fetch) nas URLs dos anexos. Depois, analise a lista de procedimentos e diga \
+objetivamente se o objeto contempla o perfil da clínica (e quais itens). Se um \
+anexo não abrir, tente o link e, em último caso, peça o PDF ao Felipe.
 
 GOOGLE DRIVE (documentos comerciais): quando um parceiro responder PEDINDO \
 documentos ou informações (CNPJ, contrato social, alvará, dados da clínica, \
@@ -228,6 +238,16 @@ const TOOLS: Tool[] = [
     input_schema: {
       type: "object",
       properties: { prefeitura: { type: "string" } },
+    },
+  },
+  {
+    name: "documentos_da_licitacao",
+    description:
+      "Lista os ANEXOS de uma licitação (termo de referência, tabela de procedimentos SUS/SIGTAP, especialidades, valores) a partir do LINK do edital (retornado em listar_licitacoes). Depois, leia o conteúdo dos PDFs com web_fetch para APROFUNDAR — confirmar se o edital cobre saúde mental/psicologia/TEA-ABA/reabilitação.",
+    input_schema: {
+      type: "object",
+      properties: { link: { type: "string", description: "link do edital no PNCP" } },
+      required: ["link"],
     },
   },
   {
@@ -602,6 +622,14 @@ async function executar(
       return api(ctx, "POST", "/api/licitacoes/monitor", {
         prefeitura: input.prefeitura || undefined,
       });
+    case "documentos_da_licitacao": {
+      try {
+        const arquivos = await arquivosDaLicitacao(String(input.link ?? ""));
+        return { total: arquivos.length, arquivos };
+      } catch (e) {
+        return { erro: e instanceof Error ? e.message : "Falha ao listar anexos." };
+      }
+    }
     case "atualizar_estagio":
       return api(ctx, "POST", `/api/companies/${input.companyId}/stage`, {
         stage: input.stage,
@@ -759,9 +787,11 @@ export async function runLara(
   const acoes: string[] = [];
   const anthropic = client();
 
-  // Busca na web é uma ferramenta de SERVIDOR (rodada pela Anthropic): a Lara
-  // pesquisa no Google/sites quando o Apollo não tem o contato.
+  // Ferramentas de SERVIDOR (rodadas pela Anthropic): busca na web (Google/
+  // sites) e leitura de página/PDF (para abrir anexos de editais e ler o texto,
+  // inclusive PDF). Servem para a Lara aprofundar além do Apollo/PNCP.
   const webTool = { type: "web_search_20260209", name: "web_search", max_uses: 5 };
+  const fetchTool = { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 };
 
   for (let i = 0; i < 8; i++) {
     const resp = await anthropic.messages.create({
@@ -771,14 +801,17 @@ export async function runLara(
       // sem "pensar demais" (mantém a resposta rápida no chat).
       output_config: { effort: "medium" },
       system: SYSTEM,
-      tools: [...TOOLS, webTool],
+      tools: [...TOOLS, webTool, fetchTool],
       messages: saneiarMensagens(messages),
     } as MessageCreateParamsNonStreaming);
 
-    // Registra (transparência) se a Lara pesquisou na web nesta rodada.
+    // Registra (transparência) se a Lara pesquisou/leu na web nesta rodada.
     for (const block of resp.content as { type: string }[]) {
-      if (block.type.includes("web_search")) {
-        if (!acoes.includes("pesquisa_web")) acoes.push("pesquisa_web");
+      if (block.type.includes("web_search") && !acoes.includes("pesquisa_web")) {
+        acoes.push("pesquisa_web");
+      }
+      if (block.type.includes("web_fetch") && !acoes.includes("leitura_web")) {
+        acoes.push("leitura_web");
       }
     }
 

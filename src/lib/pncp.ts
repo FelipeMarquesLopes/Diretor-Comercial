@@ -14,6 +14,56 @@
 
 const PNCP_BASE = "https://pncp.gov.br/api/consulta/v1";
 
+// User-Agent de navegador (o WAF do gov.br descarta requisições "de robô").
+const PNCP_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
+// Lista os ANEXOS/documentos de um edital (termo de referência, tabela de
+// procedimentos SUS/SIGTAP, etc.) a partir do link do edital no PNCP
+// (…/app/editais/{cnpj}/{ano}/{sequencial}). Devolve título + URL de download,
+// para a Lara ler o conteúdo (aprofundar no objeto real da licitação).
+export async function arquivosDaLicitacao(
+  link: string,
+): Promise<{ titulo: string; url: string }[]> {
+  const m = link.match(/editais\/(\d+)\/(\d+)\/(\d+)/);
+  if (!m) throw new Error("Link do edital em formato inesperado.");
+  const [, cnpj, ano, seq] = m;
+  // Dois caminhos possíveis da API de documentos do PNCP — tentamos os dois.
+  const bases = [
+    `https://pncp.gov.br/pncp-api/v1/orgaos/${cnpj}/compras/${ano}/${seq}/arquivos`,
+    `https://pncp.gov.br/api/pncp/v1/orgaos/${cnpj}/compras/${ano}/${seq}/arquivos`,
+  ];
+  for (const url of bases) {
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": PNCP_UA },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!res.ok) continue;
+      const data = (await res.json()) as Array<{
+        titulo?: string;
+        tipoDocumentoNome?: string;
+        url?: string;
+        uri?: string;
+      }>;
+      if (Array.isArray(data) && data.length > 0) {
+        return data
+          .map((d) => ({
+            titulo: d.titulo ?? d.tipoDocumentoNome ?? "documento",
+            url: d.url ?? d.uri ?? "",
+          }))
+          .filter((a) => a.url);
+      }
+    } catch {
+      // tenta o próximo caminho
+    }
+  }
+  throw new Error(
+    "Não consegui listar os anexos do edital no PNCP. Você pode me colar o link direto do PDF que eu leio.",
+  );
+}
+
 // Modalidades relevantes para contratar/credenciar uma clínica (código do PNCP).
 // Enxuto de propósito: o PNCP tem rate limit (429), então cada modalidade a
 // menos é uma requisição a menos. Estas 4 cobrem o que interessa (credenciar,
