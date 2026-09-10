@@ -19,14 +19,29 @@ const PNCP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
+export interface AnexoLicitacao {
+  titulo: string;
+  url: string;
+  tipo: string; // dica de formato: "pdf", "docx", "zip"...
+}
+
+// Deduz a extensão/tipo do arquivo pelo nome do documento ou pela URL.
+function tipoDoArquivo(titulo: string, url: string): string {
+  const alvo = `${titulo} ${url}`.toLowerCase();
+  const m = alvo.match(/\.(pdf|docx?|xlsx?|zip|rar|png|jpe?g)\b/);
+  return m ? m[1].replace("jpeg", "jpg") : "";
+}
+
 // Lista os ANEXOS/documentos de um edital (termo de referência, tabela de
 // procedimentos SUS/SIGTAP, etc.) a partir do link do edital no PNCP
 // (…/app/editais/{cnpj}/{ano}/{sequencial}). Devolve título + URL de download,
-// para a Lara ler o conteúdo (aprofundar no objeto real da licitação).
+// para a Lara BAIXAR e ler o conteúdo (aprofundar no objeto real da licitação).
 export async function arquivosDaLicitacao(
   link: string,
-): Promise<{ titulo: string; url: string }[]> {
-  const m = link.match(/editais\/(\d+)\/(\d+)\/(\d+)/);
+): Promise<AnexoLicitacao[]> {
+  const m =
+    link.match(/editais\/(\d+)\/(\d+)\/(\d+)/) ??
+    link.match(/orgaos\/(\d+)\/compras\/(\d+)\/(\d+)/);
   if (!m) throw new Error("Link do edital em formato inesperado.");
   const [, cnpj, ano, seq] = m;
   // Dois caminhos possíveis da API de documentos do PNCP — tentamos os dois.
@@ -34,9 +49,9 @@ export async function arquivosDaLicitacao(
     `https://pncp.gov.br/pncp-api/v1/orgaos/${cnpj}/compras/${ano}/${seq}/arquivos`,
     `https://pncp.gov.br/api/pncp/v1/orgaos/${cnpj}/compras/${ano}/${seq}/arquivos`,
   ];
-  for (const url of bases) {
+  for (const base of bases) {
     try {
-      const res = await fetch(url, {
+      const res = await fetch(base, {
         headers: { Accept: "application/json", "User-Agent": PNCP_UA },
         signal: AbortSignal.timeout(12000),
       });
@@ -46,13 +61,20 @@ export async function arquivosDaLicitacao(
         tipoDocumentoNome?: string;
         url?: string;
         uri?: string;
+        sequencialDocumento?: number;
       }>;
       if (Array.isArray(data) && data.length > 0) {
         return data
-          .map((d) => ({
-            titulo: d.titulo ?? d.tipoDocumentoNome ?? "documento",
-            url: d.url ?? d.uri ?? "",
-          }))
+          .map((d) => {
+            const titulo = d.titulo ?? d.tipoDocumentoNome ?? "documento";
+            // A própria API traz a URL de download (uri/url). Se não vier,
+            // montamos pelo sequencial do documento (endpoint /arquivos/{n}).
+            let url = d.uri ?? d.url ?? "";
+            if (!url && d.sequencialDocumento != null) {
+              url = `${base}/${d.sequencialDocumento}`;
+            }
+            return { titulo, url, tipo: tipoDoArquivo(titulo, url) };
+          })
           .filter((a) => a.url);
       }
     } catch {
@@ -62,6 +84,76 @@ export async function arquivosDaLicitacao(
   throw new Error(
     "Não consegui listar os anexos do edital no PNCP. Você pode me colar o link direto do PDF que eu leio.",
   );
+}
+
+export interface ArquivoBaixado {
+  base64: string;
+  mediaType: string;
+  nome: string;
+  bytes: number;
+}
+
+function mediaTypePorNome(nome: string): string {
+  const n = nome.toLowerCase();
+  if (n.endsWith(".pdf")) return "application/pdf";
+  if (n.endsWith(".png")) return "image/png";
+  if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+  return "application/octet-stream";
+}
+
+// Baixa um anexo do edital PELO SERVIDOR (com User-Agent de navegador, seguindo
+// redirects para o storage do PNCP) e devolve os bytes em base64. É assim que a
+// Lara consegue ler o PDF de verdade — sem depender do web_fetch, que não
+// alcança o arquivo (link dinâmico / SPA do PNCP). Defensivo: se o servidor
+// devolver a página HTML (SPA) em vez do arquivo, avisamos que o link falhou.
+export async function baixarArquivoLicitacao(
+  url: string,
+): Promise<ArquivoBaixado> {
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error("URL do anexo inválida.");
+  }
+  const res = await fetch(url, {
+    headers: {
+      Accept: "*/*",
+      "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+      "User-Agent": PNCP_UA,
+    },
+    redirect: "follow",
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`Não consegui baixar o anexo (HTTP ${res.status}).`);
+
+  const ct = (res.headers.get("content-type") ?? "").toLowerCase();
+  if (ct.includes("text/html")) {
+    throw new Error(
+      "O link não entregou o arquivo (voltou uma página do site, não o documento). Me cole o link direto do PDF.",
+    );
+  }
+
+  const cd = res.headers.get("content-disposition") ?? "";
+  const nm = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+  let nome = "documento";
+  if (nm?.[1]) {
+    try {
+      nome = decodeURIComponent(nm[1].trim());
+    } catch {
+      nome = nm[1].trim();
+    }
+  } else {
+    const fromUrl = url.split("?")[0].split("/").pop();
+    if (fromUrl && /\.[a-z0-9]{2,4}$/i.test(fromUrl)) nome = fromUrl;
+  }
+
+  const buf = Buffer.from(await res.arrayBuffer());
+  const MAX = 24 * 1024 * 1024; // 24MB — limite prático para leitura automática
+  if (buf.length > MAX) {
+    throw new Error(
+      `Anexo muito grande (${(buf.length / 1e6).toFixed(1)} MB) para leitura automática. Baixe e me mande as páginas relevantes.`,
+    );
+  }
+
+  const mediaType = ct.split(";")[0].trim() || mediaTypePorNome(nome);
+  return { base64: buf.toString("base64"), mediaType, nome, bytes: buf.length };
 }
 
 // Modalidades relevantes para contratar/credenciar uma clínica (código do PNCP).

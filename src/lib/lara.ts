@@ -21,13 +21,96 @@ import { MODEL } from "./model";
 import { buscarArquivos, lerArquivo, driveConfigured } from "./drive";
 import { listarEmails, lerEmail } from "./mailread";
 import { isInboxConfigured } from "./inbox";
-import { arquivosDaLicitacao } from "./pncp";
+import { arquivosDaLicitacao, baixarArquivoLicitacao } from "./pncp";
 
 function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("Anthropic não configurada (ANTHROPIC_API_KEY).");
   }
   return new Anthropic();
+}
+
+// Baixa um anexo (PDF) de licitação pelo servidor e o LÊ de verdade: manda o
+// PDF para o próprio modelo (bloco `document`, leitura nativa de PDF) e devolve
+// uma análise pronta focada no perfil da clínica. Não depende do web_fetch —
+// que não alcança o arquivo do PNCP (link dinâmico / SPA).
+async function lerDocumentoEdital(
+  url: string,
+): Promise<
+  | { nome: string; bytes: number; analise: string }
+  | { erro: string }
+> {
+  if (!url.trim()) return { erro: "Faltou a URL do anexo." };
+  let arq;
+  try {
+    arq = await baixarArquivoLicitacao(url);
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "Falha ao baixar o anexo." };
+  }
+  // Só PDF é lido nativamente. Outros formatos: devolve o link para o Felipe.
+  if (!arq.mediaType.includes("pdf")) {
+    return {
+      erro: `O anexo "${arq.nome}" é ${arq.mediaType || "de outro formato"}, não um PDF que eu leia direto. Baixe por aqui: ${url}`,
+    };
+  }
+  try {
+    const resp = await client().messages.create({
+      model: MODEL,
+      max_tokens: 2500,
+      system:
+        "Você é analista de licitações públicas de uma clínica de saúde mental e " +
+        "reabilitação (psicologia, psiquiatria, fonoaudiologia, terapia ocupacional, " +
+        "psicopedagogia, fisioterapia, nutrição, TEA/ABA). Leia o edital/anexo e " +
+        "responda em português, direto e prático, sem enrolação.",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: {
+                type: "base64",
+                media_type: "application/pdf",
+                data: arq.base64,
+              },
+            },
+            {
+              type: "text",
+              text:
+                "Analise este anexo de licitação e me diga, em tópicos:\n" +
+                "1) OBJETO/serviço contratado (em 1-2 linhas);\n" +
+                "2) COBRE o perfil da clínica? (saúde mental, psicologia, psiquiatria, " +
+                "TEA-ABA, fonoaudiologia, terapia ocupacional, psicopedagogia, " +
+                "reabilitação) — liste os itens/procedimentos que batem; se NÃO cobrir, " +
+                "diga claramente por quê;\n" +
+                "3) FORMA de contratação (credenciamento, pregão, dispensa...), quem " +
+                "pode participar e os principais requisitos/documentos;\n" +
+                "4) VALORES / tabela (SIGTAP/SUS) se houver;\n" +
+                "5) PRAZOS e datas relevantes (abertura, entrega, vigência).\n" +
+                "No fim, uma recomendação objetiva: vale a pena a clínica entrar? sim/não e por quê.",
+            },
+          ],
+        },
+      ],
+    } as MessageCreateParamsNonStreaming);
+    const analise = resp.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b.type === "text" ? b.text : ""))
+      .join("\n")
+      .trim();
+    return {
+      nome: arq.nome,
+      bytes: arq.bytes,
+      analise: analise || "(não consegui extrair texto legível deste PDF)",
+    };
+  } catch (e) {
+    return {
+      erro:
+        e instanceof Error
+          ? `Baixei o PDF mas não consegui lê-lo (${e.message}).`
+          : "Baixei o PDF mas não consegui lê-lo.",
+    };
+  }
 }
 
 const MODELO_LABEL = MODEL.includes("opus-5")
@@ -81,12 +164,15 @@ não achar um endereço confiável, diga isso e ofereça alternativas.
 
 APROFUNDAR EM LICITAÇÕES: não pare na descrição curta do edital. Para saber de \
 verdade se um edital cobre saúde mental/psicologia/TEA-ABA/reabilitação, vá aos \
-ANEXOS: use 'documentos_da_licitacao' (passando o link do edital de \
-listar_licitacoes) para pegar os PDFs (termo de referência, tabela de \
-procedimentos SUS/SIGTAP) e LEIA o conteúdo com a leitura de página/PDF \
-(web_fetch) nas URLs dos anexos. Depois, analise a lista de procedimentos e diga \
-objetivamente se o objeto contempla o perfil da clínica (e quais itens). Se um \
-anexo não abrir, tente o link e, em último caso, peça o PDF ao Felipe.
+ANEXOS. O fluxo CERTO é: (1) 'documentos_da_licitacao' (passando o link do \
+edital de listar_licitacoes) para listar os anexos e suas URLs; (2) para cada \
+PDF relevante (edital, termo de referência, tabela de procedimentos SUS/SIGTAP), \
+chame 'ler_documento_edital' com a URL — essa ferramenta BAIXA o PDF pelo \
+servidor e lê o conteúdo de verdade, já devolvendo a análise. NUNCA use \
+web_fetch nos anexos do PNCP (o arquivo é dinâmico e o web_fetch não alcança — \
+foi o que te travou antes). Depois de ler, diga objetivamente se o objeto \
+contempla o perfil da clínica e quais itens. Só peça o PDF ao Felipe se o \
+próprio download falhar (ex: arquivo protegido ou grande demais).
 
 GOOGLE DRIVE (documentos comerciais): quando um parceiro responder PEDINDO \
 documentos ou informações (CNPJ, contrato social, alvará, dados da clínica, \
@@ -243,11 +329,26 @@ const TOOLS: Tool[] = [
   {
     name: "documentos_da_licitacao",
     description:
-      "Lista os ANEXOS de uma licitação (termo de referência, tabela de procedimentos SUS/SIGTAP, especialidades, valores) a partir do LINK do edital (retornado em listar_licitacoes). Depois, leia o conteúdo dos PDFs com web_fetch para APROFUNDAR — confirmar se o edital cobre saúde mental/psicologia/TEA-ABA/reabilitação.",
+      "Lista os ANEXOS de uma licitação (termo de referência, tabela de procedimentos SUS/SIGTAP, especialidades, valores) a partir do LINK do edital (retornado em listar_licitacoes). Devolve título + URL de cada anexo. Em seguida, leia cada PDF relevante com 'ler_documento_edital'.",
     input_schema: {
       type: "object",
       properties: { link: { type: "string", description: "link do edital no PNCP" } },
       required: ["link"],
+    },
+  },
+  {
+    name: "ler_documento_edital",
+    description:
+      "Baixa e LÊ um anexo (PDF) de licitação PELO SERVIDOR e devolve a análise pronta: objeto contratado, se cobre o perfil da clínica (saúde mental/psicologia/psiquiatria/TEA-ABA/fono/TO/reabilitação) com os itens que batem, forma de contratação, requisitos, valores (SIGTAP/SUS) e prazos. Passe a URL de um anexo retornado por 'documentos_da_licitacao'. Este é o caminho CERTO para ler editais do PNCP — NÃO use web_fetch nos anexos do PNCP (o arquivo é dinâmico e o web_fetch não alcança).",
+    input_schema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "URL do anexo (PDF) retornada por documentos_da_licitacao",
+        },
+      },
+      required: ["url"],
     },
   },
   {
@@ -630,6 +731,8 @@ async function executar(
         return { erro: e instanceof Error ? e.message : "Falha ao listar anexos." };
       }
     }
+    case "ler_documento_edital":
+      return lerDocumentoEdital(String(input.url ?? ""));
     case "atualizar_estagio":
       return api(ctx, "POST", `/api/companies/${input.companyId}/stage`, {
         stage: input.stage,
