@@ -101,59 +101,129 @@ function mediaTypePorNome(nome: string): string {
   return "application/octet-stream";
 }
 
+// Deriva URLs alternativas de download (as duas bases da API de arquivos do
+// PNCP). Assim, se um caminho estiver fora do ar, tentamos o outro.
+function urlsAlternativas(url: string): string[] {
+  const urls = [url];
+  const m = url.match(
+    /orgaos\/(\d+)\/compras\/(\d+)\/(\d+)\/arquivos\/(\d+)/,
+  );
+  if (m) {
+    const [, cnpj, ano, seq, doc] = m;
+    for (const base of ["pncp-api/v1", "api/pncp/v1"]) {
+      const alt = `https://pncp.gov.br/${base}/orgaos/${cnpj}/compras/${ano}/${seq}/arquivos/${doc}`;
+      if (!urls.includes(alt)) urls.push(alt);
+    }
+  }
+  return urls;
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 // Baixa um anexo do edital PELO SERVIDOR (com User-Agent de navegador, seguindo
 // redirects para o storage do PNCP) e devolve os bytes em base64. É assim que a
 // Lara consegue ler o PDF de verdade — sem depender do web_fetch, que não
-// alcança o arquivo (link dinâmico / SPA do PNCP). Defensivo: se o servidor
-// devolver a página HTML (SPA) em vez do arquivo, avisamos que o link falhou.
+// alcança o arquivo (link dinâmico / SPA do PNCP).
+//
+// Robusto contra a instabilidade do PNCP: tenta os caminhos alternativos da API
+// e repete com backoff em erros de rede/timeout/429/5xx. Se o servidor devolver
+// a página HTML (SPA) em vez do arquivo, avisa que o link falhou. Aceita PDFs
+// que venham com content-type genérico (octet-stream) desde que o nome seja .pdf.
 export async function baixarArquivoLicitacao(
   url: string,
 ): Promise<ArquivoBaixado> {
   if (!/^https?:\/\//i.test(url)) {
     throw new Error("URL do anexo inválida.");
   }
-  const res = await fetch(url, {
-    headers: {
-      Accept: "*/*",
-      "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-      "User-Agent": PNCP_UA,
-    },
-    redirect: "follow",
-    signal: AbortSignal.timeout(30000),
-  });
-  if (!res.ok) throw new Error(`Não consegui baixar o anexo (HTTP ${res.status}).`);
-
-  const ct = (res.headers.get("content-type") ?? "").toLowerCase();
-  if (ct.includes("text/html")) {
-    throw new Error(
-      "O link não entregou o arquivo (voltou uma página do site, não o documento). Me cole o link direto do PDF.",
-    );
-  }
-
-  const cd = res.headers.get("content-disposition") ?? "";
-  const nm = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
-  let nome = "documento";
-  if (nm?.[1]) {
-    try {
-      nome = decodeURIComponent(nm[1].trim());
-    } catch {
-      nome = nm[1].trim();
-    }
-  } else {
-    const fromUrl = url.split("?")[0].split("/").pop();
-    if (fromUrl && /\.[a-z0-9]{2,4}$/i.test(fromUrl)) nome = fromUrl;
-  }
-
-  const buf = Buffer.from(await res.arrayBuffer());
+  const candidatas = urlsAlternativas(url);
   const MAX = 24 * 1024 * 1024; // 24MB — limite prático para leitura automática
-  if (buf.length > MAX) {
-    throw new Error(
-      `Anexo muito grande (${(buf.length / 1e6).toFixed(1)} MB) para leitura automática. Baixe e me mande as páginas relevantes.`,
-    );
+  let ultimoDiag = "sem resposta";
+
+  // Até 3 rodadas (a instabilidade do PNCP costuma passar em segundos), e em
+  // cada rodada tentamos todas as URLs candidatas.
+  for (let rodada = 0; rodada < 3; rodada++) {
+    if (rodada > 0) await sleepMs(rodada * 900); // 0, 900ms, 1800ms
+
+    for (const alvo of candidatas) {
+      let res: Response;
+      try {
+        res = await fetch(alvo, {
+          headers: {
+            Accept: "*/*",
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+            "User-Agent": PNCP_UA,
+          },
+          redirect: "follow",
+          signal: AbortSignal.timeout(30000),
+        });
+      } catch {
+        ultimoDiag = "sem resposta do servidor (timeout)";
+        continue; // rede/timeout → tenta a próxima URL / próxima rodada
+      }
+
+      // 429/5xx são transitórios: guarda o diagnóstico e deixa o backoff agir.
+      if (res.status === 429 || res.status >= 500) {
+        ultimoDiag = `servidor do PNCP instável (HTTP ${res.status})`;
+        continue;
+      }
+      if (!res.ok) {
+        // 404/403 etc. — erro definitivo desta URL; tenta a alternativa.
+        ultimoDiag = `HTTP ${res.status}`;
+        continue;
+      }
+
+      const ct = (res.headers.get("content-type") ?? "").toLowerCase();
+      if (ct.includes("text/html")) {
+        ultimoDiag = "voltou uma página do site (HTML), não o arquivo";
+        continue;
+      }
+
+      const cd = res.headers.get("content-disposition") ?? "";
+      const nm = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+      let nome = "documento";
+      if (nm?.[1]) {
+        try {
+          nome = decodeURIComponent(nm[1].trim());
+        } catch {
+          nome = nm[1].trim();
+        }
+      } else {
+        const fromUrl = alvo.split("?")[0].split("/").pop();
+        if (fromUrl && /\.[a-z0-9]{2,4}$/i.test(fromUrl)) nome = fromUrl;
+      }
+
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length === 0) {
+        ultimoDiag = "arquivo veio vazio";
+        continue;
+      }
+      if (buf.length > MAX) {
+        throw new Error(
+          `Anexo muito grande (${(buf.length / 1e6).toFixed(1)} MB) para leitura automática. Baixe e me mande as páginas relevantes.`,
+        );
+      }
+
+      // content-type do arquivo. Se vier genérico (octet-stream) mas o nome for
+      // .pdf, tratamos como PDF. Última garantia: assinatura "%PDF" no início.
+      let mediaType = ct.split(";")[0].trim() || mediaTypePorNome(nome);
+      const pareceGenerico = !mediaType || mediaType.includes("octet-stream");
+      const ehPdfPeloNome = nome.toLowerCase().endsWith(".pdf");
+      const ehPdfPelaAssinatura = buf.subarray(0, 5).toString("latin1") === "%PDF-";
+      if (pareceGenerico && (ehPdfPeloNome || ehPdfPelaAssinatura)) {
+        mediaType = "application/pdf";
+      } else if (pareceGenerico) {
+        mediaType = mediaTypePorNome(nome);
+      }
+
+      return { base64: buf.toString("base64"), mediaType, nome, bytes: buf.length };
+    }
   }
 
-  const mediaType = ct.split(";")[0].trim() || mediaTypePorNome(nome);
-  return { base64: buf.toString("base64"), mediaType, nome, bytes: buf.length };
+  throw new Error(
+    `Não consegui baixar o anexo agora (${ultimoDiag}). O servidor do PNCP costuma oscilar — dá para tentar de novo em alguns minutos, ou você me envia o PDF direto no chat.`,
+  );
 }
 
 // Modalidades relevantes para contratar/credenciar uma clínica (código do PNCP).

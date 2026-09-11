@@ -15,6 +15,7 @@ import type {
   MessageCreateParamsNonStreaming,
   Tool,
   ToolResultBlockParam,
+  ContentBlockParam,
 } from "@anthropic-ai/sdk/resources/messages";
 
 import { MODEL } from "./model";
@@ -171,8 +172,16 @@ chame 'ler_documento_edital' com a URL — essa ferramenta BAIXA o PDF pelo \
 servidor e lê o conteúdo de verdade, já devolvendo a análise. NUNCA use \
 web_fetch nos anexos do PNCP (o arquivo é dinâmico e o web_fetch não alcança — \
 foi o que te travou antes). Depois de ler, diga objetivamente se o objeto \
-contempla o perfil da clínica e quais itens. Só peça o PDF ao Felipe se o \
-próprio download falhar (ex: arquivo protegido ou grande demais).
+contempla o perfil da clínica e quais itens. Se o download falhar (o servidor \
+do PNCP às vezes fica instável, ou o arquivo está protegido/grande demais), \
+diga isso com honestidade e dê 2 saídas: (a) tentar de novo em alguns minutos \
+(pode criar uma tarefa lembrando); (b) o Felipe te ENVIAR o PDF direto aqui no \
+chat — você recebe anexos (PDF e imagem) e lê na hora, sem depender do PNCP.
+
+ANEXOS NO CHAT: o Felipe pode anexar arquivos (PDF, print) direto na conversa. \
+Quando vier um documento anexado, leia o conteúdo de verdade e responda ao que \
+ele pediu (analisar edital, contrato, tabela, apresentação etc.). Nunca peça um \
+arquivo que ele já anexou.
 
 GOOGLE DRIVE (documentos comerciais): quando um parceiro responder PEDINDO \
 documentos ou informações (CNPJ, contrato social, alvará, dados da clínica, \
@@ -848,9 +857,59 @@ async function executar(
   }
 }
 
+// Anexo enviado pelo Felipe no chat (ex: o PDF do edital que ele baixou do
+// PNCP quando o servidor deles está fora do ar). Só PDF e imagem.
+export interface LaraAnexo {
+  nome: string;
+  mediaType: string; // application/pdf | image/png | image/jpeg
+  base64: string;
+}
+
 export interface LaraTurn {
   role: "user" | "assistant";
   content: string;
+  anexos?: LaraAnexo[];
+}
+
+// Converte um turno (com possíveis anexos) numa mensagem da API. PDFs viram
+// bloco `document` (leitura nativa) e imagens bloco `image`. Para não inflar o
+// histórico, anexos só são reenviados nos turnos recentes; os antigos mantêm só
+// o texto + uma marca do que foi anexado.
+function turnParaMensagem(t: LaraTurn, manterAnexo: boolean): MessageParam {
+  if (t.role === "user" && t.anexos && t.anexos.length > 0) {
+    if (manterAnexo) {
+      const blocks: ContentBlockParam[] = [];
+      for (const a of t.anexos) {
+        if (a.mediaType === "application/pdf" && a.base64) {
+          blocks.push({
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: a.base64 },
+          });
+        } else if (
+          (a.mediaType === "image/png" ||
+            a.mediaType === "image/jpeg" ||
+            a.mediaType === "image/webp" ||
+            a.mediaType === "image/gif") &&
+          a.base64
+        ) {
+          blocks.push({
+            type: "image",
+            source: { type: "base64", media_type: a.mediaType, data: a.base64 },
+          });
+        }
+      }
+      const txt = t.content?.trim()
+        ? t.content
+        : "Segue o documento em anexo. Leia e me analise (foco no perfil da clínica).";
+      blocks.push({ type: "text", text: txt });
+      if (blocks.length > 1) return { role: "user", content: blocks };
+    }
+    // Turno antigo (ou sem blocos válidos): guarda só o texto + a marca.
+    const nomes = t.anexos.map((a) => a.nome).join(", ");
+    const base = t.content?.trim() ? t.content : "(anexo enviado)";
+    return { role: "user", content: `${base}\n[anexo enviado antes: ${nomes}]` };
+  }
+  return { role: t.role, content: t.content };
 }
 
 export interface LaraResult {
@@ -883,10 +942,12 @@ export async function runLara(
   turns: LaraTurn[],
 ): Promise<LaraResult> {
   // Limita o histórico (conversas muito longas ficam caras e frágeis).
-  const messages: MessageParam[] = turns.slice(-24).map((t) => ({
-    role: t.role,
-    content: t.content,
-  }));
+  const recentes = turns.slice(-24);
+  const messages: MessageParam[] = recentes.map((t, idx) =>
+    // Reenvia o conteúdo do anexo só nos 4 últimos turnos (PDF em base64 é
+    // pesado); nos anteriores, mantém apenas a referência textual.
+    turnParaMensagem(t, idx >= recentes.length - 4),
+  );
   const acoes: string[] = [];
   const anthropic = client();
 

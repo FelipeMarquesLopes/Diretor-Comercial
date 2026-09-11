@@ -2,7 +2,35 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Msg = { role: "user" | "assistant"; content: string; acoes?: string[] };
+type Anexo = { nome: string; mediaType: string; base64: string };
+type Msg = {
+  role: "user" | "assistant";
+  content: string;
+  acoes?: string[];
+  anexos?: Anexo[];
+};
+
+const TIPOS_OK = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+];
+const MAX_ANEXO = 25 * 1024 * 1024; // 25MB
+
+// Lê um arquivo como base64 (sem o prefixo data:).
+function lerBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error("Falha ao ler o arquivo"));
+    fr.onload = () => {
+      const s = String(fr.result ?? "");
+      resolve(s.includes(",") ? s.slice(s.indexOf(",") + 1) : s);
+    };
+    fr.readAsDataURL(file);
+  });
+}
 
 // Tipos mínimos do reconhecimento de voz do navegador (Web Speech API).
 interface FalaEvento {
@@ -39,15 +67,42 @@ export default function Lara() {
     {
       role: "assistant",
       content:
-        "Oi, Felipe! Sou a Lara, sua assistente aqui no Growth AI. Posso consultar o funil, prospectar, buscar licitações, pesquisar contatos na web, criar tarefas, preparar rascunhos e — quando você mandar — aprovar e disparar os e-mails. É só pedir.",
+        "Oi, Felipe! Sou a Lara, sua assistente aqui no Growth AI. Posso consultar o funil, prospectar, buscar licitações, ler os anexos dos editais, pesquisar contatos na web, criar tarefas, preparar rascunhos e — quando você mandar — aprovar e disparar os e-mails. Pode me anexar um PDF ou print (📎) que eu leio na hora. É só pedir.",
     },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [ouvindo, setOuvindo] = useState(false);
   const [micOk, setMicOk] = useState(false);
+  const [anexos, setAnexos] = useState<Anexo[]>([]);
+  const [avisoAnexo, setAvisoAnexo] = useState("");
   const fimRef = useRef<HTMLDivElement>(null);
   const recRef = useRef<Reconhecedor | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Anexar arquivos (PDF/imagem) — vira base64 e segue junto da próxima mensagem.
+  async function aoEscolherArquivos(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setAvisoAnexo("");
+    const novos: Anexo[] = [];
+    for (const f of Array.from(files)) {
+      if (!TIPOS_OK.includes(f.type)) {
+        setAvisoAnexo(`"${f.name}" não é PDF nem imagem — não dá pra ler.`);
+        continue;
+      }
+      if (f.size > MAX_ANEXO) {
+        setAvisoAnexo(`"${f.name}" passa de 25MB — muito grande.`);
+        continue;
+      }
+      try {
+        novos.push({ nome: f.name, mediaType: f.type, base64: await lerBase64(f) });
+      } catch {
+        setAvisoAnexo(`Não consegui ler "${f.name}".`);
+      }
+    }
+    if (novos.length) setAnexos((a) => [...a, ...novos]);
+    if (fileRef.current) fileRef.current.value = "";
+  }
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -94,16 +149,26 @@ export default function Lara() {
 
   async function enviar(texto: string) {
     const t = texto.trim();
-    if (!t || loading) return;
-    const novo: Msg[] = [...msgs, { role: "user", content: t }];
+    const anexosAgora = anexos;
+    if ((!t && anexosAgora.length === 0) || loading) return;
+    const novo: Msg[] = [
+      ...msgs,
+      {
+        role: "user",
+        content: t || (anexosAgora.length ? "(documento anexado)" : ""),
+        anexos: anexosAgora.length ? anexosAgora : undefined,
+      },
+    ];
     setMsgs(novo);
     setInput("");
+    setAnexos([]);
+    setAvisoAnexo("");
     setLoading(true);
     try {
       // Envia só o histórico de conversa (user/assistant), sem a saudação inicial.
       const historico = novo
         .filter((_, i) => i > 0)
-        .map((m) => ({ role: m.role, content: m.content }));
+        .map((m) => ({ role: m.role, content: m.content, anexos: m.anexos }));
       const r = await fetch("/api/lara", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -158,6 +223,18 @@ export default function Lara() {
                   : "bg-brand-50 text-brand-900"
               }`}
             >
+              {m.anexos && m.anexos.length > 0 && (
+                <div className="mb-1.5 flex flex-wrap gap-1">
+                  {m.anexos.map((a, k) => (
+                    <span
+                      key={k}
+                      className="rounded-full bg-white/25 px-2 py-0.5 text-[11px] font-medium"
+                    >
+                      📎 {a.nome}
+                    </span>
+                  ))}
+                </div>
+              )}
               {m.content}
               {m.acoes && m.acoes.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1">
@@ -198,6 +275,28 @@ export default function Lara() {
         </div>
       )}
 
+      {(anexos.length > 0 || avisoAnexo) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {anexos.map((a, i) => (
+            <span
+              key={i}
+              className="flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs text-brand-700"
+            >
+              📎 {a.nome}
+              <button
+                type="button"
+                onClick={() => setAnexos((x) => x.filter((_, k) => k !== i))}
+                className="ml-0.5 text-brand-400 hover:text-red-500"
+                title="Remover"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+          {avisoAnexo && <span className="text-xs text-red-500">{avisoAnexo}</span>}
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -205,6 +304,23 @@ export default function Lara() {
         }}
         className="mt-2 flex items-center gap-2"
       >
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,image/*"
+          multiple
+          hidden
+          onChange={(e) => aoEscolherArquivos(e.target.files)}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={loading}
+          title="Anexar arquivo (PDF ou imagem)"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-brand-200 bg-white text-lg text-brand-700 transition-colors hover:bg-brand-50 disabled:opacity-50"
+        >
+          📎
+        </button>
         {micOk && (
           <button
             type="button"
@@ -229,7 +345,7 @@ export default function Lara() {
         />
         <button
           type="submit"
-          disabled={loading || !input.trim()}
+          disabled={loading || (!input.trim() && anexos.length === 0)}
           className="rounded-full bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
         >
           Enviar
