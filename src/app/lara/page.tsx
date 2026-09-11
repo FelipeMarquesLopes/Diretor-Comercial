@@ -108,6 +108,53 @@ export default function Lara() {
     fimRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, loading]);
 
+  // Ao abrir, carrega a conversa salva (memória) — continua de onde parou.
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/lara/historico");
+        const d = await r.json().catch(() => ({}));
+        const linhas = Array.isArray(d.mensagens) ? d.mensagens : [];
+        if (linhas.length > 0) {
+          setMsgs((m) => [
+            ...m,
+            ...linhas.map(
+              (l: {
+                role: "user" | "assistant";
+                content: string;
+                acoes?: string[] | null;
+                anexos?: Anexo[] | null;
+              }) => ({
+                role: l.role,
+                content: l.content,
+                acoes: l.acoes ?? undefined,
+                anexos: l.anexos ?? undefined,
+              }),
+            ),
+          ]);
+        }
+      } catch {
+        // sem histórico — começa na saudação
+      }
+    })();
+  }, []);
+
+  // "Nova conversa": apaga o histórico salvo (não mexe na memória de fatos).
+  async function novaConversa() {
+    if (loading) return;
+    if (!confirm("Começar uma nova conversa? O que a Lara lembra sobre você continua salvo.")) {
+      return;
+    }
+    try {
+      await fetch("/api/lara/historico", { method: "DELETE" });
+    } catch {
+      // ignora — reseta a tela de qualquer forma
+    }
+    setMsgs((m) => m.slice(0, 1));
+    setAnexos([]);
+    setAvisoAnexo("");
+  }
+
   // Verifica se o navegador tem reconhecimento de voz.
   useEffect(() => {
     const w = window as JanelaComVoz;
@@ -165,14 +212,13 @@ export default function Lara() {
     setAvisoAnexo("");
     setLoading(true);
     try {
-      // Envia só o histórico de conversa (user/assistant), sem a saudação inicial.
-      const historico = novo
-        .filter((_, i) => i > 0)
-        .map((m) => ({ role: m.role, content: m.content, anexos: m.anexos }));
+      // O servidor guarda a conversa (memória): mandamos só a mensagem nova.
       const r = await fetch("/api/lara", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: historico }),
+        body: JSON.stringify({
+          message: { content: t, anexos: anexosAgora },
+        }),
       });
       const d = await r.json().catch(() => ({}));
       if (d.error) {
@@ -202,12 +248,21 @@ export default function Lara() {
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-purple-500 text-lg font-semibold text-white">
           L
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-lg font-semibold text-brand-800">Lara</h1>
           <p className="text-xs text-brand-800/50">
             Sua assistente no Growth AI — peça o que precisar
           </p>
         </div>
+        <button
+          type="button"
+          onClick={novaConversa}
+          disabled={loading}
+          title="Nova conversa (o que a Lara lembra de você continua salvo)"
+          className="shrink-0 rounded-full border border-brand-200 bg-white px-3 py-1.5 text-xs text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+        >
+          Nova conversa
+        </button>
       </header>
 
       <div className="flex-1 space-y-3 overflow-y-auto rounded-2xl border border-brand-100 bg-white p-4 shadow-card">

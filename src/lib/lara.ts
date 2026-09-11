@@ -23,6 +23,7 @@ import { buscarArquivos, lerArquivo, driveConfigured } from "./drive";
 import { listarEmails, lerEmail } from "./mailread";
 import { isInboxConfigured } from "./inbox";
 import { arquivosDaLicitacao, baixarArquivoLicitacao } from "./pncp";
+import { carregarMemoria, lembrarFato, esquecerFato } from "./laraMemory";
 
 function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -182,6 +183,16 @@ ANEXOS NO CHAT: o Felipe pode anexar arquivos (PDF, print) direto na conversa. \
 Quando vier um documento anexado, leia o conteúdo de verdade e responda ao que \
 ele pediu (analisar edital, contrato, tabela, apresentação etc.). Nunca peça um \
 arquivo que ele já anexou.
+
+MEMÓRIA: você TEM memória. A conversa fica salva (continua de onde parou) e você \
+mantém uma MEMÓRIA DE LONGO PRAZO de fatos/decisões/preferências do Felipe e do \
+negócio. Quando ele te contar algo DURADOURO (um credenciamento fechado, uma \
+preferência de abordagem, uma decisão estratégica, um contato-chave, uma meta), \
+use 'lembrar' para guardar — de forma curta e com uma 'chave' clara. Não guarde \
+detalhes efêmeros do papo. Se ele pedir para esquecer algo, use 'esquecer'; se \
+ele perguntar o que você lembra, use 'listar_memoria'. Os fatos que você já sabe \
+aparecem abaixo, no bloco MEMÓRIA DE LONGO PRAZO — use-os com naturalidade, sem \
+ficar anunciando "de acordo com a minha memória".
 
 GOOGLE DRIVE (documentos comerciais): quando um parceiro responder PEDINDO \
 documentos ou informações (CNPJ, contrato social, alvará, dados da clínica, \
@@ -359,6 +370,40 @@ const TOOLS: Tool[] = [
       },
       required: ["url"],
     },
+  },
+  {
+    name: "lembrar",
+    description:
+      "Guarda na MEMÓRIA DE LONGO PRAZO um fato/decisão/preferência que você deve lembrar em conversas futuras (ex: 'fechamos credenciamento com a Elaine da Unimed Bandeirantes', 'o Felipe prefere e-mails curtos para médicos', 'a unidade de Alphaville abre em X'). Use quando o Felipe compartilhar algo DURADOURO — nunca para detalhes efêmeros do papo atual. Para ATUALIZAR um fato já existente, repita a mesma 'chave'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        conteudo: { type: "string", description: "o fato a lembrar, em 1-2 frases" },
+        chave: {
+          type: "string",
+          description: "rótulo curto p/ atualizar/remover depois (ex: credenciamento_unimed)",
+        },
+      },
+      required: ["conteudo"],
+    },
+  },
+  {
+    name: "esquecer",
+    description:
+      "Remove um fato da memória de longo prazo (por 'chave' ou 'id'). Use quando o Felipe pedir para esquecer algo, ou quando um fato ficar desatualizado.",
+    input_schema: {
+      type: "object",
+      properties: {
+        chave: { type: "string" },
+        id: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "listar_memoria",
+    description:
+      "Lista os fatos que você tem guardados na memória de longo prazo, para o Felipe revisar o que você lembra dele e do negócio.",
+    input_schema: { type: "object", properties: {} },
   },
   {
     name: "buscar_licitacoes",
@@ -742,6 +787,18 @@ async function executar(
     }
     case "ler_documento_edital":
       return lerDocumentoEdital(String(input.url ?? ""));
+    case "lembrar":
+      return lembrarFato({
+        conteudo: String(input.conteudo ?? ""),
+        chave: input.chave ? String(input.chave) : undefined,
+      });
+    case "esquecer":
+      return esquecerFato({
+        chave: input.chave ? String(input.chave) : undefined,
+        id: input.id ? String(input.id) : undefined,
+      });
+    case "listar_memoria":
+      return { fatos: await carregarMemoria() };
     case "atualizar_estagio":
       return api(ctx, "POST", `/api/companies/${input.companyId}/stage`, {
         stage: input.stage,
@@ -951,6 +1008,23 @@ export async function runLara(
   const acoes: string[] = [];
   const anthropic = client();
 
+  // MEMÓRIA DE LONGO PRAZO: carrega os fatos curados e injeta no system, para a
+  // Lara já "saber" sem precisar de ferramenta. Defensivo: se a memória não
+  // estiver disponível, segue sem ela.
+  let system = SYSTEM;
+  try {
+    const fatos = await carregarMemoria();
+    if (fatos.length > 0) {
+      system +=
+        "\n\n=== MEMÓRIA DE LONGO PRAZO (o que você já sabe — use com naturalidade) ===\n" +
+        fatos
+          .map((f) => `- ${f.chave ? `[${f.chave}] ` : ""}${f.conteudo}`)
+          .join("\n");
+    }
+  } catch {
+    // sem memória nesta rodada
+  }
+
   // Ferramentas de SERVIDOR (rodadas pela Anthropic): busca na web (Google/
   // sites) e leitura de página/PDF (para abrir anexos de editais e ler o texto,
   // inclusive PDF). Servem para a Lara aprofundar além do Apollo/PNCP.
@@ -964,7 +1038,7 @@ export async function runLara(
       // Esforço médio: a Lara raciocina o suficiente para pedidos vagos, mas
       // sem "pensar demais" (mantém a resposta rápida no chat).
       output_config: { effort: "medium" },
-      system: SYSTEM,
+      system,
       tools: [...TOOLS, webTool, fetchTool],
       messages: saneiarMensagens(messages),
     } as MessageCreateParamsNonStreaming);
