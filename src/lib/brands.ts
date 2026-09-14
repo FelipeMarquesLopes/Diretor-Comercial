@@ -10,7 +10,12 @@
 // A Therapy Minds usa a MESMA oferta (mesma lista de serviços), com assinatura
 // e remetente próprios.
 
-import { CLINIC_SERVICES, EMAIL_SIGNATURE, MENTHAL_UNITS } from "./branding";
+import {
+  CLINIC_SERVICES,
+  EMAIL_SIGNATURE,
+  MENTHAL_UNITS,
+  THERAPY_MINDS_UNITS,
+} from "./branding";
 
 export type BrandId = "menthalhelp" | "therapy_minds";
 
@@ -55,7 +60,7 @@ export const BRANDS: Record<BrandId, Brand> = {
     accent: "#0d9488", // teal (distingue no seletor)
     signature: TM_SIGNATURE,
     services: CLINIC_SERVICES, // mesma oferta
-    units: MENTHAL_UNITS, // ajustável quando houver unidades próprias
+    units: THERAPY_MINDS_UNITS, // exclusivamente Zona Sul (Interlagos)
   },
 };
 

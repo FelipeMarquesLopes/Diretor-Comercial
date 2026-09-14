@@ -3,7 +3,17 @@
 import { useEffect, useState } from "react";
 import type { Company, Contact, MessageHook } from "@/lib/types";
 import { HOOK_LABELS, STATUS_LABELS } from "@/lib/types";
-import { UNITS } from "@/lib/units";
+import { unitsForBrand } from "@/lib/units";
+import { DEFAULT_BRAND, type BrandId } from "@/lib/brands";
+
+// Marca ativa lida do cookie `marca` (o seletor no topo grava). Usada para
+// mostrar só as unidades da marca ativa no seletor de raio.
+function marcaAtiva(): BrandId {
+  if (typeof document === "undefined") return DEFAULT_BRAND;
+  const m = document.cookie.match(/(?:^|;\s*)marca=([^;]+)/);
+  const v = m ? decodeURIComponent(m[1]) : null;
+  return v === "therapy_minds" || v === "menthalhelp" ? v : DEFAULT_BRAND;
+}
 
 type CompanyWithContacts = Company & { contacts: Contact[] };
 
@@ -203,6 +213,9 @@ export function ProspeccaoView({
   const [cidades, setCidades] = useState("");
   // Fase 4.1 — unidade selecionada para busca por região (proximidade).
   const [unidade, setUnidade] = useState<string | null>(null);
+  // Unidades da marca ativa (MenthalHelp: 4 regiões; Therapy Minds: Zona Sul).
+  const [unidades, setUnidades] = useState(() => unitsForBrand(DEFAULT_BRAND));
+  useEffect(() => setUnidades(unitsForBrand(marcaAtiva())), []);
   const [minEmployees, setMinEmployees] = useState(cfg.minEmployees);
   const [maxEmployees, setMaxEmployees] = useState<string>("");
   const [perPage, setPerPage] = useState(25);
@@ -377,7 +390,7 @@ export function ProspeccaoView({
             📍 Buscar no raio de ~20&nbsp;km de uma unidade
           </span>
           <div className="flex flex-wrap gap-2">
-            {UNITS.map((u) => {
+            {unidades.map((u) => {
               const active = unidade === u.id;
               return (
                 <button
@@ -399,7 +412,7 @@ export function ProspeccaoView({
                       : "border border-brand-200 bg-white text-brand-700 hover:bg-brand-50"
                   }`}
                 >
-                  {u.name.replace("MenthalHelp — ", "")}
+                  {u.name.replace(/^(MenthalHelp|Therapy Minds) — /, "")}
                 </button>
               );
             })}
@@ -407,10 +420,10 @@ export function ProspeccaoView({
           {unidade && (
             <p className="mt-1.5 text-[11px] text-brand-800/50">
               Raio ~
-              {UNITS.find((u) => u.id === unidade)?.radiusKm ?? 20}&nbsp;km — busca
+              {unidades.find((u) => u.id === unidade)?.radiusKm ?? 20}&nbsp;km — busca
               nos municípios:{" "}
               <span className="text-brand-700">
-                {UNITS.find((u) => u.id === unidade)?.cities.join(" · ")}
+                {unidades.find((u) => u.id === unidade)?.cities.join(" · ")}
               </span>
               . O Apollo filtra por município (não por km exato); ajuste as
               cidades abaixo se quiser.

@@ -90,8 +90,8 @@ export default function AgendaAberta() {
           encaminhamentos. O informativo é <b>reenviado a cada 15 dias</b>,
           automaticamente e por tempo indeterminado — com uma mensagem diferente
           a cada vez, sempre reforçando nossas unidades (Guarulhos, Zona Norte /
-          Tucuruvi, Zona Sul / Interlagos, Bragança Paulista e Barueri /
-          Alphaville). Nada é enviado sem o seu clique final em Rascunhos.
+          Tucuruvi, Bragança Paulista e Barueri / Alphaville). Nada é enviado sem
+          o seu clique final em Rascunhos.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-sm">

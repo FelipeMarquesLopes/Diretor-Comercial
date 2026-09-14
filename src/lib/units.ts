@@ -13,8 +13,11 @@
 // Definidas em CÓDIGO (mudam raríssimo, como MENTHAL_UNITS/PIPELINES). Nada de
 // dado de paciente — é geografia comercial.
 
+import type { BrandId } from "./types";
+
 export interface Unit {
   id: string;
+  brand: BrandId; // marca dona da unidade
   name: string; // como aparece no seletor
   estado: string; // UF para o filtro do Apollo
   radiusKm: number; // raio de captação pretendido (aprox. via municípios)
@@ -28,6 +31,7 @@ export const DEFAULT_RADIUS_KM = 20;
 export const UNITS: Unit[] = [
   {
     id: "guarulhos",
+    brand: "menthalhelp",
     name: "MenthalHelp — Guarulhos",
     estado: "Sao Paulo",
     radiusKm: 20,
@@ -44,6 +48,7 @@ export const UNITS: Unit[] = [
   },
   {
     id: "zona-norte",
+    brand: "menthalhelp",
     name: "MenthalHelp — Zona Norte SP (Tucuruvi)",
     estado: "Sao Paulo",
     radiusKm: 20,
@@ -58,7 +63,8 @@ export const UNITS: Unit[] = [
   },
   {
     id: "zona-sul",
-    name: "MenthalHelp — Zona Sul SP (Interlagos)",
+    brand: "therapy_minds",
+    name: "Therapy Minds — Zona Sul SP (Interlagos)",
     estado: "Sao Paulo",
     radiusKm: 20,
     cities: [
@@ -73,6 +79,7 @@ export const UNITS: Unit[] = [
   },
   {
     id: "braganca",
+    brand: "menthalhelp",
     name: "MenthalHelp — Bragança Paulista",
     estado: "Sao Paulo",
     radiusKm: 20,
@@ -89,6 +96,7 @@ export const UNITS: Unit[] = [
   },
   {
     id: "alphaville",
+    brand: "menthalhelp",
     name: "MenthalHelp — Barueri (Alphaville)",
     estado: "Sao Paulo",
     radiusKm: 20,
@@ -108,4 +116,9 @@ export const UNITS: Unit[] = [
 export function findUnit(id: string | null | undefined): Unit | null {
   if (!id) return null;
   return UNITS.find((u) => u.id === id) ?? null;
+}
+
+// Unidades de uma marca (o seletor de prospecção mostra só as da marca ativa).
+export function unitsForBrand(brand: BrandId): Unit[] {
+  return UNITS.filter((u) => u.brand === brand);
 }

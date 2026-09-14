@@ -10,41 +10,52 @@
 // Princípio inviolável: isto personaliza a ABORDAGEM ao parceiro. Nunca há
 // dado de paciente.
 
-import type { Company } from "./types";
+import type { Company, BrandId } from "./types";
+import { getBrand } from "./brands";
 
-// Região textual do lead → unidade MenthalHelp mais próxima (proximidade = ouro).
-const UNIT_BY_REGION: { match: string[]; unit: string }[] = [
-  { match: ["guarulhos"], unit: "Guarulhos" },
-  { match: ["tucuruvi", "zona norte"], unit: "Zona Norte de SP (Tucuruvi)" },
-  { match: ["interlagos", "zona sul"], unit: "Zona Sul de SP (Interlagos)" },
-  { match: ["bragança", "braganca"], unit: "Bragança Paulista" },
-  { match: ["barueri", "alphaville"], unit: "Barueri (Alphaville)" },
+// Região textual do lead → unidade mais próxima (proximidade = ouro). Cada
+// unidade pertence a UMA marca: a MenthalHelp cobre Guarulhos, Zona Norte
+// (Tucuruvi), Bragança e Alphaville; a Therapy Minds atua só na Zona Sul
+// (Interlagos). O ângulo só cita uma unidade da MARCA do lead.
+const UNIT_BY_REGION: { match: string[]; unit: string; brand: BrandId }[] = [
+  { match: ["guarulhos"], unit: "Guarulhos", brand: "menthalhelp" },
+  { match: ["tucuruvi", "zona norte"], unit: "Zona Norte de SP (Tucuruvi)", brand: "menthalhelp" },
+  { match: ["interlagos", "zona sul"], unit: "Zona Sul de SP (Interlagos)", brand: "therapy_minds" },
+  { match: ["bragança", "braganca"], unit: "Bragança Paulista", brand: "menthalhelp" },
+  { match: ["barueri", "alphaville"], unit: "Barueri (Alphaville)", brand: "menthalhelp" },
 ];
 
 function nearestUnit(company: Company): string | null {
   const region = `${company.city ?? ""} ${company.state ?? ""}`.toLowerCase();
+  // Só considera unidades da marca dona do lead (bases/regiões separadas).
   for (const r of UNIT_BY_REGION) {
-    if (r.match.some((m) => region.includes(m))) return r.unit;
+    if (r.brand === company.brand && r.match.some((m) => region.includes(m))) {
+      return r.unit;
+    }
   }
-  if (
+  const emSP =
     region.includes("são paulo") ||
     region.includes("sao paulo") ||
-    /\bsp\b/.test(region)
-  ) {
-    return "Grande São Paulo (várias unidades)";
+    /\bsp\b/.test(region);
+  if (emSP) {
+    // Therapy Minds só tem Zona Sul; MenthalHelp tem várias unidades na região.
+    return company.brand === "therapy_minds"
+      ? "Zona Sul de SP (Interlagos)"
+      : "Grande São Paulo (várias unidades)";
   }
   return null;
 }
 
 // Argumento central por segmento — a "tese" de por que faz sentido a conversa.
 function segmentAngle(company: Company): string {
+  const marca = getBrand(company.brand).label; // "MenthalHelp" ou "Therapy Minds"
   switch (company.category) {
     case "operadora":
       return company.operator_type === "ativa"
         ? "Já somos parceiros — o encaixe é operacional (ampliar cobertura/procedimentos e manter o bom atendimento aos beneficiários)."
         : "Rede multidisciplinar com forte expertise em TEA/ABA e capacidade real (3.000+ atendimentos/mês) — pronta para credenciar e absorver demanda dos beneficiários.";
     case "empresa":
-      return "Foco: reduzir os afastamentos e atestados por saúde mental — o custo do absenteísmo para a empresa. A MenthalHelp atua de forma PREVENTIVA: vai à empresa avaliar os colaboradores, sinaliza ao RH quem precisa de apoio, encaminha e acompanha, com relatórios periódicos ao RH. Diferencial decisivo: CUSTO ZERO para a empresa — tudo pelo convênio que os colaboradores já têm, faturado pelo nosso credenciamento com as operadoras.";
+      return `Foco: reduzir os afastamentos e atestados por saúde mental — o custo do absenteísmo para a empresa. A ${marca} atua de forma PREVENTIVA: vai à empresa avaliar os colaboradores, sinaliza ao RH quem precisa de apoio, encaminha e acompanha, com relatórios periódicos ao RH. Diferencial decisivo: CUSTO ZERO para a empresa — tudo pelo convênio que os colaboradores já têm, faturado pelo nosso credenciamento com as operadoras.`;
     case "escola":
       return "Podemos ser o canal de cuidado da escola: avaliação e acompanhamento em saúde mental e neurodesenvolvimento (forte em TEA/ABA), apoio à inclusão e suporte à equipe pedagógica — encaminhamento facilitado para as famílias.";
     case "medico":

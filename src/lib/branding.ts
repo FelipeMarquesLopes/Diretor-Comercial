@@ -25,14 +25,17 @@ Tel: (11) 2382-4087
 WhatsApp: (11) 97695-0702`;
 
 // Unidades/regiões da MenthalHelp — sempre reforçadas no informativo de
-// "agenda aberta" para as operadoras.
+// "agenda aberta" para as operadoras. (A Zona Sul/Interlagos é da Therapy
+// Minds, não entra aqui.)
 export const MENTHAL_UNITS = [
   "Guarulhos",
   "Zona Norte de SP (Tucuruvi)",
-  "Zona Sul de SP (Interlagos)",
   "Bragança Paulista",
   "Barueri (Alphaville)",
 ];
+
+// Unidades/regiões da Therapy Minds — atua EXCLUSIVAMENTE na Zona Sul de SP.
+export const THERAPY_MINDS_UNITS = ["Zona Sul de SP (Interlagos)"];
 
 // Fonte padrão dos e-mails (pedido do CEO).
 export const EMAIL_FONT_FAMILY = "Arial, Helvetica, sans-serif";
