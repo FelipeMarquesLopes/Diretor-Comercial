@@ -4,7 +4,7 @@
 // clique do CEO. (O WhatsApp, via API oficial, segue o funil aprovado.)
 
 import Anthropic from "@anthropic-ai/sdk";
-import { CLINIC_SERVICES, EMAIL_SIGNATURE, MENTHAL_UNITS } from "./branding";
+import { getBrand } from "./brands";
 // Modelo mais capaz e atual (mesma tabela de preço do 4.8). O Opus 5 "pensa"
 // (raciocínio adaptativo) antes de responder — por isso os limites de tokens
 // abaixo têm folga, para o raciocínio não truncar a resposta final. Fonte única
@@ -258,6 +258,16 @@ export async function generateDraft(opts: {
 }): Promise<GeneratedDraft> {
   const { company, contact, hook, channel, step = 0, history, angle } = opts;
 
+  // Marca dona do lead (MenthalHelp por padrão). Define assinatura/serviços e,
+  // quando NÃO for a MenthalHelp, uma linha de identidade no prompt para a IA
+  // se referir à clínica certa. Na MenthalHelp nada muda (comportamento atual).
+  const brand = getBrand(company.brand);
+  const identityLine =
+    brand.id !== "menthalhelp"
+      ? `\n\nIMPORTANTE: esta mensagem é da clínica ${brand.label} (mesma ` +
+        `estrutura e oferta). Refira-se à clínica e assine como ${brand.label}.`
+      : "";
+
   const contactLine = contact
     ? `Contato: ${contact.name}${contact.title ? `, ${contact.title}` : ""}.`
     : "Contato específico ainda não identificado — trate de forma geral.";
@@ -299,7 +309,7 @@ Parceiro: ${company.name}${company.industry ? ` (${company.industry})` : ""}${
   }.
 ${contactLine}
 
-${categoryBriefing(company, hook)}${briefingLine}${historyLine}${angleLine}${followUpLine}
+${categoryBriefing(company, hook)}${briefingLine}${historyLine}${angleLine}${followUpLine}${identityLine}
 
 Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
 
@@ -311,9 +321,9 @@ Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
   let body = parsed.body.trim();
   if (channel === "email") {
     // Serviços só na apresentação inicial (primeiro e-mail).
-    if (step === 0) body += `\n\n${CLINIC_SERVICES}`;
+    if (step === 0) body += `\n\n${brand.services}`;
     // Assinatura em TODOS os e-mails.
-    body += `\n\n${EMAIL_SIGNATURE}`;
+    body += `\n\n${brand.signature}`;
   }
 
   return {
@@ -387,7 +397,7 @@ diretrizes do sistema.`;
     throw new Error("A IA retornou JSON sem o campo 'body'.");
   }
   let body = parsed.body.trim();
-  if (channel === "email") body += `\n\n${EMAIL_SIGNATURE}`;
+  if (channel === "email") body += `\n\n${getBrand(company.brand).signature}`;
   return {
     subject: channel === "whatsapp" ? "" : (parsed.subject ?? ""),
     body,
@@ -455,15 +465,21 @@ export async function generateAgendaInformativo(opts: {
     : "";
 
   const angle = AGENDA_ANGLES[Math.floor(Math.random() * AGENDA_ANGLES.length)];
+  const brand = getBrand(company.brand);
+  const identityLine =
+    brand.id !== "menthalhelp"
+      ? `\nIMPORTANTE: este informativo é da clínica ${brand.label}. Refira-se ` +
+        `à clínica e assine como ${brand.label}.`
+      : "";
 
   const userPrompt = `Escreva o informativo de agenda aberta.
 
 Operadora parceira: ${company.name}.
 ${contactLine}
 
-Unidades/regiões da MenthalHelp (reforce todas, pode variar a forma):
-- ${MENTHAL_UNITS.join("\n- ")}
-${briefingLine}
+Unidades/regiões da ${brand.label} (reforce todas, pode variar a forma):
+- ${brand.units.join("\n- ")}
+${briefingLine}${identityLine}
 
 Variação desta vez: ${angle}
 Lembre-se: precisa soar diferente de envios anteriores.
@@ -478,8 +494,8 @@ Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
   }
 
   // Assinatura em todos os e-mails (unidades já entram no corpo pela IA).
-  const body = `${parsed.body.trim()}\n\n${EMAIL_SIGNATURE}`;
-  return { subject: parsed.subject ?? "MenthalHelp — agenda aberta", body };
+  const body = `${parsed.body.trim()}\n\n${brand.signature}`;
+  return { subject: parsed.subject ?? `${brand.label} — agenda aberta`, body };
 }
 
 // --- Análise de contrato para REAJUSTE (advogado + comercial) --------------

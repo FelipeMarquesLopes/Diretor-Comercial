@@ -65,9 +65,13 @@ export interface PartnerResponse {
 // Só para operadoras: "nova" (captação) ou "ativa" (relacionamento).
 export type OperatorType = "nova" | "ativa";
 
+// Marca dona do parceiro (bases separadas). Ver src/lib/brands.ts.
+export type BrandId = "menthalhelp" | "therapy_minds";
+
 export interface Company {
   id: string;
   category: PartnerCategory;
+  brand: BrandId;
   operator_type: OperatorType;
   briefing: string | null;
   cc_emails: string | null;

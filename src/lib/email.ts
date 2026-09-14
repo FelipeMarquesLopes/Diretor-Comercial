@@ -15,6 +15,7 @@
 
 import nodemailer from "nodemailer";
 import { EMAIL_FONT_FAMILY, EMAIL_FONT_SIZE } from "./branding";
+import { senderConfig, DEFAULT_BRAND, type BrandId } from "./brands";
 
 // Rodapé de descadastro (LGPD — legítimo interesse em outreach B2B). Anexado
 // automaticamente a TODO envio, para o destinatário poder pedir para sair.
@@ -38,44 +39,45 @@ function toHtml(text: string): string {
   );
 }
 
-function cfg() {
-  const host = process.env.SMTP_HOST ?? "smtp.gmail.com";
-  const port = Number(process.env.SMTP_PORT ?? "465");
-  const user = process.env.SMTP_USER ?? process.env.GMAIL_USER;
-  const pass = process.env.SMTP_PASSWORD ?? process.env.GMAIL_APP_PASSWORD;
-  const fromName =
-    process.env.SMTP_FROM_NAME ?? process.env.GMAIL_FROM_NAME ?? "MenthalHelp";
-  // E-mail que entra em CÓPIA em todos os disparos (o CEO acompanha por fora).
-  const cc = process.env.EMAIL_CC ?? "felipe@clinicamenthalhelp.com.br";
-  return { host, port, user, pass, fromName, cc };
+// Configuração do remetente por MARCA (MenthalHelp / Therapy Minds).
+function cfg(brand: BrandId = DEFAULT_BRAND) {
+  return senderConfig(brand);
 }
 
-export function isEmailConfigured(): boolean {
-  const { user, pass } = cfg();
+// Considera o e-mail configurado se QUALQUER marca tiver remetente pronto (a
+// MenthalHelp, por padrão). Aceita conferir uma marca específica.
+export function isEmailConfigured(brand?: BrandId): boolean {
+  const { user, pass } = cfg(brand);
   return Boolean(user && pass);
 }
 
-let transporter: nodemailer.Transporter | null = null;
-function getTransporter(): nodemailer.Transporter {
-  const { host, port, user, pass } = cfg();
+// Um transporter por marca (contas de envio diferentes).
+const transporters = new Map<BrandId, nodemailer.Transporter>();
+function getTransporter(brand: BrandId): nodemailer.Transporter {
+  const { host, port, user, pass } = cfg(brand);
   if (!user || !pass) {
-    throw new Error(
-      "E-mail não configurado. Defina SMTP_HOST, SMTP_USER e SMTP_PASSWORD " +
-        "(veja o README, seção 'Conectar o e-mail').",
-    );
+    const extra =
+      brand === "therapy_minds"
+        ? "Defina SMTP_USER_TM e SMTP_PASSWORD_TM (remetente da Therapy Minds)."
+        : "Defina SMTP_HOST, SMTP_USER e SMTP_PASSWORD (veja o README, 'Conectar o e-mail').";
+    throw new Error(`E-mail da marca não configurado. ${extra}`);
   }
-  transporter ??= nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465, // 465 = SSL; 587 = STARTTLS
-    auth: { user, pass },
-    // Timeouts explícitos: falha rápido e limpo (em vez de pendurar a função)
-    // quando o servidor demora ou derruba a conexão.
-    connectionTimeout: 20000,
-    greetingTimeout: 15000,
-    socketTimeout: 25000,
-  });
-  return transporter;
+  let t = transporters.get(brand);
+  if (!t) {
+    t = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465, // 465 = SSL; 587 = STARTTLS
+      auth: { user, pass },
+      // Timeouts explícitos: falha rápido e limpo (em vez de pendurar a função)
+      // quando o servidor demora ou derruba a conexão.
+      connectionTimeout: 20000,
+      greetingTimeout: 15000,
+      socketTimeout: 25000,
+    });
+    transporters.set(brand, t);
+  }
+  return t;
 }
 
 // Erros de CONEXÃO transitórios (o servidor derrubou/expirou) — vale retentar.
@@ -89,17 +91,18 @@ function isTransient(err: unknown): boolean {
 // Envia com até 3 tentativas e espera crescente (2s, 4s). Em falha de conexão,
 // descarta o transporte para reconectar do zero na próxima tentativa.
 async function sendMailWithRetry(
+  brand: BrandId,
   mailOptions: Parameters<nodemailer.Transporter["sendMail"]>[0],
 ): Promise<{ messageId?: string }> {
   const maxTentativas = 3;
   let ultimoErro: unknown;
   for (let i = 0; i < maxTentativas; i++) {
     try {
-      return await getTransporter().sendMail(mailOptions);
+      return await getTransporter(brand).sendMail(mailOptions);
     } catch (err) {
       ultimoErro = err;
       if (!isTransient(err) || i === maxTentativas - 1) throw err;
-      transporter = null; // força reconexão limpa
+      transporters.delete(brand); // força reconexão limpa
       await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
     }
   }
@@ -117,8 +120,11 @@ export async function sendEmail(opts: {
   // Threading: amarra este e-mail na mesma conversa da mensagem anterior.
   inReplyTo?: string;
   references?: string;
+  // Marca dona do lead — define de qual conta/remetente o e-mail sai.
+  brand?: BrandId;
 }): Promise<{ messageId?: string }> {
-  const { user, fromName, cc } = cfg();
+  const brand = opts.brand ?? DEFAULT_BRAND;
+  const { user, fromName, cc } = cfg(brand);
   // Monta a cópia: e-mail de monitoramento do CEO + extras informados.
   // Remove duplicatas e nunca repete o próprio destinatário.
   const seen = new Set<string>([opts.to.toLowerCase()]);
@@ -138,7 +144,7 @@ export async function sendEmail(opts: {
     `color:#9aa0a6;margin-top:18px;border-top:1px solid #eee;padding-top:10px;">` +
     OPTOUT_TEXT +
     `</p>`;
-  const info = await sendMailWithRetry({
+  const info = await sendMailWithRetry(brand, {
     from: `${fromName} <${user}>`,
     to: opts.to,
     cc: ccList.length > 0 ? ccList : undefined, // CEO + extras em cópia

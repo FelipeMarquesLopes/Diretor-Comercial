@@ -106,7 +106,7 @@ export async function PATCH(
       const { data: pre } = await supabase
         .from("drafts")
         .select(
-          "subject, body, attachments, sequence_id, contacts(email), companies(cc_emails)",
+          "subject, body, attachments, sequence_id, contacts(email), companies(cc_emails, brand)",
         )
         .eq("id", id)
         .single();
@@ -201,6 +201,12 @@ export async function PATCH(
         : draftSubject;
       const inReplyTo = seqThread?.last_message_id ?? undefined;
 
+      // Remetente = marca dona do lead (bases/remetentes separados).
+      const brand =
+        (pre?.companies as { brand?: string } | null)?.brand === "therapy_minds"
+          ? "therapy_minds"
+          : "menthalhelp";
+
       let sentInfo: { messageId?: string } = {};
       try {
         sentInfo = await sendEmail({
@@ -211,6 +217,7 @@ export async function PATCH(
           attachments,
           inReplyTo,
           references: inReplyTo,
+          brand,
         });
       } catch (err) {
         return NextResponse.json(

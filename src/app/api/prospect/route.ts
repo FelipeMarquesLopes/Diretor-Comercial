@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { searchCompanies, searchDecisionMakers } from "@/lib/apollo";
 import { qualifyCompany } from "@/lib/qualify";
+import { brandFromRequest } from "@/lib/brands";
 
 // POST /api/prospect
 // Busca empresas no Apollo, qualifica, e persiste no banco (com decisores).
@@ -68,6 +69,9 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
+
+  // Marca ativa: os leads prospectados entram na base desta marca.
+  const brand = brandFromRequest(req);
 
   let orgs;
   try {
@@ -140,6 +144,7 @@ export async function POST(req: Request) {
         {
           apollo_id: org.apolloId,
           category,
+          brand,
           name: org.name,
           domain: org.domain,
           website: org.website,
@@ -157,7 +162,7 @@ export async function POST(req: Request) {
           qualification_notes: q.notes,
           priority: q.priority,
         },
-        { onConflict: "apollo_id" },
+        { onConflict: "apollo_id,brand" },
       )
       .select()
       .single();
@@ -186,7 +191,7 @@ export async function POST(req: Request) {
           linkedin_url: c.linkedinUrl,
           email_status: c.emailStatus,
         },
-        { onConflict: "apollo_id" },
+        { onConflict: "apollo_id,company_id" },
       );
       contatosDecisores++;
     }

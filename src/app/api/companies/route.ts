@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { verifierConfigured, verifyEmail, isSendable } from "@/lib/emailVerify";
 import { getSuppressedSet } from "@/lib/suppression";
+import { brandFromRequest } from "@/lib/brands";
 
 export const maxDuration = 60;
 
@@ -12,6 +13,7 @@ export async function GET(req: Request) {
   const status = searchParams.get("status");
   const category = searchParams.get("category");
   const q = searchParams.get("q"); // busca por nome (ex: seletor de parceiro)
+  const brand = brandFromRequest(req, searchParams.get("brand")); // marca ativa
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -29,6 +31,7 @@ export async function GET(req: Request) {
     .order("qualification_score", { ascending: false })
     .limit(200);
 
+  query = query.eq("brand", brand); // bases separadas por marca
   if (status) query = query.eq("status", status);
   if (category) query = query.eq("category", category);
   if (q && q.trim()) query = query.ilike("name", `%${q.trim()}%`);
@@ -109,11 +112,14 @@ export async function POST(req: Request) {
     }
   }
 
-  // Cria já qualificada (cadastro manual = decisão do CEO de abordar).
+  // Cria já qualificada (cadastro manual = decisão do CEO de abordar), na marca
+  // ativa (bases separadas por marca).
+  const brand = brandFromRequest(req);
   const { data: company, error: cErr } = await supabase
     .from("companies")
     .insert({
       category,
+      brand,
       name: body.name.trim(),
       city: body.city?.trim() || null,
       state: body.state?.trim() || null,
