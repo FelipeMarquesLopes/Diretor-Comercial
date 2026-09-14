@@ -113,7 +113,10 @@ export function senderConfig(brand: BrandId): {
       user: process.env.SMTP_USER_TM,
       pass: process.env.SMTP_PASSWORD_TM,
       fromName: process.env.SMTP_FROM_NAME_TM ?? "Therapy Minds",
-      cc: process.env.EMAIL_CC_TM ?? process.env.EMAIL_CC ?? "",
+      // Cópia de monitoramento só se o CEO definir uma da PRÓPRIA Therapy Minds
+      // (não herda o e-mail da MenthalHelp — evita expor um endereço de outra
+      // marca ao destinatário).
+      cc: process.env.EMAIL_CC_TM ?? "",
     };
   }
   return {
