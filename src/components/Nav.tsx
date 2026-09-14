@@ -2,53 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { BRANDS, DEFAULT_BRAND, type BrandId } from "@/lib/brands";
-
-function lerMarcaCookie(): BrandId {
-  if (typeof document === "undefined") return DEFAULT_BRAND;
-  const m = document.cookie.match(/(?:^|;\s*)marca=([^;]+)/);
-  const v = m ? decodeURIComponent(m[1]) : null;
-  return v === "therapy_minds" || v === "menthalhelp" ? v : DEFAULT_BRAND;
-}
-
-// Seletor de MARCA ATIVA. Grava o cookie `marca` (o servidor lê em toda chamada)
-// e recarrega para as listas/prospecção/envio passarem a operar naquela marca.
-function BrandSwitcher() {
-  const [marca, setMarca] = useState<BrandId>(DEFAULT_BRAND);
-  useEffect(() => setMarca(lerMarcaCookie()), []);
-
-  function trocar(b: BrandId) {
-    if (b === marca) return;
-    document.cookie = `marca=${b}; path=/; max-age=${60 * 60 * 24 * 365}`;
-    setMarca(b);
-    window.location.reload();
-  }
-
-  return (
-    <div
-      className="ml-auto flex items-center gap-1 rounded-xl border border-brand-100 bg-brand-50/60 p-0.5"
-      title="Marca ativa — define a base, o remetente e a assinatura"
-    >
-      {(Object.keys(BRANDS) as BrandId[]).map((b) => {
-        const ativo = marca === b;
-        return (
-          <button
-            key={b}
-            type="button"
-            onClick={() => trocar(b)}
-            className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
-              ativo ? "text-white shadow-sm" : "text-brand-800/60 hover:text-brand-800"
-            }`}
-            style={ativo ? { backgroundColor: BRANDS[b].accent } : undefined}
-          >
-            {BRANDS[b].short}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 // Navegação em GRUPOS didáticos, na ordem do funil comercial:
 //   1. Visão geral   → Dashboard
@@ -118,7 +71,6 @@ export function Nav() {
           })}
         </div>
       ))}
-      <BrandSwitcher />
     </nav>
   );
 }
