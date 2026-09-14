@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureSequences, generateDraftForSequence } from "@/lib/outreach";
+import { brandFromRequest } from "@/lib/brands";
 import type { Company, Sequence } from "@/lib/types";
 
 // Gerar o rascunho de reativação chama a IA — dá folga.
@@ -11,7 +12,10 @@ const DIA = 24 * 60 * 60 * 1000;
 // GET /api/reactivation
 // Lista oportunidades ABANDONADAS: parceiros que demonstraram interesse
 // (status "em_negociacao") mas ficaram sem NENHUMA interação há muitos dias.
-export async function GET() {
+// Só da marca ativa.
+export async function GET(req: Request) {
+  const brand = brandFromRequest(req);
+
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
     supabase = getServerSupabase();
@@ -28,6 +32,7 @@ export async function GET() {
   const { data: comps } = await supabase
     .from("companies")
     .select("id, name, category")
+    .eq("brand", brand)
     .eq("status", "em_negociacao")
     .limit(100);
 

@@ -4,13 +4,16 @@ import { generateDraft } from "@/lib/anthropic";
 import { buildCommercialContext } from "@/lib/memory";
 import { buildPersonalizationAngle } from "@/lib/personalize";
 import { getSuppressedSet } from "@/lib/suppression";
+import { brandFromRequest } from "@/lib/brands";
 import type { Company, Contact, DraftChannel, MessageHook } from "@/lib/types";
 
 // GET /api/drafts?status=pendente
-// Lista rascunhos, com dados da empresa e do contato.
+// Lista rascunhos, com dados da empresa e do contato. Só da MARCA ATIVA
+// (rascunhos são o trabalho de uma marca — bases separadas).
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
+  const brand = brandFromRequest(req);
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -23,9 +26,11 @@ export async function GET(req: Request) {
   }
   let query = supabase
     .from("drafts")
+    // !inner + filtro em companies.brand => só rascunhos da marca ativa.
     .select(
-      "*, companies(name, industry, city, state, cc_emails, category, operator_type, next_followup), contacts(name, title, email), sequences(next_action_at, status, resume_at)",
+      "*, companies!inner(name, industry, city, state, cc_emails, category, operator_type, next_followup, brand), contacts(name, title, email), sequences(next_action_at, status, resume_at)",
     )
+    .eq("companies.brand", brand)
     .order("created_at", { ascending: false })
     .limit(200);
 

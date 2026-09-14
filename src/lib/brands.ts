@@ -104,16 +104,16 @@ export function senderConfig(brand: BrandId): {
   cc: string;
 } {
   if (brand === "therapy_minds") {
+    // A Therapy Minds envia pelo Google Workspace (Gmail). Host/porta padrão do
+    // Gmail; user = e-mail do Workspace, pass = SENHA DE APP (não a senha normal
+    // — o Gmail exige senha de app para SMTP). Tudo via env, nunca no código.
     return {
-      host: process.env.SMTP_HOST_TM ?? process.env.SMTP_HOST ?? "smtp.titan.email",
-      port: Number(process.env.SMTP_PORT_TM ?? process.env.SMTP_PORT ?? "465"),
+      host: process.env.SMTP_HOST_TM ?? "smtp.gmail.com",
+      port: Number(process.env.SMTP_PORT_TM ?? "465"),
       user: process.env.SMTP_USER_TM,
       pass: process.env.SMTP_PASSWORD_TM,
       fromName: process.env.SMTP_FROM_NAME_TM ?? "Therapy Minds",
-      cc:
-        process.env.EMAIL_CC_TM ??
-        process.env.EMAIL_CC ??
-        "felipe@clinicamenthalhelp.com.br",
+      cc: process.env.EMAIL_CC_TM ?? process.env.EMAIL_CC ?? "",
     };
   }
   return {

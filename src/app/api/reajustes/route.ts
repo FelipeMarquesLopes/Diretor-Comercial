@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureSequences } from "@/lib/outreach";
+import { brandFromRequest } from "@/lib/brands";
 import type { Company } from "@/lib/types";
 
-// GET /api/reajustes — lista as operadoras da frente "Reajustes".
-export async function GET() {
+// GET /api/reajustes — lista as operadoras da frente "Reajustes", da marca ativa.
+export async function GET(req: Request) {
+  const brand = brandFromRequest(req);
+
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
     supabase = getServerSupabase();
@@ -18,6 +21,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("companies")
     .select("*, contacts(*)")
+    .eq("brand", brand)
     .eq("category", "reajuste")
     .order("created_at", { ascending: false });
 
@@ -67,6 +71,7 @@ export async function POST(req: Request) {
     .from("companies")
     .insert({
       category: "reajuste",
+      brand: brandFromRequest(req),
       briefing: body.briefing ?? null,
       cc_emails: body.ccEmails?.trim() || null,
       name: body.name,

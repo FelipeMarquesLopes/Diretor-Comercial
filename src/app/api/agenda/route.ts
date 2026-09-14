@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { DIAS_AGENDA_ABERTA, generateAgendaDraft } from "@/lib/outreach";
+import { brandFromRequest } from "@/lib/brands";
 import type { Company } from "@/lib/types";
 
 // Data (YYYY-MM-DD) daqui a N dias — para o campo `next_followup` (date).
@@ -10,8 +11,10 @@ function emDias(dias: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// GET /api/agenda — lista as operadoras da frente "Agenda Aberta".
-export async function GET() {
+// GET /api/agenda — lista as operadoras da frente "Agenda Aberta", da marca ativa.
+export async function GET(req: Request) {
+  const brand = brandFromRequest(req);
+
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
     supabase = getServerSupabase();
@@ -25,6 +28,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("companies")
     .select("*, contacts(*)")
+    .eq("brand", brand)
     .eq("category", "agenda_aberta")
     .order("created_at", { ascending: false });
 
@@ -75,6 +79,7 @@ export async function POST(req: Request) {
     .from("companies")
     .insert({
       category: "agenda_aberta",
+      brand: brandFromRequest(req),
       briefing: body.briefing ?? null,
       cc_emails: body.ccEmails?.trim() || null,
       name: body.name,

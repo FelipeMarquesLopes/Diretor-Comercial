@@ -5,11 +5,14 @@ import { resumeAtAfterNegative } from "@/lib/followup";
 import { recomputeCompanyScore } from "@/lib/scoring";
 import { nextActionForIntent } from "@/lib/nextAction";
 import { createTask } from "@/lib/tasks";
+import { brandFromRequest } from "@/lib/brands";
 import type { ResponseSentiment, SequenceChannel } from "@/lib/types";
 
 // GET /api/responses — respostas recebidas (mais recentes), com o nome da
-// operadora. Usado no dashboard para apontar quem respondeu.
-export async function GET() {
+// operadora. Usado no dashboard para apontar quem respondeu. Só da marca ativa.
+export async function GET(req: Request) {
+  const brand = brandFromRequest(req);
+
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
     supabase = getServerSupabase();
@@ -23,8 +26,9 @@ export async function GET() {
   const { data, error } = await supabase
     .from("responses")
     .select(
-      "id, company_id, sentiment, intent, next_action_at, summary, raw_text, channel, created_at, companies(name, category)",
+      "id, company_id, sentiment, intent, next_action_at, summary, raw_text, channel, created_at, companies!inner(name, category, brand)",
     )
+    .eq("companies.brand", brand)
     .is("dismissed_at", null) // só as respostas ainda abertas (não arquivadas)
     .order("created_at", { ascending: false })
     .limit(30);

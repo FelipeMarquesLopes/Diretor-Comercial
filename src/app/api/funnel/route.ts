@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { findStage } from "@/lib/pipelines";
+import { brandFromRequest } from "@/lib/brands";
 
 export const maxDuration = 60;
 
 // GET /api/funnel — funil comercial ponta a ponta (Fase 6.1), para a visão de
 // diretoria: onde está o gargalo e onde está o dinheiro. Agrega sobre os dados
-// que já existem (companies + stage + contacts + responses). Sem PII.
-export async function GET() {
+// que já existem (companies + stage + contacts + responses). Sem PII. Só da
+// marca ativa.
+export async function GET(req: Request) {
+  const brand = brandFromRequest(req);
+
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
     supabase = getServerSupabase();
@@ -20,13 +24,22 @@ export async function GET() {
 
   const [{ data: companies }, { data: validContacts }, { data: responses }] =
     await Promise.all([
-      supabase.from("companies").select("category, status, stage").limit(5000),
+      supabase
+        .from("companies")
+        .select("category, status, stage")
+        .eq("brand", brand)
+        .limit(5000),
       supabase
         .from("contacts")
-        .select("company_id")
+        .select("company_id, companies!inner(brand)")
         .eq("email_verdict", "valid")
+        .eq("companies.brand", brand)
         .limit(8000),
-      supabase.from("responses").select("company_id, sentiment").limit(8000),
+      supabase
+        .from("responses")
+        .select("company_id, sentiment, companies!inner(brand)")
+        .eq("companies.brand", brand)
+        .limit(8000),
     ]);
 
   const comps = companies ?? [];

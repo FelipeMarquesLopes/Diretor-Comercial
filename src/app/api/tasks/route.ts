@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { createTask } from "@/lib/tasks";
+import { brandFromRequest } from "@/lib/brands";
 
-// GET /api/tasks?status=aberta — lista tarefas com o nome do parceiro.
+// GET /api/tasks?status=aberta — lista tarefas com o nome do parceiro, só da
+// marca ativa. Tarefas SEM parceiro (company_id nulo) aparecem em qualquer
+// marca (são gerais do CEO).
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") ?? "aberta";
+  const brand = brandFromRequest(req);
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -19,15 +23,20 @@ export async function GET(req: Request) {
 
   let query = supabase
     .from("tasks")
-    .select("*, companies(name, category)")
+    .select("*, companies(name, category, brand)")
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(400);
   if (status !== "todas") query = query.eq("status", status);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ tasks: data ?? [] });
+  // Tarefas da marca ativa + as gerais (sem parceiro vinculado).
+  const tasks = (data ?? []).filter((t) => {
+    const b = (t.companies as { brand?: string } | null)?.brand;
+    return !b || b === brand;
+  });
+  return NextResponse.json({ tasks });
 }
 
 // POST /api/tasks — cria uma tarefa manual (do CEO).

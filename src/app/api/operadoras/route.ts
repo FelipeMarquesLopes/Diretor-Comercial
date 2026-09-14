@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureSequences, generateDraftForSequence } from "@/lib/outreach";
+import { brandFromRequest } from "@/lib/brands";
 import type { Company, Sequence } from "@/lib/types";
 
-// GET /api/operadoras — lista operadoras com contatos e sequências.
-export async function GET() {
+// GET /api/operadoras — lista operadoras com contatos e sequências, da marca ativa.
+export async function GET(req: Request) {
+  const brand = brandFromRequest(req);
+
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
     supabase = getServerSupabase();
@@ -18,6 +21,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("companies")
     .select("*, contacts(*), sequences(*)")
+    .eq("brand", brand)
     .eq("category", "operadora")
     .order("created_at", { ascending: false });
 
@@ -66,6 +70,7 @@ export async function POST(req: Request) {
     .from("companies")
     .insert({
       category: "operadora",
+      brand: brandFromRequest(req),
       operator_type: body.operatorType === "ativa" ? "ativa" : "nova",
       briefing: body.briefing ?? null,
       cc_emails: body.ccEmails?.trim() || null,

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { brandFromRequest } from "@/lib/brands";
 
-// GET /api/stats — métricas para o dashboard executivo.
-export async function GET() {
+// GET /api/stats — métricas para o dashboard executivo, SÓ da marca ativa.
+export async function GET(req: Request) {
+  const brand = brandFromRequest(req);
+
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
     supabase = getServerSupabase();
@@ -13,8 +16,24 @@ export async function GET() {
     );
   }
 
-  async function count(table: string, filter?: [string, string]) {
-    let q = supabase.from(table).select("*", { count: "exact", head: true });
+  // Contagem em companies (a própria tabela tem `brand`).
+  async function countCompanies(filter?: [string, string]) {
+    let q = supabase
+      .from("companies")
+      .select("*", { count: "exact", head: true })
+      .eq("brand", brand);
+    if (filter) q = q.eq(filter[0], filter[1]);
+    const { count: c } = await q;
+    return c ?? 0;
+  }
+
+  // Contagem em tabelas filhas (drafts/sequences): filtra pela marca da empresa
+  // via join interno (companies!inner + companies.brand).
+  async function countByBrand(table: string, filter?: [string, string]) {
+    let q = supabase
+      .from(table)
+      .select("*, companies!inner(brand)", { count: "exact", head: true })
+      .eq("companies.brand", brand);
     if (filter) q = q.eq(filter[0], filter[1]);
     const { count: c } = await q;
     return c ?? 0;
@@ -26,11 +45,12 @@ export async function GET() {
     Date.UTC(nowBrt.getUTCFullYear(), nowBrt.getUTCMonth(), nowBrt.getUTCDate(), 3, 0, 0),
   ).toISOString();
 
-  // Respostas recebidas HOJE (total e por sentimento).
+  // Respostas recebidas HOJE (total e por sentimento) — só da marca ativa.
   async function countRespostasHoje(sentiment?: string) {
     let q = supabase
       .from("responses")
-      .select("*", { count: "exact", head: true })
+      .select("*, companies!inner(brand)", { count: "exact", head: true })
+      .eq("companies.brand", brand)
       .gte("created_at", startTodayISO);
     if (sentiment) q = q.eq("sentiment", sentiment);
     const { count: c } = await q;
@@ -52,16 +72,16 @@ export async function GET() {
     positivasHoje,
     negativasHoje,
   ] = await Promise.all([
-    count("companies", ["category", "empresa"]),
-    count("companies", ["category", "operadora"]),
-    count("companies", ["status", "qualificado"]),
-    count("companies", ["status", "contato_iniciado"]),
-    count("companies", ["status", "em_negociacao"]),
-    count("companies", ["status", "parceria_ativa"]),
-    count("drafts", ["status", "pendente"]),
-    count("drafts", ["status", "aprovado"]),
-    count("drafts", ["status", "enviado"]),
-    count("sequences", ["status", "aguardando_ceo"]),
+    countCompanies(["category", "empresa"]),
+    countCompanies(["category", "operadora"]),
+    countCompanies(["status", "qualificado"]),
+    countCompanies(["status", "contato_iniciado"]),
+    countCompanies(["status", "em_negociacao"]),
+    countCompanies(["status", "parceria_ativa"]),
+    countByBrand("drafts", ["status", "pendente"]),
+    countByBrand("drafts", ["status", "aprovado"]),
+    countByBrand("drafts", ["status", "enviado"]),
+    countByBrand("sequences", ["status", "aguardando_ceo"]),
     countRespostasHoje(),
     countRespostasHoje("positivo"),
     countRespostasHoje("negativo"),

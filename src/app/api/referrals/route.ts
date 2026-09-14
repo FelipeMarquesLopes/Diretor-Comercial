@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { brandFromRequest } from "@/lib/brands";
 
 // GET /api/referrals — parceiros que são (ou podem ser) FONTE DE
 // ENCAMINHAMENTO: parcerias ativas + qualquer um já marcado como fonte.
 // Ordenado por quantidade de indicações (as que "valem ouro" no topo).
-// Fase 5 — agregado, sem PII.
-export async function GET() {
+// Fase 5 — agregado, sem PII. Só da marca ativa.
+export async function GET(req: Request) {
+  const brand = brandFromRequest(req);
+
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
     supabase = getServerSupabase();
@@ -21,6 +24,7 @@ export async function GET() {
     .select(
       "id, name, category, city, state, status, is_referral_source, referral_count",
     )
+    .eq("brand", brand)
     .or("is_referral_source.eq.true,status.eq.parceria_ativa")
     .order("referral_count", { ascending: false })
     .order("name", { ascending: true })
