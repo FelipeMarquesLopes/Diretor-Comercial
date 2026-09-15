@@ -29,19 +29,14 @@ export interface Brand {
   units: string[]; // unidades/regiões
 }
 
-// Assinatura da Therapy Minds. Reutiliza o que é comum (o CEO é sócio-diretor
-// das duas) e puxa CNPJ/telefones de variáveis de ambiente quando existirem —
-// nunca inventamos dados: se não houver, a linha simplesmente não aparece.
-const TM_SIGNATURE = [
-  "Sócio-Diretor - Felipe Marques",
-  "Therapy Minds",
-  process.env.BRAND_TM_CNPJ ? `CNPJ: ${process.env.BRAND_TM_CNPJ}` : null,
-  "Administrativo",
-  process.env.BRAND_TM_TEL ? `Tel: ${process.env.BRAND_TM_TEL}` : null,
-  process.env.BRAND_TM_WHATSAPP ? `WhatsApp: ${process.env.BRAND_TM_WHATSAPP}` : null,
-]
-  .filter(Boolean)
-  .join("\n");
+// Assinatura fixa da Therapy Minds (dados reais informados pelo CEO). A
+// signatária é a Renata Reis (Sócia Diretora) — pessoa diferente da MenthalHelp.
+const TM_SIGNATURE = `Renata Reis
+Sócia Diretora
+Clínica Therapy Minds
+Tel/WhatsApp: (11) 99718-5146
+E-mail: adm@therapyminds.com.br
+Rua Nicolau Alayon, 859`;
 
 export const BRANDS: Record<BrandId, Brand> = {
   menthalhelp: {
