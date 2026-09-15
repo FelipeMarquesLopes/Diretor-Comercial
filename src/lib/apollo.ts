@@ -246,7 +246,12 @@ const DECISION_TITLES = {
     "Fundador",
   ],
   operadora: [
-    // Setor de CREDENCIAMENTO / rede credenciada (quem credencia prestadores)
+    // Setor de CREDENCIAMENTO / rede credenciada (quem credencia prestadores).
+    // Palavra-raiz "Credenciamento" já casa a maioria dos cargos no Apollo
+    // (busca por trecho): Diretor/Gerente/Coord/Supervisor/Analista/Assistente/
+    // Auxiliar de Credenciamento. Mantemos variações e sinônimos do setor.
+    "Credenciamento",
+    "Diretor de Credenciamento",
     "Gerente de Credenciamento",
     "Coordenador de Credenciamento",
     "Coordenadora de Credenciamento",
@@ -254,17 +259,37 @@ const DECISION_TITLES = {
     "Analista de Credenciamento",
     "Assistente de Credenciamento",
     "Auxiliar de Credenciamento",
-    "Credenciamento",
+    "Credenciamento de Prestadores",
+    "Credenciamento de Rede",
+    "Credenciamento e Contratualização",
+    "Núcleo de Credenciamento",
+    // Contratualização / contratos com prestadores (sinônimo de credenciar)
+    "Contratualização",
+    "Contratualização de Prestadores",
+    "Contratos Médicos",
+    "Cadastro de Prestadores",
+    "Habilitação de Prestadores",
+    // Rede credenciada / prestadores (o mesmo setor, outros nomes)
+    "Rede Credenciada",
+    "Rede de Prestadores",
     "Gerente de Rede Credenciada",
+    "Gerente de Rede de Prestadores",
     "Gerente de Rede",
     "Coordenador de Rede",
     "Gestão de Rede",
+    "Gestão da Rede Credenciada",
+    "Desenvolvimento de Rede",
+    "Expansão de Rede",
     "Relacionamento com Prestadores",
     "Relacionamento com Credenciados",
+    "Relacionamento com a Rede",
+    // Termos em inglês (multinacionais / cargos globais)
     "Credentialing",
     "Provider Network",
+    "Provider Relations",
+    "Provider Contracting",
     "Network Management",
-    "Gerente de Rede de Prestadores",
+    "Network Development",
     // Setor COMERCIAL / contratos / parcerias (quem fecha o contrato)
     "Diretor Comercial",
     "Gerente Comercial",

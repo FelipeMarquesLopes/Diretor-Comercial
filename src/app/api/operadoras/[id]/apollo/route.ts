@@ -14,6 +14,58 @@ import {
 import { getSuppressedSet } from "@/lib/suppression";
 import type { Company, Contact } from "@/lib/types";
 
+// Escolhe, entre as candidatas do Apollo, a empresa que é REALMENTE uma
+// operadora/seguradora de saúde — descartando resultados de OUTRO setor que
+// casam pelo nome (ex: "Porto Seguro" → Colégio Visconde de Porto Seguro).
+interface OrgCandidato {
+  name?: string | null;
+  domain?: string | null;
+  industry?: string | null;
+}
+const _norm = (s: string | null | undefined) =>
+  (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+// Setores a DESCARTAR (não é operadora de saúde).
+const KW_EDUCACAO = [
+  "colegio", "escola", "ensino", "educ", "universidade", "faculdade",
+  "college", "school", "creche", "pre-escola", "curso",
+];
+// Sinais de que É saúde/seguro (prioriza).
+const KW_SAUDE = [
+  "saude", "seguro", "health", "insurance", "medic", "hospital", "plano",
+  "odonto", "clinic", "assistencia", "operadora", "seguradora", "care",
+];
+// Um domínio que "cheira" a escola/educação nunca é operadora de saúde. O
+// sufixo .g12.br é reservado a instituições de ensino no Brasil.
+function dominioEhEducacao(dom: string): boolean {
+  const d = _norm(dom);
+  return (
+    d.endsWith(".g12.br") ||
+    d.endsWith(".edu") ||
+    d.includes(".edu.") ||
+    /colegio|escola|ensino|faculdade|universidade/.test(d)
+  );
+}
+function escolherOperadora(
+  orgs: OrgCandidato[],
+  _nomeBuscado: string,
+): OrgCandidato | null {
+  const comDominio = orgs.filter((o) => o.domain);
+  if (comDominio.length === 0) return null;
+  const pontuadas = comDominio.map((o) => {
+    const hay = `${_norm(o.name)} ${_norm(o.industry)}`;
+    const ehEducacao = KW_EDUCACAO.some((k) => hay.includes(k));
+    const ehSaude = KW_SAUDE.some((k) => hay.includes(k));
+    let score = 0;
+    if (ehEducacao) score -= 100; // descarta educação
+    if (ehSaude) score += 10; // prioriza saúde/seguro
+    return { o, score };
+  });
+  const validas = pontuadas.filter((s) => s.score > -100);
+  if (validas.length === 0) return null; // só sobrou educação → melhor não usar
+  validas.sort((a, b) => b.score - a.score);
+  return validas[0].o;
+}
+
 // Revelar até 25 e-mails no Apollo é pesado — sem isto a função roda no
 // tempo-limite padrão (~10s). A GERAÇÃO do rascunho fica numa rota à parte
 // (/draft) de propósito, para não competir pelo mesmo tempo de execução.
@@ -440,16 +492,23 @@ export async function POST(
 
   // --- Ação: BUSCAR (padrão) — acha os contatos de credenciamento ------------
   // 1) Resolve o domínio: usa o já salvo ou descobre pelo nome no Apollo.
+  //    IMPORTANTE: nomes ambíguos (ex: "Porto Seguro") casam com empresas de
+  //    OUTRO setor (o Colégio Porto Seguro!). Por isso buscamos VÁRIAS candidatas
+  //    e escolhemos a de SAÚDE/SEGURO, descartando escola/educação.
   let domain = company.domain;
+  // Se o domínio salvo é de escola/educação (casou errado numa busca anterior),
+  // ignora e re-busca a empresa certa.
+  if (domain && dominioEhEducacao(domain)) domain = null;
   if (!domain) {
     try {
       const orgs = await searchCompanies({
         name: company.name,
         locations: ["Brazil"],
         minEmployees: 1,
-        perPage: 1,
+        perPage: 10,
       });
-      domain = orgs[0]?.domain ?? null;
+      const melhor = escolherOperadora(orgs, company.name);
+      domain = melhor?.domain ?? null;
       if (domain) {
         await supabase
           .from("companies")
@@ -468,7 +527,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Não encontrei o domínio desta operadora no Apollo pelo nome. Confira o nome (ex: 'Bradesco Saúde') ou cadastre o e-mail manualmente na edição.",
+          "Não encontrei uma OPERADORA DE SAÚDE com esse nome no Apollo (os resultados pareciam de outro setor, ex: escola). Confira o nome (ex: 'Porto Seguro Saúde', 'Bradesco Saúde') ou cadastre o e-mail manualmente na edição.",
       },
       { status: 404 },
     );
