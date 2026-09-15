@@ -4,7 +4,7 @@
 // clique do CEO. (O WhatsApp, via API oficial, segue o funil aprovado.)
 
 import Anthropic from "@anthropic-ai/sdk";
-import { getBrand } from "./brands";
+import { getBrand, type Brand } from "./brands";
 // Modelo mais capaz e atual (mesma tabela de preço do 4.8). O Opus 5 "pensa"
 // (raciocínio adaptativo) antes de responder — por isso os limites de tokens
 // abaixo têm folga, para o raciocínio não truncar a resposta final. Fonte única
@@ -17,6 +17,18 @@ import type {
   MessageHook,
   ResponseSentiment,
 } from "./types";
+
+// Ajusta um texto para a MARCA do lead: troca o nome da clínica e o volume de
+// atendimentos/mês. Na MenthalHelp NÃO muda nada (texto idêntico ao atual —
+// operadoras/reajuste seguem perfeitos). Na Therapy Minds, "MenthalHelp" vira
+// "Therapy Minds" e "3.000+/3.000" vira o volume dela ("1.000").
+function brandizar(texto: string, brand: Brand): string {
+  if (brand.id === "menthalhelp") return texto;
+  return texto
+    .replaceAll("MenthalHelp", brand.label)
+    .replaceAll("3.000+", brand.volume)
+    .replaceAll("3.000", brand.volume.replace(/\+$/, ""));
+}
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -313,7 +325,9 @@ ${categoryBriefing(company, hook)}${briefingLine}${historyLine}${angleLine}${fol
 
 Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
 
-  const parsed = parseJsonObject(await ask(SYSTEM_PROMPT, userPrompt)) as Partial<GeneratedDraft>;
+  const parsed = parseJsonObject(
+    await ask(brandizar(SYSTEM_PROMPT, brand), brandizar(userPrompt, brand)),
+  ) as Partial<GeneratedDraft>;
   if (typeof parsed.body !== "string") {
     throw new Error("A IA retornou JSON sem o campo 'body'.");
   }
@@ -368,6 +382,7 @@ export async function generateReply(opts: {
   history?: string; // memória comercial (Fase 1.2)
 }): Promise<GeneratedDraft> {
   const { company, contact, incomingText, instruction, channel, history } = opts;
+  const brand = getBrand(company.brand);
   const contactLine = contact
     ? `Contato: ${contact.name}${contact.title ? `, ${contact.title}` : ""}.`
     : "Contato: responda de forma cordial e geral.";
@@ -391,13 +406,13 @@ Gere o assunto (use "Re: ..." quando fizer sentido) e o corpo, seguindo as \
 diretrizes do sistema.`;
 
   const parsed = parseJsonObject(
-    await ask(REPLY_SYSTEM, userPrompt),
+    await ask(brandizar(REPLY_SYSTEM, brand), brandizar(userPrompt, brand)),
   ) as Partial<GeneratedDraft>;
   if (typeof parsed.body !== "string") {
     throw new Error("A IA retornou JSON sem o campo 'body'.");
   }
   let body = parsed.body.trim();
-  if (channel === "email") body += `\n\n${getBrand(company.brand).signature}`;
+  if (channel === "email") body += `\n\n${brand.signature}`;
   return {
     subject: channel === "whatsapp" ? "" : (parsed.subject ?? ""),
     body,
@@ -487,7 +502,7 @@ Lembre-se: precisa soar diferente de envios anteriores.
 Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
 
   const parsed = parseJsonObject(
-    await ask(AGENDA_SYSTEM, userPrompt),
+    await ask(brandizar(AGENDA_SYSTEM, brand), brandizar(userPrompt, brand)),
   ) as Partial<GeneratedDraft>;
   if (typeof parsed.body !== "string") {
     throw new Error("A IA retornou JSON sem o campo 'body'.");

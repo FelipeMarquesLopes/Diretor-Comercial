@@ -16,6 +16,20 @@ export const CLINIC_SERVICES = `Nossos serviços:
 • Método Pediasuit
 • Avaliação Neuropsicológica`;
 
+// Lista de serviços da THERAPY MINDS (difere da MenthalHelp: sem Fisioterapia
+// Neurológica/Ortopédica e sem Método Pediasuit).
+export const THERAPY_MINDS_SERVICES = `Nossos serviços:
+• Psicologia TEA ABA
+• Psicologia Clínica/Convencional
+• Fonoaudiologia TEA ABA
+• Fonoaudiologia Clínica/Convencional
+• Terapia Ocupacional TEA ABA
+• Terapia Ocupacional com Integração Sensorial
+• Psicopedagogia
+• Musicoterapia
+• Fisioterapia TEA ABA
+• Avaliação Neuropsicológica`;
+
 // Assinatura — entra em TODOS os e-mails.
 export const EMAIL_SIGNATURE = `Sócio-Diretor - Felipe Marques
 Clínica Multidisciplinar MenthalHelp

@@ -12,6 +12,7 @@
 
 import {
   CLINIC_SERVICES,
+  THERAPY_MINDS_SERVICES,
   EMAIL_SIGNATURE,
   MENTHAL_UNITS,
   THERAPY_MINDS_UNITS,
@@ -27,6 +28,7 @@ export interface Brand {
   signature: string; // assinatura fixa (fim de todo e-mail)
   services: string; // lista de serviços (apresentação inicial)
   units: string[]; // unidades/regiões
+  volume: string; // volume de atendimentos/mês (ex: "3.000+", "1.000")
 }
 
 // Assinatura fixa da Therapy Minds (dados reais informados pelo CEO). A
@@ -47,6 +49,7 @@ export const BRANDS: Record<BrandId, Brand> = {
     signature: EMAIL_SIGNATURE, // inalterada — a atual, perfeita
     services: CLINIC_SERVICES,
     units: MENTHAL_UNITS,
+    volume: "3.000+",
   },
   therapy_minds: {
     id: "therapy_minds",
@@ -54,8 +57,9 @@ export const BRANDS: Record<BrandId, Brand> = {
     short: "Therapy Minds",
     accent: "#0d9488", // teal (distingue no seletor)
     signature: TM_SIGNATURE,
-    services: CLINIC_SERVICES, // mesma oferta
+    services: THERAPY_MINDS_SERVICES, // lista própria (sem fisio neuro/orto e pediasuit)
     units: THERAPY_MINDS_UNITS, // exclusivamente Zona Sul (Interlagos)
+    volume: "1.000",
   },
 };
 
