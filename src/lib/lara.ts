@@ -115,11 +115,17 @@ async function lerDocumentoEdital(
   }
 }
 
-const MODELO_LABEL = MODEL.includes("opus-5")
+// Modelo de ORQUESTRAÇÃO da Lara (decidir quais ferramentas usar). Usamos um
+// modelo RÁPIDO aqui — a escrita da copy do e-mail continua no Opus 5 (feita
+// dentro de anthropic.ts pelas ferramentas), então a qualidade do texto não
+// muda; só a Lara fica muito mais ágil. Ajustável por LARA_MODEL na Vercel.
+const LARA_MODEL = process.env.LARA_MODEL?.trim() || "claude-sonnet-5";
+
+const MODELO_LABEL = LARA_MODEL.includes("opus-5")
   ? "Claude Opus 5"
-  : MODEL.includes("sonnet-5")
+  : LARA_MODEL.includes("sonnet-5")
     ? "Claude Sonnet 5"
-    : MODEL;
+    : LARA_MODEL;
 
 const SYSTEM = `Você é a LARA, a assistente comercial pessoal do Felipe (Sócio-Diretor \
 da MenthalHelp / Therapy Minds) DENTRO do sistema Growth AI. Você executa o que \
@@ -1044,11 +1050,12 @@ export async function runLara(
 
   for (let i = 0; i < 8; i++) {
     const resp = await anthropic.messages.create({
-      model: MODEL,
+      model: LARA_MODEL,
       max_tokens: 4000,
-      // Esforço médio: a Lara raciocina o suficiente para pedidos vagos, mas
-      // sem "pensar demais" (mantém a resposta rápida no chat).
-      output_config: { effort: "medium" },
+      // Esforço BAIXO: orquestrar (escolher ferramentas) não precisa de muito
+      // "pensamento". Isso deixa a Lara bem mais rápida no chat. A escrita da
+      // copy do e-mail é feita pelas ferramentas (Opus 5), sem perder qualidade.
+      output_config: { effort: "low" },
       system,
       tools: [...TOOLS, webTool, fetchTool],
       messages: saneiarMensagens(messages),
