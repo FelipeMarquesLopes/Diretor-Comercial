@@ -326,7 +326,7 @@ ${categoryBriefing(company, hook)}${briefingLine}${historyLine}${angleLine}${fol
 Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
 
   const parsed = parseJsonObject(
-    await ask(brandizar(SYSTEM_PROMPT, brand), brandizar(userPrompt, brand)),
+    await ask(brandizar(SYSTEM_PROMPT, brand), brandizar(userPrompt, brand), 4000, "medium"),
   ) as Partial<GeneratedDraft>;
   if (typeof parsed.body !== "string") {
     throw new Error("A IA retornou JSON sem o campo 'body'.");
@@ -406,7 +406,7 @@ Gere o assunto (use "Re: ..." quando fizer sentido) e o corpo, seguindo as \
 diretrizes do sistema.`;
 
   const parsed = parseJsonObject(
-    await ask(brandizar(REPLY_SYSTEM, brand), brandizar(userPrompt, brand)),
+    await ask(brandizar(REPLY_SYSTEM, brand), brandizar(userPrompt, brand), 4000, "medium"),
   ) as Partial<GeneratedDraft>;
   if (typeof parsed.body !== "string") {
     throw new Error("A IA retornou JSON sem o campo 'body'.");
@@ -502,7 +502,7 @@ Lembre-se: precisa soar diferente de envios anteriores.
 Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
 
   const parsed = parseJsonObject(
-    await ask(brandizar(AGENDA_SYSTEM, brand), brandizar(userPrompt, brand)),
+    await ask(brandizar(AGENDA_SYSTEM, brand), brandizar(userPrompt, brand), 4000, "medium"),
   ) as Partial<GeneratedDraft>;
   if (typeof parsed.body !== "string") {
     throw new Error("A IA retornou JSON sem o campo 'body'.");

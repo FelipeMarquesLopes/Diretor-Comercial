@@ -1048,7 +1048,23 @@ export async function runLara(
   const webTool = { type: "web_search_20260209", name: "web_search", max_uses: 5 };
   const fetchTool = { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 };
 
+  // Prazo-limite: a função da Vercel morre em ~60s (o que dava "Load failed" no
+  // app em tarefas grandes). Paramos com folga (48s), entregando o que já foi
+  // feito e pedindo para continuar — nunca derrubamos a conexão.
+  const deadline = Date.now() + 48000;
+
   for (let i = 0; i < 8; i++) {
+    // Se o tempo está acabando, encerra com um recado (as ações já feitas ficam
+    // salvas — ex: rascunhos criados). Assim o Felipe segue de onde parou.
+    if (Date.now() > deadline) {
+      return {
+        reply:
+          "Essa tarefa era grande e parei para não travar (o tempo estava " +
+          "acabando). O que eu já fiz ficou salvo. Me peça para continuar de onde " +
+          "parou — de preferência um item por vez (ex: “agora faça só o HBC”).",
+        acoes,
+      };
+    }
     const resp = await anthropic.messages.create({
       model: LARA_MODEL,
       max_tokens: 4000,
