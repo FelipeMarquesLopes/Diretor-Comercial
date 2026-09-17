@@ -170,6 +170,24 @@ TEXTO COMPLETO, e então mostre na conversa o parceiro, o assunto e o corpo do \
 e-mail (transcreva o texto do rascunho para ele ler). Nunca diga que não \
 consegue puxar o rascunho.
 
+COPY E CONTINUIDADE (autonomia total sobre o texto): você PODE ajustar \
+livremente a COPY — o ASSUNTO e o CORPO — de qualquer e-mail, em qualquer \
+segmento (operadora, empresa, médico, escola, sindicato, igreja). Não diga que \
+seu "controle de frase é limitado": use 'editar_rascunho' para reescrever o \
+texto exatamente como precisa (você escreve o corpo completo no tom da marca; a \
+assinatura entra sozinha). ANTES de reescrever ou RETOMAR um contato, use SEMPRE \
+'historico_parceiro' (pelo companyId) para ler os últimos e-mails ENVIADOS e as \
+RESPOSTAS recebidas — inclusive uma NEGATIVA anterior. Escreva dando SEQUÊNCIA \
+ao histórico, com naturalidade: \
+- se o parceiro já disse NÃO antes, retome reconhecendo isso e trazendo um \
+MOTIVO NOVO (ex: nova unidade, novo argumento, mudança de cenário); \
+- se é um contato ANTIGO sem resposta, reconheça o tempo ("retomando nosso \
+contato") e reforce o valor; \
+- nunca repita o mesmo texto do último envio nem contradiga o que já foi dito. \
+Não invente números do parceiro que você não tem — se faltar um dado concreto \
+(ex: quantos beneficiários eles têm numa região), escreva de forma qualitativa \
+("região de alta concentração de beneficiários de vocês") ou pergunte ao Felipe.
+
 BUSCA NA WEB (você NÃO depende só do Apollo): você tem a ferramenta de pesquisa \
 na internet (web_search). Quando o Apollo não tiver o e-mail de um decisor, \
 PESQUISE na web (site oficial do parceiro, Google, páginas de contato) para \
@@ -353,6 +371,33 @@ const TOOLS: Tool[] = [
         hook: { type: "string", description: "nr1|saude_mental|tea_aba (opcional)" },
       },
       required: ["companyId"],
+    },
+  },
+  {
+    name: "historico_parceiro",
+    description:
+      "Traz o CONTEXTO comercial completo de um parceiro (empresa/operadora/médico/escola/sindicato/igreja) pelo companyId, para você ANALISAR antes de escrever: linha do tempo, respostas recebidas (ex: uma NEGATIVA anterior) e os últimos e-mails ENVIADOS (assunto + corpo). Use SEMPRE antes de reescrever ou retomar um contato, para dar sequência ao histórico sem repetir nem contradizer.",
+    input_schema: {
+      type: "object",
+      properties: { companyId: { type: "string" } },
+      required: ["companyId"],
+    },
+  },
+  {
+    name: "editar_rascunho",
+    description:
+      "Reescreve DIRETAMENTE o assunto e/ou o corpo de um rascunho existente — controle fino da copy, além da regeneração por template. Use quando quiser ajustar texto/ênfase/assunto de um e-mail para QUALQUER segmento (operadora, empresa, médico, escola, sindicato, igreja). Escreva o corpo COMPLETO no tom da marca; NÃO inclua a assinatura (é adicionada automaticamente). O rascunho fica pendente para o CEO aprovar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string" },
+        subject: { type: "string", description: "novo assunto (opcional)" },
+        body: {
+          type: "string",
+          description: "novo corpo do e-mail, no tom da marca, SEM a assinatura",
+        },
+      },
+      required: ["draftId"],
     },
   },
   {
@@ -770,6 +815,13 @@ async function executar(
       return api(ctx, "POST", "/api/drafts", {
         companyId: input.companyId,
         hook: input.hook ?? "saude_mental",
+      });
+    case "historico_parceiro":
+      return api(ctx, "GET", `/api/companies/${input.companyId}/historico`);
+    case "editar_rascunho":
+      return api(ctx, "POST", `/api/drafts/${input.draftId}/rewrite`, {
+        subject: input.subject,
+        body: input.body,
       });
     case "listar_licitacoes": {
       const p = new URLSearchParams();
