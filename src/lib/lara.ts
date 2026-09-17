@@ -1051,7 +1051,7 @@ export async function runLara(
   // Prazo-limite: a função da Vercel morre em ~60s (o que dava "Load failed" no
   // app em tarefas grandes). Paramos com folga (48s), entregando o que já foi
   // feito e pedindo para continuar — nunca derrubamos a conexão.
-  const deadline = Date.now() + 48000;
+  const deadline = Date.now() + 42000;
 
   for (let i = 0; i < 8; i++) {
     // Se o tempo está acabando, encerra com um recado (as ações já feitas ficam
@@ -1103,10 +1103,24 @@ export async function runLara(
         if (block.type === "tool_use") {
           acoes.push(block.name);
           let out: unknown;
-          try {
-            out = await executar(ctx, block.name, (block.input ?? {}) as Record<string, unknown>);
-          } catch (e) {
-            out = { erro: e instanceof Error ? e.message : "falha na ferramenta" };
+          if (Date.now() > deadline) {
+            // Tempo acabando: não inicia uma ação pesada (ex: gerar copy) que
+            // estouraria o limite da Vercel. Devolve aviso e a próxima volta do
+            // loop encerra com o recado de "continuar".
+            out = {
+              erro:
+                "Tempo quase esgotado — não executei esta ação para não travar. Peça para continuar.",
+            };
+          } else {
+            try {
+              out = await executar(
+                ctx,
+                block.name,
+                (block.input ?? {}) as Record<string, unknown>,
+              );
+            } catch (e) {
+              out = { erro: e instanceof Error ? e.message : "falha na ferramenta" };
+            }
           }
           const bruto = JSON.stringify(out ?? { ok: true });
           const conteudo = (bruto && bruto !== "undefined" ? bruto : "{}").slice(0, 6000);
