@@ -419,6 +419,84 @@ diretrizes do sistema.`;
   };
 }
 
+// --- Revisão de continuidade do follow-up (a "conferência da Lara") ----------
+//
+// Antes de um follow-up (72h) ficar aguardando aprovação, a Lara CONFERE se ele
+// dá continuidade correta ao histórico: não repetir o último enviado, reconhecer
+// uma NEGATIVA anterior com um ângulo novo, e não contradizer nem inventar dados.
+// Se estiver bom, mantém; se precisar, reescreve. Nada é enviado — segue pendente.
+export async function reviewFollowupDraft(opts: {
+  company: Company;
+  subject: string;
+  body: string;
+  lastSent?: { subject: string | null; body: string | null } | null;
+  responses?: { sentiment: string; summary: string | null; trecho: string }[];
+}): Promise<{ changed: boolean; subject: string; body: string }> {
+  const { company, subject, body } = opts;
+  const brand = getBrand(company.brand);
+  const respostas = opts.responses ?? [];
+
+  const ultimo = opts.lastSent
+    ? `ÚLTIMO E-MAIL ENVIADO a este parceiro:\nAssunto: ${opts.lastSent.subject ?? ""}\n${(opts.lastSent.body ?? "").slice(0, 1200)}`
+    : "Ainda não há registro de e-mail anterior enviado.";
+  const resumoRespostas = respostas.length
+    ? respostas
+        .map(
+          (r) =>
+            `- [${r.sentiment}] ${r.summary ?? ""}${r.trecho ? ` — "${r.trecho.slice(0, 300)}"` : ""}`,
+        )
+        .join("\n")
+    : "Nenhuma resposta registrada.";
+
+  const system =
+    `Você é a Lara, revisora de e-mails comerciais da ${brand.label} ` +
+    "(clínica de saúde mental e neurodesenvolvimento, forte em TEA/ABA). Antes " +
+    "de um FOLLOW-UP ficar aguardando aprovação, você confere se ele dá " +
+    "continuidade correta ao histórico com o parceiro. Português do Brasil, tom " +
+    "profissional e de parceria.";
+
+  const userPrompt = `Confira este FOLLOW-UP antes de aguardar aprovação.
+
+Parceiro: ${company.name} (${company.category}).
+
+${ultimo}
+
+RESPOSTAS JÁ RECEBIDAS deste parceiro:
+${resumoRespostas}
+
+RASCUNHO ATUAL do follow-up:
+Assunto: ${subject}
+${body}
+
+REGRAS da revisão:
+- Se o rascunho repete quase igual o último enviado, reescreva variando abertura/estrutura/argumento.
+- Se houve uma NEGATIVA, o texto PRECISA reconhecê-la e trazer um MOTIVO NOVO para retomar (sem soar insistente).
+- Dê continuidade natural ("retomando nosso contato" quando fizer sentido); nunca contradiga o histórico.
+- NÃO invente números/dados do parceiro. NÃO altere a assinatura (bloco final com nome e contatos) — mantenha-a igual.
+- Se o rascunho já está adequado, NÃO mude (changed=false).
+
+Responda SOMENTE JSON, sem texto antes/depois: {"changed": true|false, "subject": "<assunto>", "body": "<corpo completo, com a assinatura no fim>"}`;
+
+  try {
+    const parsed = parseJsonObject(
+      await ask(system, userPrompt, 4000, "low"),
+    ) as { changed?: boolean; subject?: string; body?: string };
+    if (!parsed.changed || typeof parsed.body !== "string" || !parsed.body.trim()) {
+      return { changed: false, subject, body };
+    }
+    let novoBody = parsed.body.trim();
+    // Garante a assinatura da marca no fim (sem duplicar).
+    const ultimaLinha = brand.signature.trim().split("\n").pop() ?? "";
+    if (ultimaLinha && !novoBody.includes(ultimaLinha)) {
+      novoBody += `\n\n${brand.signature}`;
+    }
+    return { changed: true, subject: parsed.subject?.trim() || subject, body: novoBody };
+  } catch {
+    // Se a revisão falhar, mantém o rascunho original (não quebra o motor).
+    return { changed: false, subject, body };
+  }
+}
+
 // --- Informativo recorrente de "Agenda Aberta" -----------------------------
 
 const AGENDA_SYSTEM = `Você é o assistente de RELACIONAMENTO da MenthalHelp, \

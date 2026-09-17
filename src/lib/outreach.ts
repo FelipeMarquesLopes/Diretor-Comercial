@@ -2,7 +2,7 @@
 // Usados pelas rotas de API (nunca no navegador).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { generateDraft, generateAgendaInformativo } from "./anthropic";
+import { generateDraft, generateAgendaInformativo, reviewFollowupDraft } from "./anthropic";
 import { buildCommercialContext } from "./memory";
 import { buildPersonalizationAngle } from "./personalize";
 import { nextActionAt } from "./followup";
@@ -122,17 +122,71 @@ export async function generateDraftForSequence(
     return { ok: false, error: err instanceof Error ? err.message : "Erro na IA" };
   }
 
-  await supabase.from("drafts").insert({
-    company_id: company.id,
-    contact_id: contact?.id ?? null,
-    channel: sequence.channel,
-    hook,
-    subject: generated.subject || null,
-    body: generated.body,
-    status: "pendente",
-    sequence_id: sequence.id,
-    step: sequence.step,
-  });
+  const { data: novoDraft } = await supabase
+    .from("drafts")
+    .insert({
+      company_id: company.id,
+      contact_id: contact?.id ?? null,
+      channel: sequence.channel,
+      hook,
+      subject: generated.subject || null,
+      body: generated.body,
+      status: "pendente",
+      sequence_id: sequence.id,
+      step: sequence.step,
+    })
+    .select("id")
+    .single<{ id: string }>();
+
+  // CONFERÊNCIA DA LARA (só follow-ups por e-mail): relê o histórico (último
+  // enviado + respostas) e AJUSTA o rascunho para dar continuidade correta —
+  // sem repetir, reconhecendo uma negativa anterior etc. Continua pendente.
+  // Defensivo: qualquer falha aqui não quebra o motor (o rascunho já existe).
+  if (novoDraft && sequence.step > 0 && sequence.channel === "email") {
+    try {
+      const [{ data: enviado }, { data: respostas }] = await Promise.all([
+        supabase
+          .from("drafts")
+          .select("subject, body")
+          .eq("company_id", company.id)
+          .eq("status", "enviado")
+          .order("sent_at", { ascending: false })
+          .limit(1)
+          .maybeSingle<{ subject: string | null; body: string | null }>(),
+        supabase
+          .from("responses")
+          .select("sentiment, summary, raw_text")
+          .eq("company_id", company.id)
+          .order("created_at", { ascending: false })
+          .limit(5),
+      ]);
+      const review = await reviewFollowupDraft({
+        company,
+        subject: generated.subject || "",
+        body: generated.body,
+        lastSent: enviado ?? null,
+        responses: (respostas ?? []).map((r) => ({
+          sentiment: r.sentiment as string,
+          summary: (r.summary as string | null) ?? null,
+          trecho: ((r.raw_text as string | null) ?? "").slice(0, 400),
+        })),
+      });
+      if (review.changed) {
+        await supabase
+          .from("drafts")
+          .update({ subject: review.subject || null, body: review.body })
+          .eq("id", novoDraft.id);
+        await supabase.from("activities").insert({
+          company_id: company.id,
+          type: "rascunho",
+          description:
+            "Lara revisou o follow-up e ajustou a copy para dar continuidade ao histórico.",
+        });
+      }
+    } catch {
+      // revisão é um extra; se falhar, o rascunho original segue pendente
+    }
+  }
 
   // Rascunho pendente → não regerar até que este seja enviado.
   await supabase
