@@ -24,6 +24,7 @@ import { listarEmails, lerEmail } from "./mailread";
 import { isInboxConfigured } from "./inbox";
 import { arquivosDaLicitacao, baixarArquivoLicitacao } from "./pncp";
 import { carregarMemoria, lembrarFato, esquecerFato } from "./laraMemory";
+import { getBrand } from "./brands";
 
 function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -663,7 +664,7 @@ const TOOLS: Tool[] = [
 
 // --- Execução das ferramentas (chamando os próprios endpoints) --------------
 
-type Ctx = { origin: string; auth: string | null };
+type Ctx = { origin: string; auth: string | null; brand?: string | null };
 
 async function api(
   ctx: Ctx,
@@ -673,6 +674,11 @@ async function api(
 ): Promise<unknown> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (ctx.auth) headers["Authorization"] = ctx.auth; // age com as credenciais do CEO
+  // Repassa a MARCA ATIVA para as rotas internas filtrarem/carimbarem certo
+  // (senão a Lara só enxergaria a base da MenthalHelp, a marca padrão).
+  if (ctx.brand === "menthalhelp" || ctx.brand === "therapy_minds") {
+    headers["Cookie"] = `marca=${ctx.brand}`;
+  }
   const res = await fetch(`${ctx.origin}${path}`, {
     method,
     headers,
@@ -1081,6 +1087,16 @@ export async function runLara(
   // Lara já "saber" sem precisar de ferramenta. Defensivo: se a memória não
   // estiver disponível, segue sem ela.
   let system = SYSTEM;
+  // MARCA ATIVA: a Lara opera na base da marca em que o CEO está na tela — as
+  // listas e ações já vêm filtradas por ela. Deixamos isso explícito para a Lara
+  // não confundir marcas (ex: um lead da Therapy Minds x MenthalHelp).
+  const marcaAtiva = getBrand(ctx.brand);
+  system +=
+    `\n\n=== MARCA ATIVA AGORA: ${marcaAtiva.label} ===\n` +
+    `Você está trabalhando na base da ${marcaAtiva.label}. Tudo que você lista ` +
+    `(empresas, rascunhos, respostas) e tudo que você cria/edita é DESTA marca. ` +
+    `Se o CEO falar de um parceiro que você não acha aqui, ele pode estar na ` +
+    `outra marca — diga isso em vez de afirmar que "não existe".`;
   try {
     const fatos = await carregarMemoria();
     if (fatos.length > 0) {

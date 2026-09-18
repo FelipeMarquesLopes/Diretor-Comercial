@@ -5,6 +5,7 @@ import {
   historicoParaTurnos,
   salvarMensagem,
 } from "@/lib/laraMemory";
+import { brandFromRequest } from "@/lib/brands";
 
 // A Lara pode encadear várias ferramentas (Apollo, PNCP, IA) — dá folga.
 export const maxDuration = 60;
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
 
   const origin = new URL(req.url).origin;
   const auth = req.headers.get("authorization");
+  // Marca ativa (o navegador manda o cookie `marca`): a Lara passa a operar na
+  // MESMA marca em que o CEO está trabalhando na tela.
+  const brand = brandFromRequest(req);
 
   try {
     // --- Formato NOVO: uma mensagem; o servidor guarda a memória. ---
@@ -46,7 +50,7 @@ export async function POST(req: Request) {
       const atual: LaraTurn = { role: "user", content, anexos };
       const turns = [...historico, atual];
 
-      const result = await runLara({ origin, auth }, turns);
+      const result = await runLara({ origin, auth, brand }, turns);
 
       // Persiste a troca (o anexo é salvo só como nome/tipo, sem base64).
       await salvarMensagem({ role: "user", content, anexos });
@@ -64,7 +68,7 @@ export async function POST(req: Request) {
     if (turns.length === 0) {
       return NextResponse.json({ error: "Sem mensagens." }, { status: 400 });
     }
-    const result = await runLara({ origin, auth }, turns);
+    const result = await runLara({ origin, auth, brand }, turns);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(
