@@ -189,6 +189,12 @@ Não invente números do parceiro que você não tem — se faltar um dado concr
 (ex: quantos beneficiários eles têm numa região), escreva de forma qualitativa \
 ("região de alta concentração de beneficiários de vocês") ou pergunte ao Felipe.
 
+CÓPIAS (CC): você TEM controle real do campo de cópia — use 'gerenciar_cc' para \
+adicionar/remover/definir os e-mails que entram em CÓPIA no envio de um \
+parceiro (ex: incluir aida.motta@sulamerica.com.br em cópia na SulAmérica). NÃO \
+diga que só consegue citar no corpo do texto: adicione de verdade no CC. Se um \
+e-mail estiver bloqueado (retorno/descadastro), o sistema recusa e você avisa.
+
 BUSCA NA WEB (você NÃO depende só do Apollo): você tem a ferramenta de pesquisa \
 na internet (web_search). Quando o Apollo não tiver o e-mail de um decisor, \
 PESQUISE na web (site oficial do parceiro, Google, páginas de contato) para \
@@ -399,6 +405,33 @@ const TOOLS: Tool[] = [
         },
       },
       required: ["draftId"],
+    },
+  },
+  {
+    name: "gerenciar_cc",
+    description:
+      "Gerencia os e-mails em CÓPIA (CC) de um parceiro — quem entra em cópia quando o rascunho é enviado (controle REAL do campo de cópia, não só citar no texto). Use 'adicionar' para incluir, 'remover' para tirar, ou 'definir' para substituir toda a lista. Ex: incluir aida.motta@sulamerica.com.br em cópia no envio da SulAmérica. E-mails bloqueados (retorno/descadastro) são recusados automaticamente.",
+    input_schema: {
+      type: "object",
+      properties: {
+        companyId: { type: "string" },
+        adicionar: {
+          type: "array",
+          items: { type: "string" },
+          description: "e-mails a incluir em cópia",
+        },
+        remover: {
+          type: "array",
+          items: { type: "string" },
+          description: "e-mails a tirar da cópia",
+        },
+        definir: {
+          type: "array",
+          items: { type: "string" },
+          description: "substitui TODA a lista de cópia por estes e-mails",
+        },
+      },
+      required: ["companyId"],
     },
   },
   {
@@ -828,6 +861,12 @@ async function executar(
       return api(ctx, "POST", `/api/drafts/${input.draftId}/rewrite`, {
         subject: input.subject,
         body: input.body,
+      });
+    case "gerenciar_cc":
+      return api(ctx, "POST", `/api/companies/${input.companyId}/cc`, {
+        add: input.adicionar,
+        remove: input.remover,
+        set: input.definir,
       });
     case "listar_licitacoes": {
       const p = new URLSearchParams();
