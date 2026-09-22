@@ -48,9 +48,15 @@ export default function Contratos() {
     try {
       const r = await fetch("/api/contratos");
       const d = await r.json();
-      setContratos(Array.isArray(d.contratos) ? d.contratos : []);
-    } catch {
+      if (d.error) {
+        setContratos([]);
+        setMsg(`Não consegui carregar a lista: ${d.error}`);
+      } else {
+        setContratos(Array.isArray(d.contratos) ? d.contratos : []);
+      }
+    } catch (e) {
       setContratos([]);
+      setMsg(`Falha ao carregar: ${e instanceof Error ? e.message : String(e)}`);
     }
     setCarregando(false);
   }
