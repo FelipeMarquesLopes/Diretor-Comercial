@@ -103,12 +103,13 @@ export async function POST(req: Request) {
     company = data ?? null;
   } else if (body.newName?.trim()) {
     const nome = body.newName.trim();
-    // Evita DUPLICAR: se já existe um parceiro com esse nome exato na marca,
-    // usa o existente em vez de criar outro.
+    // Evita DUPLICAR: se já existe um CREDENCIADO com esse nome exato na marca,
+    // usa o existente. Não toca nos registros de prospecção (mundos separados).
     const { data: existente } = await supabase
       .from("companies")
       .select("id, name")
       .eq("brand", brand)
+      .eq("contract_only", true)
       .ilike("name", nome)
       .limit(1)
       .maybeSingle<{ id: string; name: string }>();

@@ -37,9 +37,7 @@ const CAT_LABEL: Record<string, string> = {
 export default function Contratos() {
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const [busca, setBusca] = useState("");
-  const [resultados, setResultados] = useState<Parceiro[]>([]);
-  const [parceiro, setParceiro] = useState<Parceiro | null>(null);
+  const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [arquivos, setArquivos] = useState<File[]>([]);
   const [enviando, setEnviando] = useState(false);
@@ -60,39 +58,10 @@ export default function Contratos() {
     carregar();
   }, []);
 
-  // Busca de parceiro (por nome), na marca ativa.
-  useEffect(() => {
-    const q = busca.trim();
-    if (q.length < 2) {
-      setResultados([]);
-      return;
-    }
-    const t = setTimeout(async () => {
-      try {
-        const r = await fetch(
-          `/api/companies?includeContractOnly=1&q=${encodeURIComponent(q)}`,
-        );
-        const d = await r.json();
-        setResultados(
-          (d.companies ?? []).slice(0, 8).map((c: Parceiro) => ({
-            id: c.id,
-            name: c.name,
-            category: c.category,
-            contract_only: c.contract_only,
-            city: c.city,
-          })),
-        );
-      } catch {
-        setResultados([]);
-      }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [busca]);
-
   async function subir() {
-    const usandoNovo = !parceiro && busca.trim().length >= 2;
-    if (!parceiro && !usandoNovo) {
-      setMsg("Escolha um parceiro existente ou digite o nome do novo (credenciado).");
+    const nomeLimpo = nome.trim();
+    if (nomeLimpo.length < 2) {
+      setMsg("Digite o nome da operadora/parceiro do contrato.");
       return;
     }
     if (arquivos.length === 0) {
@@ -100,16 +69,13 @@ export default function Contratos() {
       return;
     }
     setEnviando(true);
-    setMsg("Subindo e lendo o contrato com a IA…");
+    setMsg("Subindo e lendo os documentos com a IA…");
     try {
       // 1) URLs assinadas
       const sign = await fetch("/api/contratos/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          names: arquivos.map((f) => f.name),
-          companyId: parceiro?.id, // novo parceiro: sem id ainda (usa prefixo geral)
-        }),
+        body: JSON.stringify({ names: arquivos.map((f) => f.name) }),
       });
       const sd = await sign.json();
       if (!sd.uploads) throw new Error(sd.error ?? "Falha ao preparar upload.");
@@ -125,14 +91,13 @@ export default function Contratos() {
         if (!put.ok) throw new Error(`Falha ao subir "${up.name}".`);
       }
 
-      // 3) Registra + IA analisa (parceiro existente OU cria credenciado na hora)
+      // 3) Registra + IA analisa (usa/cria o parceiro pelo NOME — sem dropdown)
       const reg = await fetch("/api/contratos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: parceiro?.id,
-          newName: parceiro ? undefined : busca.trim(),
-          email: parceiro ? undefined : email.trim() || undefined,
+          newName: nomeLimpo,
+          email: email.trim() || undefined,
           paths: sd.uploads.map((u: { path: string }) => u.path),
           names: sd.uploads.map((u: { name: string }) => u.name),
         }),
@@ -142,11 +107,10 @@ export default function Contratos() {
 
       setMsg(
         rd.analiseOk
-          ? "Contrato anexado e lido pela IA (data e cláusula extraídas)."
+          ? "Documentos lidos pela IA (data, cláusula e proposta abaixo). Decida quando gerar o pedido."
           : "Contrato anexado. A IA não conseguiu ler tudo — confira a data depois.",
       );
-      setParceiro(null);
-      setBusca("");
+      setNome("");
       setEmail("");
       setArquivos([]);
       carregar();
@@ -219,76 +183,26 @@ export default function Contratos() {
         <h2 className="text-sm font-semibold text-brand-800">Anexar contrato</h2>
         <div className="mt-3">
           <label className="mb-1 block text-xs font-medium text-brand-800/70">
-            Parceiro (busque pelo nome)
+            De qual operadora/parceiro é este contrato?
           </label>
-          {parceiro ? (
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-brand-50 px-3 py-1 text-sm text-brand-800">
-                {parceiro.name}
-                {parceiro.category ? ` · ${CAT_LABEL[parceiro.category] ?? parceiro.category}` : ""}
-              </span>
-              <button
-                onClick={() => setParceiro(null)}
-                className="text-xs text-brand-500 hover:text-red-500"
-              >
-                trocar
-              </button>
-            </div>
-          ) : (
-            <>
-              <input
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="ex: Bradesco Saúde, Colégio X, Dr. Fulano…"
-                className="w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
-              />
-              {resultados.length > 0 && (
-                <div className="mt-1 rounded-lg border border-brand-100 bg-white">
-                  {resultados.map((r) => (
-                    <button
-                      key={r.id}
-                      onClick={() => {
-                        setParceiro(r);
-                        setResultados([]);
-                      }}
-                      className="block w-full px-3 py-2 text-left text-sm hover:bg-brand-50"
-                    >
-                      {r.name}
-                      <span className="text-brand-800/50">
-                        {" "}
-                        · {CAT_LABEL[r.category] ?? r.category}
-                        {r.city ? ` · ${r.city}` : ""}
-                      </span>
-                      {r.contract_only && (
-                        <span className="ml-2 rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">
-                          credenciado
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {busca.trim().length >= 2 &&
-                !resultados.some(
-                  (r) => r.name.toLowerCase() === busca.trim().toLowerCase(),
-                ) && (
-                <div className="mt-2 rounded-lg border border-dashed border-brand-200 bg-brand-50/40 p-2.5">
-                  <p className="text-xs text-brand-800/70">
-                    Não está na lista? Vou criar{" "}
-                    <b>&quot;{busca.trim()}&quot;</b> como novo parceiro
-                    credenciado (fora da prospecção). Você pode informar o e-mail
-                    de credenciamento agora (opcional, para o reajuste depois):
-                  </p>
-                  <input
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="e-mail de credenciamento (opcional)"
-                    className="mt-2 w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
-                  />
-                </div>
-              )}
-            </>
-          )}
+          <input
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            placeholder="ex: Amil, Unimed Guarulhos, Bradesco Saúde…"
+            className="w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
+          />
+        </div>
+
+        <div className="mt-3">
+          <label className="mb-1 block text-xs font-medium text-brand-800/70">
+            E-mail de quem vai tratar o reajuste (opcional)
+          </label>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="ex: marcia.souza@amil.com.br"
+            className="w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
+          />
         </div>
 
         <div className="mt-3">
@@ -400,6 +314,12 @@ export default function Contratos() {
             </div>
             {c.parecer && (
               <p className="mt-1 text-xs text-brand-800/60">{c.parecer}</p>
+            )}
+            {c.elegivel && !c.em_reajuste && (
+              <p className="mt-1 text-[11px] text-brand-800/50">
+                Elegível a reajuste. Clique em <b>Preparar reajuste</b> para gerar
+                o pedido agora, ou aguarde a campanha automática de janeiro.
+              </p>
             )}
             <div className="mt-1 text-[11px] text-brand-800/40">
               {c.files?.map((f) => f.name).join(", ")}
