@@ -13,6 +13,7 @@ type Contrato = {
   janela: string | null;
   parecer: string | null;
   elegivel: boolean;
+  em_reajuste: boolean;
   created_at: string;
 };
 
@@ -153,15 +154,56 @@ export default function Contratos() {
     carregar();
   }
 
-  const elegiveis = contratos.filter((c) => c.elegivel).length;
+  const [preparando, setPreparando] = useState<string | null>(null);
+  async function prepararReajuste(id: string) {
+    setPreparando(id);
+    setMsg("");
+    try {
+      const r = await fetch(`/api/contratos/${id}/reajuste`, { method: "POST" });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setMsg("Pedido de reajuste preparado (rascunho pendente) e registrado na aba Reajustes.");
+      carregar();
+    } catch (e) {
+      setMsg(`Erro ao preparar reajuste: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    setPreparando(null);
+  }
+
+  async function prepararTodos() {
+    const alvos = contratos.filter((c) => c.elegivel && !c.em_reajuste && c.parceiro);
+    if (alvos.length === 0) return;
+    if (!confirm(`Preparar o pedido de reajuste de ${alvos.length} contrato(s) elegível(is)?`)) {
+      return;
+    }
+    setPreparando("todos");
+    setMsg(`Preparando ${alvos.length} pedido(s) de reajuste…`);
+    let ok = 0;
+    for (const c of alvos) {
+      try {
+        const r = await fetch(`/api/contratos/${c.id}/reajuste`, { method: "POST" });
+        const d = await r.json();
+        if (!d.error) ok++;
+      } catch {
+        // segue para o próximo
+      }
+    }
+    setMsg(`${ok} de ${alvos.length} pedido(s) de reajuste preparados (rascunhos pendentes).`);
+    setPreparando(null);
+    carregar();
+  }
+
+  const elegiveis = contratos.filter((c) => c.elegivel && !c.em_reajuste).length;
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="text-xl font-semibold text-brand-800">Contratos</h1>
+      <h1 className="text-xl font-semibold text-brand-800">Reajustes</h1>
       <p className="mt-1 text-sm text-brand-800/60">
-        Banco de contratos dos parceiros. A IA lê o PDF e extrai a data de início
-        e a cláusula de reajuste. Todo Jan–Fev, a Lara prepara os pedidos de
-        reajuste dos contratos com 12+ meses.
+        Banco de contratos + reajuste, num lugar só. Anexe o contrato do parceiro
+        (a IA lê o PDF e extrai a data de início e a cláusula). Contratos com 12+
+        meses ficam elegíveis — prepare o pedido de reajuste aqui (ou peça à Lara)
+        e ele entra na cobrança. Todo Jan–Fev o sistema prepara os elegíveis
+        automaticamente.
       </p>
 
       {/* Upload */}
@@ -256,15 +298,26 @@ export default function Contratos() {
       </div>
 
       {/* Lista */}
-      <div className="mt-5 flex items-center justify-between">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-brand-800">
           {contratos.length} contrato(s)
         </h2>
-        {elegiveis > 0 && (
-          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
-            {elegiveis} com 12+ meses (reajuste elegível)
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {elegiveis > 0 && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+              {elegiveis} elegível(is) sem cobrança
+            </span>
+          )}
+          {elegiveis > 0 && (
+            <button
+              onClick={prepararTodos}
+              disabled={preparando === "todos"}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {preparando === "todos" ? "Preparando…" : "Preparar todos os elegíveis"}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-2 space-y-2">
@@ -289,18 +342,34 @@ export default function Contratos() {
                     {CAT_LABEL[c.categoria] ?? c.categoria}
                   </span>
                 )}
-                {c.elegivel && (
+                {c.elegivel && !c.em_reajuste && (
                   <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
                     reajuste elegível
                   </span>
                 )}
+                {c.em_reajuste && (
+                  <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                    em cobrança de reajuste
+                  </span>
+                )}
               </div>
-              <button
-                onClick={() => excluir(c.id)}
-                className="text-xs text-brand-400 hover:text-red-500"
-              >
-                excluir
-              </button>
+              <div className="flex items-center gap-2">
+                {!c.em_reajuste && c.parceiro && (
+                  <button
+                    onClick={() => prepararReajuste(c.id)}
+                    disabled={preparando === c.id}
+                    className="rounded-md bg-brand-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                  >
+                    {preparando === c.id ? "Preparando…" : "Preparar reajuste"}
+                  </button>
+                )}
+                <button
+                  onClick={() => excluir(c.id)}
+                  className="text-xs text-brand-400 hover:text-red-500"
+                >
+                  excluir
+                </button>
+              </div>
             </div>
             <div className="mt-1 text-xs text-brand-800/70">
               {c.data_inicio ? (

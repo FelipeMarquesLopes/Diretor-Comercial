@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabase
     .from("contracts")
-    .select("*, companies(name, category)")
+    .select("*, companies(name, category, reajuste_ativo)")
     .eq("brand", brand)
     .order("created_at", { ascending: false })
     .limit(500);
@@ -42,6 +42,8 @@ export async function GET(req: Request) {
     ...c,
     parceiro: (c.companies as { name?: string } | null)?.name ?? null,
     categoria: (c.companies as { category?: string } | null)?.category ?? null,
+    em_reajuste:
+      (c.companies as { reajuste_ativo?: boolean } | null)?.reajuste_ativo ?? false,
     elegivel: elegivelReajuste(c.data_inicio as string | null),
   }));
   return NextResponse.json({ contratos });
