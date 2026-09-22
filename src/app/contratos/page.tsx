@@ -33,6 +33,7 @@ export default function Contratos() {
   const [busca, setBusca] = useState("");
   const [resultados, setResultados] = useState<Parceiro[]>([]);
   const [parceiro, setParceiro] = useState<Parceiro | null>(null);
+  const [email, setEmail] = useState("");
   const [arquivos, setArquivos] = useState<File[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [msg, setMsg] = useState("");
@@ -61,7 +62,9 @@ export default function Contratos() {
     }
     const t = setTimeout(async () => {
       try {
-        const r = await fetch(`/api/companies?q=${encodeURIComponent(q)}`);
+        const r = await fetch(
+          `/api/companies?includeContractOnly=1&q=${encodeURIComponent(q)}`,
+        );
         const d = await r.json();
         setResultados(
           (d.companies ?? []).slice(0, 8).map((c: Parceiro) => ({
@@ -78,8 +81,9 @@ export default function Contratos() {
   }, [busca]);
 
   async function subir() {
-    if (!parceiro) {
-      setMsg("Escolha o parceiro do contrato.");
+    const usandoNovo = !parceiro && busca.trim().length >= 2;
+    if (!parceiro && !usandoNovo) {
+      setMsg("Escolha um parceiro existente ou digite o nome do novo (credenciado).");
       return;
     }
     if (arquivos.length === 0) {
@@ -95,7 +99,7 @@ export default function Contratos() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           names: arquivos.map((f) => f.name),
-          companyId: parceiro.id,
+          companyId: parceiro?.id, // novo parceiro: sem id ainda (usa prefixo geral)
         }),
       });
       const sd = await sign.json();
@@ -112,12 +116,14 @@ export default function Contratos() {
         if (!put.ok) throw new Error(`Falha ao subir "${up.name}".`);
       }
 
-      // 3) Registra + IA analisa
+      // 3) Registra + IA analisa (parceiro existente OU cria credenciado na hora)
       const reg = await fetch("/api/contratos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: parceiro.id,
+          companyId: parceiro?.id,
+          newName: parceiro ? undefined : busca.trim(),
+          email: parceiro ? undefined : email.trim() || undefined,
           paths: sd.uploads.map((u: { path: string }) => u.path),
           names: sd.uploads.map((u: { name: string }) => u.name),
         }),
@@ -132,6 +138,7 @@ export default function Contratos() {
       );
       setParceiro(null);
       setBusca("");
+      setEmail("");
       setArquivos([]);
       carregar();
     } catch (e) {
@@ -203,6 +210,22 @@ export default function Contratos() {
                       </span>
                     </button>
                   ))}
+                </div>
+              )}
+              {busca.trim().length >= 2 && (
+                <div className="mt-2 rounded-lg border border-dashed border-brand-200 bg-brand-50/40 p-2.5">
+                  <p className="text-xs text-brand-800/70">
+                    Não está na lista? Vou criar{" "}
+                    <b>&quot;{busca.trim()}&quot;</b> como novo parceiro
+                    credenciado (fora da prospecção). Você pode informar o e-mail
+                    de credenciamento agora (opcional, para o reajuste depois):
+                  </p>
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e-mail de credenciamento (opcional)"
+                    className="mt-2 w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
+                  />
                 </div>
               )}
             </>

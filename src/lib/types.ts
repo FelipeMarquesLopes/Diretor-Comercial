@@ -88,6 +88,8 @@ export interface Company {
   id: string;
   category: PartnerCategory;
   brand: BrandId;
+  // Parceiro só de CONTRATO (credenciado) — fora da prospecção/automação.
+  contract_only: boolean;
   operator_type: OperatorType;
   briefing: string | null;
   cc_emails: string | null;

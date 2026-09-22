@@ -32,6 +32,11 @@ export async function GET(req: Request) {
     .limit(200);
 
   query = query.eq("brand", brand); // bases separadas por marca
+  // Por padrão, esconde os parceiros SÓ de contrato (credenciados) — eles não
+  // fazem parte da prospecção. A aba Contratos pede includeContractOnly=1.
+  if (searchParams.get("includeContractOnly") !== "1") {
+    query = query.eq("contract_only", false);
+  }
   if (status) query = query.eq("status", status);
   if (category) query = query.eq("category", category);
   if (q && q.trim()) {

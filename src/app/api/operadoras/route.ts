@@ -23,6 +23,7 @@ export async function GET(req: Request) {
     .select("*, contacts(*), sequences(*)")
     .eq("brand", brand)
     .eq("category", "operadora")
+    .eq("contract_only", false)
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

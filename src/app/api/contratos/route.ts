@@ -55,6 +55,9 @@ export async function POST(req: Request) {
   const brand = brandFromRequest(req);
   let body: {
     companyId?: string;
+    newName?: string; // criar parceiro credenciado na hora (fora da prospecção)
+    email?: string; // contato de credenciamento (para o reajuste depois)
+    contactName?: string;
     paths?: string[];
     names?: string[];
     notes?: string;
@@ -66,8 +69,11 @@ export async function POST(req: Request) {
   }
   const paths = (body.paths ?? []).filter((p) => typeof p === "string");
   const names = body.names ?? [];
-  if (!body.companyId) {
-    return NextResponse.json({ error: "Escolha o parceiro do contrato." }, { status: 400 });
+  if (!body.companyId && !body.newName?.trim()) {
+    return NextResponse.json(
+      { error: "Informe o parceiro (existente) ou o nome do novo parceiro." },
+      { status: 400 },
+    );
   }
   if (paths.length === 0) {
     return NextResponse.json({ error: "Nenhum arquivo enviado." }, { status: 400 });
@@ -83,11 +89,48 @@ export async function POST(req: Request) {
     );
   }
 
-  const { data: company } = await supabase
-    .from("companies")
-    .select("id, name")
-    .eq("id", body.companyId)
-    .single<{ id: string; name: string }>();
+  // Resolve o parceiro: usa o existente OU cria um CREDENCIADO na hora (fora da
+  // prospecção — contract_only=true, já parceria ativa, sem automação).
+  let company: { id: string; name: string } | null = null;
+  if (body.companyId) {
+    const { data } = await supabase
+      .from("companies")
+      .select("id, name")
+      .eq("id", body.companyId)
+      .single<{ id: string; name: string }>();
+    company = data ?? null;
+  } else if (body.newName?.trim()) {
+    const { data, error: cErr } = await supabase
+      .from("companies")
+      .insert({
+        name: body.newName.trim(),
+        brand,
+        category: "operadora",
+        contract_only: true, // credenciado — não entra na prospecção/automação
+        status: "parceria_ativa",
+        qualified: true,
+        commercial_thesis: "credenciada",
+        notes: "Parceiro credenciado (banco de contratos).",
+      })
+      .select("id, name")
+      .single<{ id: string; name: string }>();
+    if (cErr || !data) {
+      return NextResponse.json(
+        { error: cErr?.message ?? "Não consegui criar o parceiro." },
+        { status: 500 },
+      );
+    }
+    company = data;
+    // Contato de credenciamento (opcional) — usado no pedido de reajuste depois.
+    if (body.email?.trim()) {
+      await supabase.from("contacts").insert({
+        company_id: company.id,
+        name: body.contactName?.trim() || company.name,
+        email: body.email.trim(),
+        is_decision_maker: true,
+      });
+    }
+  }
   if (!company) {
     return NextResponse.json({ error: "Parceiro não encontrado." }, { status: 404 });
   }
