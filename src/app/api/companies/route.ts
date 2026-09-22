@@ -34,7 +34,20 @@ export async function GET(req: Request) {
   query = query.eq("brand", brand); // bases separadas por marca
   if (status) query = query.eq("status", status);
   if (category) query = query.eq("category", category);
-  if (q && q.trim()) query = query.ilike("name", `%${q.trim()}%`);
+  if (q && q.trim()) {
+    // Busca tolerante: se o CEO digitar várias palavras (ex: "Amil Saúde"),
+    // casa por QUALQUER uma delas (encontra "Amil"). Uma palavra só: substring.
+    const termos = q
+      .trim()
+      .split(/\s+/)
+      .map((w) => w.replace(/[%,()]/g, "").trim())
+      .filter((w) => w.length >= 2);
+    if (termos.length > 1) {
+      query = query.or(termos.map((w) => `name.ilike.%${w}%`).join(","));
+    } else {
+      query = query.ilike("name", `%${q.trim()}%`);
+    }
+  }
 
   const { data, error } = await query;
   if (error) {
