@@ -98,6 +98,8 @@ export interface Company {
   reajuste_parecer: string | null;
   reajuste_percent: string | null;
   reajuste_janela: string | null;
+  // true quando um pedido de reajuste já foi iniciado (aparece na aba Reajustes).
+  reajuste_ativo: boolean;
   apollo_id: string | null;
   name: string;
   domain: string | null;

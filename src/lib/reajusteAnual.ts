@@ -93,6 +93,19 @@ export async function criarPedidoReajuste(
   });
   if (draftErr) return { ok: false, error: draftErr.message };
 
+  // Marca o parceiro como EM PROCESSO DE REAJUSTE (passa a aparecer na aba
+  // Reajustes) e leva a análise do contrato para a ficha dele, sem sobrescrever
+  // dados já preenchidos manualmente.
+  await supabase
+    .from("companies")
+    .update({
+      reajuste_ativo: true,
+      reajuste_percent: company.reajuste_percent ?? contract.indice ?? null,
+      reajuste_janela: company.reajuste_janela ?? contract.janela ?? null,
+      reajuste_parecer: company.reajuste_parecer ?? contract.parecer ?? null,
+    })
+    .eq("id", company.id);
+
   await supabase
     .from("contracts")
     .update({ reajuste_year: anoAtual })

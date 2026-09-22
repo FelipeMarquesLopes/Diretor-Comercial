@@ -18,11 +18,14 @@ export async function GET(req: Request) {
     );
   }
 
+  // Mostra quem está em processo de reajuste: a frente clássica (category
+  // 'reajuste') E qualquer parceiro com pedido já iniciado (reajuste_ativo),
+  // inclusive credenciados vindos do banco de contratos.
   const { data, error } = await supabase
     .from("companies")
     .select("*, contacts(*)")
     .eq("brand", brand)
-    .eq("category", "reajuste")
+    .or("category.eq.reajuste,reajuste_ativo.eq.true")
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
