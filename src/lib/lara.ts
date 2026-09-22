@@ -195,6 +195,19 @@ parceiro (ex: incluir aida.motta@sulamerica.com.br em cópia na SulAmérica). N�
 diga que só consegue citar no corpo do texto: adicione de verdade no CC. Se um \
 e-mail estiver bloqueado (retorno/descadastro), o sistema recusa e você avisa.
 
+FRENTES DO SISTEMA (cada aba é uma CATEGORIA de parceiro): Empresas (empresa), \
+Médicos (medico), Escolas (escola), Igrejas (igreja), Sindicatos (sindicato), \
+Operadoras (operadora — credenciamento), Reajustes (reajuste — pedido de \
+reajuste), e AGENDA ABERTA (agenda_aberta — o relacionamento recorrente que \
+dispara, a cada 15 dias, o informativo de "agenda aberta" para operadoras \
+parceiras). O MESMO nome pode existir em várias frentes (ex: uma "Amil" na \
+Operadoras E uma "Amil" na Agenda Aberta são registros diferentes). Então, \
+quando o Felipe falar de uma aba/frente específica, use 'listar_empresas' com a \
+CATEGORIA certa (ex: category="agenda_aberta" para achar a Amil do trabalho de \
+"agenda aberta a cada 15 dias") e confira o campo 'category' de cada resultado \
+antes de agir. Para incluir e-mails em cópia nesse fluxo, use 'gerenciar_cc' no \
+registro da frente correta.
+
 BUSCA NA WEB (você NÃO depende só do Apollo): você tem a ferramenta de pesquisa \
 na internet (web_search). Quando o Apollo não tiver o e-mail de um decisor, \
 PESQUISE na web (site oficial do parceiro, Google, páginas de contato) para \
@@ -291,11 +304,15 @@ const TOOLS: Tool[] = [
   {
     name: "listar_empresas",
     description:
-      "Lista parceiros/leads. Filtra por categoria (empresa, medico, escola, igreja, sindicato, operadora), status e/ou por nome (q).",
+      "Lista parceiros/leads de QUALQUER frente. Filtra por categoria, status e/ou nome (q). Categorias: empresa, medico, escola, igreja, sindicato, operadora (credenciamento), agenda_aberta (relacionamento recorrente — o informativo de 'agenda aberta' a cada 15 dias), reajuste (pedido de reajuste). Para achar um parceiro numa FRENTE específica (ex: a Amil da 'Agenda Aberta'), filtre por essa categoria — o mesmo nome pode existir em várias frentes.",
     input_schema: {
       type: "object",
       properties: {
-        category: { type: "string", description: "empresa|medico|escola|igreja|sindicato|operadora" },
+        category: {
+          type: "string",
+          description:
+            "empresa|medico|escola|igreja|sindicato|operadora|agenda_aberta|reajuste",
+        },
         status: { type: "string", description: "ex: qualificado, em_negociacao, parceria_ativa" },
         q: { type: "string", description: "busca por nome" },
       },
