@@ -102,35 +102,65 @@ export async function POST(req: Request) {
       .single<{ id: string; name: string }>();
     company = data ?? null;
   } else if (body.newName?.trim()) {
-    const { data, error: cErr } = await supabase
+    const nome = body.newName.trim();
+    // Evita DUPLICAR: se já existe um parceiro com esse nome exato na marca,
+    // usa o existente em vez de criar outro.
+    const { data: existente } = await supabase
       .from("companies")
-      .insert({
-        name: body.newName.trim(),
-        brand,
-        category: "operadora",
-        contract_only: true, // credenciado — não entra na prospecção/automação
-        status: "parceria_ativa",
-        qualified: true,
-        commercial_thesis: "credenciada",
-        notes: "Parceiro credenciado (banco de contratos).",
-      })
       .select("id, name")
-      .single<{ id: string; name: string }>();
-    if (cErr || !data) {
-      return NextResponse.json(
-        { error: cErr?.message ?? "Não consegui criar o parceiro." },
-        { status: 500 },
-      );
-    }
-    company = data;
-    // Contato de credenciamento (opcional) — usado no pedido de reajuste depois.
-    if (body.email?.trim()) {
-      await supabase.from("contacts").insert({
-        company_id: company.id,
-        name: body.contactName?.trim() || company.name,
-        email: body.email.trim(),
-        is_decision_maker: true,
-      });
+      .eq("brand", brand)
+      .ilike("name", nome)
+      .limit(1)
+      .maybeSingle<{ id: string; name: string }>();
+    if (existente) {
+      company = existente;
+      // Se informou e-mail e o parceiro não tem contato com e-mail, adiciona.
+      if (body.email?.trim()) {
+        const { data: temContato } = await supabase
+          .from("contacts")
+          .select("id")
+          .eq("company_id", existente.id)
+          .not("email", "is", null)
+          .limit(1);
+        if (!temContato || temContato.length === 0) {
+          await supabase.from("contacts").insert({
+            company_id: existente.id,
+            name: body.contactName?.trim() || existente.name,
+            email: body.email.trim(),
+            is_decision_maker: true,
+          });
+        }
+      }
+    } else {
+      const { data, error: cErr } = await supabase
+        .from("companies")
+        .insert({
+          name: nome,
+          brand,
+          category: "operadora",
+          contract_only: true, // credenciado — não entra na prospecção/automação
+          status: "parceria_ativa",
+          qualified: true,
+          commercial_thesis: "credenciada",
+          notes: "Parceiro credenciado (banco de contratos).",
+        })
+        .select("id, name")
+        .single<{ id: string; name: string }>();
+      if (cErr || !data) {
+        return NextResponse.json(
+          { error: cErr?.message ?? "Não consegui criar o parceiro." },
+          { status: 500 },
+        );
+      }
+      company = data;
+      if (body.email?.trim()) {
+        await supabase.from("contacts").insert({
+          company_id: company.id,
+          name: body.contactName?.trim() || company.name,
+          email: body.email.trim(),
+          is_decision_maker: true,
+        });
+      }
     }
   }
   if (!company) {

@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-type Parceiro = { id: string; name: string; category: string };
+type Parceiro = {
+  id: string;
+  name: string;
+  category: string;
+  contract_only?: boolean;
+  city?: string | null;
+};
 type Contrato = {
   id: string;
   parceiro: string | null;
@@ -72,6 +78,8 @@ export default function Contratos() {
             id: c.id,
             name: c.name,
             category: c.category,
+            contract_only: c.contract_only,
+            city: c.city,
           })),
         );
       } catch {
@@ -249,12 +257,21 @@ export default function Contratos() {
                       <span className="text-brand-800/50">
                         {" "}
                         · {CAT_LABEL[r.category] ?? r.category}
+                        {r.city ? ` · ${r.city}` : ""}
                       </span>
+                      {r.contract_only && (
+                        <span className="ml-2 rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">
+                          credenciado
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
               )}
-              {busca.trim().length >= 2 && (
+              {busca.trim().length >= 2 &&
+                !resultados.some(
+                  (r) => r.name.toLowerCase() === busca.trim().toLowerCase(),
+                ) && (
                 <div className="mt-2 rounded-lg border border-dashed border-brand-200 bg-brand-50/40 p-2.5">
                   <p className="text-xs text-brand-800/70">
                     Não está na lista? Vou criar{" "}
