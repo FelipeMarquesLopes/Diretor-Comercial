@@ -276,7 +276,8 @@ export default function Contratos() {
 
         <div className="mt-3">
           <label className="mb-1 block text-xs font-medium text-brand-800/70">
-            PDF do contrato (pode incluir adendos/aditivos)
+            PDFs do vínculo — selecione TODOS de uma vez: o contrato original +
+            os aditivos/extensões (a IA analisa tudo em conjunto, ponta a ponta)
           </label>
           <input
             type="file"

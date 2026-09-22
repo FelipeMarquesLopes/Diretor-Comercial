@@ -653,23 +653,33 @@ empresa, escola, sindicato, médico), combinando a visão de um ADVOGADO (leitur
 da cláusula) e de um SETOR COMERCIAL (estratégia de reajuste). Sua análise é um \
 APOIO à decisão do CEO — não é parecer jurídico definitivo.
 
-Podem ser anexados VÁRIOS documentos: o CONTRATO ORIGINAL e seus ADENDOS/\
-ADITIVOS (extensões, alterações ao longo do tempo). Considere TODOS em conjunto: \
-um adendo mais recente PREVALECE sobre o contrato original na parte que ele \
-altera. Baseie a cláusula de reajuste na versão mais atual/vigente.
+Podem ser anexados VÁRIOS documentos do MESMO vínculo: o CONTRATO ORIGINAL e \
+seus ADENDOS/ADITIVOS/EXTENSÕES ao longo da parceria. Analise TUDO PONTA A \
+PONTA, assim:
+- Ordene os documentos por DATA (do mais antigo ao mais novo) e leia como uma \
+LINHA DO TEMPO única do mesmo contrato.
+- Um documento mais recente PREVALECE sobre o anterior na parte que ele altera. \
+A cláusula/condição VIGENTE é sempre a da versão mais atual.
+- Rastreie a EVOLUÇÃO do reajuste: se e QUANDO já houve reajuste aplicado, em \
+quais itens, e o que ficou sem correção. Aponte a DEFASAGEM acumulada (há quanto \
+tempo a tabela geral não é reajustada) — é o argumento comercial mais forte.
+- Não confunda um aditivo pontual (ex: inclusão de um procedimento) com um \
+reajuste geral da tabela.
 
-Leia os documentos em anexo e determine:
-1. A DATA DE ASSINATURA / INÍCIO DA VIGÊNCIA do contrato (a mais antiga, que \
-marca o início do vínculo), no formato AAAA-MM-DD. Se só houver mês/ano, use o \
-dia 01. Se não achar, deixe vazio.
-2. O ÍNDICE/critério de reajuste previsto (ex: IPCA, IGP-M, percentual fixo, \
-negociação anual) e o percentual que faz sentido pleitear com base nele.
-3. A JANELA/DATA ideal para enviar o pedido de reajuste (ex: data-base/aniversário \
-do contrato, antecedência exigida em cláusula, periodicidade permitida).
-4. Um PARECER curto e prático (2-4 frases) unindo o lado jurídico e o comercial.
+Ao final, determine:
+1. A DATA DE ASSINATURA / INÍCIO DA VIGÊNCIA do vínculo (a MAIS ANTIGA entre os \
+documentos), no formato AAAA-MM-DD. Se só houver mês/ano, use o dia 01. Se não \
+achar, deixe vazio.
+2. O ÍNDICE/critério de reajuste VIGENTE (ex: IPCA, IGP-M, percentual fixo, \
+negociação anual) e o percentual que faz sentido pleitear — considerando a \
+defasagem acumulada desde o último reajuste geral.
+3. A JANELA/DATA ideal para enviar o pedido (ex: data-base/aniversário do \
+contrato, antecedência exigida em cláusula, periodicidade permitida).
+4. Um PARECER curto e prático (2-4 frases) unindo o jurídico e o comercial, \
+citando a evolução (último reajuste x defasagem) quando relevante.
 
-Se o contrato não trouxer a informação com clareza, diga isso honestamente no \
-campo correspondente (não invente números nem datas).
+Se algo não estiver claro, diga isso honestamente no campo correspondente (não \
+invente números nem datas).
 
 FORMATO DE SAÍDA: responda SOMENTE com JSON válido, sem texto antes/depois e \
 sem blocos de código:
@@ -717,8 +727,9 @@ export async function analyzeContract(opts: {
     model: MODEL,
     // Pensamento ADAPTATIVO com esforço BAIXO: mantém a análise rápida (para
     // não estourar o limite de tempo da hospedagem) e deixa espaço garantido
-    // para o parecer. (effort controla o quanto o modelo "pensa".)
-    max_tokens: 4000,
+    // para o parecer. Muitos documentos (original + aditivos) pedem mais folga
+    // de saída — por isso 6000. (effort controla o quanto o modelo "pensa".)
+    max_tokens: 6000,
     output_config: { effort: "low" },
     system: ANALYSIS_SYSTEM,
     messages: [
