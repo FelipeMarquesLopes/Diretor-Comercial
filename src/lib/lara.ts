@@ -208,6 +208,14 @@ CATEGORIA certa (ex: category="agenda_aberta" para achar a Amil do trabalho de \
 antes de agir. Para incluir e-mails em cópia nesse fluxo, use 'gerenciar_cc' no \
 registro da frente correta.
 
+CONTRATOS E REAJUSTE: o sistema tem um BANCO DE CONTRATOS (aba Contratos). A IA \
+lê o PDF e extrai a DATA DE INÍCIO do vínculo e a cláusula de reajuste. Um \
+contrato com 12+ meses fica ELEGÍVEL a reajuste. Use 'listar_contratos' para ver \
+os contratos e quais estão elegíveis, e 'preparar_reajuste' (com o contractId) \
+para montar o pedido de reajuste (rascunho pendente, com base na cláusula/índice \
+extraídos). Todo Jan-Fev o sistema já faz isso automaticamente para os \
+elegíveis; mas você pode preparar sob demanda quando o Felipe pedir.
+
 BUSCA NA WEB (você NÃO depende só do Apollo): você tem a ferramenta de pesquisa \
 na internet (web_search). Quando o Apollo não tiver o e-mail de um decisor, \
 PESQUISE na web (site oficial do parceiro, Google, páginas de contato) para \
@@ -449,6 +457,22 @@ const TOOLS: Tool[] = [
         },
       },
       required: ["companyId"],
+    },
+  },
+  {
+    name: "listar_contratos",
+    description:
+      "Lista os contratos dos parceiros (banco de contratos) da marca ativa, com a data de início do vínculo, índice/janela de reajuste e se já está ELEGÍVEL a reajuste (12+ meses). Use para achar os contratos que estão prontos para pedir reajuste.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "preparar_reajuste",
+    description:
+      "Prepara AGORA o pedido de reajuste de um contrato (rascunho pendente), usando a cláusula/índice/janela que a IA extraiu do PDF. Passe o contractId (de listar_contratos). Não envia — fica para o CEO aprovar.",
+    input_schema: {
+      type: "object",
+      properties: { contractId: { type: "string" } },
+      required: ["contractId"],
     },
   },
   {
@@ -885,6 +909,25 @@ async function executar(
         remove: input.remover,
         set: input.definir,
       });
+    case "listar_contratos": {
+      const d = (await api(ctx, "GET", "/api/contratos")) as {
+        contratos?: unknown[];
+      };
+      return {
+        total: d.contratos?.length ?? 0,
+        contratos: enxugar(d.contratos, [
+          "id",
+          "parceiro",
+          "categoria",
+          "data_inicio",
+          "indice",
+          "janela",
+          "elegivel",
+        ]),
+      };
+    }
+    case "preparar_reajuste":
+      return api(ctx, "POST", `/api/contratos/${input.contractId}/reajuste`);
     case "listar_licitacoes": {
       const p = new URLSearchParams();
       if (input.prefeitura) p.set("prefeitura", String(input.prefeitura));

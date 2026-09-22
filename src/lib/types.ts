@@ -68,6 +68,22 @@ export type OperatorType = "nova" | "ativa";
 // Marca dona do parceiro (bases separadas). Ver src/lib/brands.ts.
 export type BrandId = "menthalhelp" | "therapy_minds";
 
+// Contrato de um parceiro (banco de contratos + reajuste anual).
+export interface Contract {
+  id: string;
+  company_id: string | null;
+  brand: BrandId;
+  files: { path: string; name: string }[];
+  data_inicio: string | null;
+  clausula: string | null;
+  indice: string | null;
+  janela: string | null;
+  parecer: string | null;
+  reajuste_year: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
 export interface Company {
   id: string;
   category: PartnerCategory;

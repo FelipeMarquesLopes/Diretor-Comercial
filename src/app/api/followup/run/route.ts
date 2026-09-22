@@ -6,6 +6,7 @@ import {
   generateDraftForSequence,
 } from "@/lib/outreach";
 import { checkInbox, isInboxConfigured } from "@/lib/inbox";
+import { varrerReajustesAnuais } from "@/lib/reajusteAnual";
 import type { Company, Sequence } from "@/lib/types";
 
 // Data (YYYY-MM-DD) daqui a N dias.
@@ -137,6 +138,21 @@ async function run() {
     }
   }
 
+  // 4. CAMPANHA DE REAJUSTE ANUAL (Jan-Fev): varre os contratos com 12+ meses
+  //    e prepara os pedidos de reajuste (rascunhos pendentes). Idempotente por
+  //    ano; roda um teto por rodada para não estourar o tempo. Fora de Jan-Fev
+  //    não faz nada.
+  let reajustesAnuais = 0;
+  const mes = new Date().getMonth(); // 0 = jan, 1 = fev
+  if (mes === 0 || mes === 1) {
+    try {
+      const r = await varrerReajustesAnuais(supabase, { max: 10 });
+      reajustesAnuais = r.preparados;
+    } catch {
+      // se a IA/DB falhar, segue — na próxima rodada tenta os que faltaram
+    }
+  }
+
   return NextResponse.json({
     respostas_lidas: respostas,
     bounces_bloqueados: bounces,
@@ -144,5 +160,6 @@ async function run() {
     reativadas,
     rascunhos_gerados: gerados,
     informativos_agenda: informativos,
+    reajustes_anuais: reajustesAnuais,
   });
 }

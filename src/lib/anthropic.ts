@@ -346,6 +346,60 @@ Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
   };
 }
 
+// --- Pedido de reajuste a partir de um CONTRATO (campanha anual) ------------
+
+const REAJUSTE_SYSTEM = `Você é o assistente comercial+jurídico da clínica. \
+Escreva o RASCUNHO de um e-mail FORMAL, cordial e objetivo, SOLICITANDO REAJUSTE \
+contratual a um parceiro com quem a clínica mantém contrato há 12+ meses. \
+Diretrizes:
+- Português do Brasil, tom de PARCERIA de longo prazo — nunca ameace nem pressione.
+- Cite o embasamento contratual (cláusula/índice de reajuste) e a data-base/janela \
+quando informados, e faça o pedido de forma clara e educada.
+- Curto e objetivo (~120-160 palavras). Sem CAIXA ALTA. Não invente números: se o \
+percentual/índice não estiver claro, peça uma conversa para alinhar o reajuste.
+- NÃO escreva assinatura, nome, cargo, telefone nem lista de serviços — o sistema \
+adiciona automaticamente.
+FORMATO: responda SOMENTE JSON: {"subject": "<assunto>", "body": "<corpo>"}`;
+
+// Gera o pedido de reajuste usando os dados que a IA extraiu do contrato.
+export async function generateReajusteRequest(opts: {
+  company: Company;
+  contact?: Contact | null;
+  indice?: string | null;
+  janela?: string | null;
+  parecer?: string | null;
+}): Promise<GeneratedDraft> {
+  const { company, contact } = opts;
+  const brand = getBrand(company.brand);
+  const contactLine = contact
+    ? `Contato: ${contact.name}${contact.title ? `, ${contact.title}` : ""}.`
+    : "Contato: trate de forma cordial e institucional.";
+  const dados = [
+    opts.indice ? `Índice/percentual da cláusula: ${opts.indice}.` : "",
+    opts.janela ? `Janela/data-base do reajuste: ${opts.janela}.` : "",
+    opts.parecer ? `Parecer interno (contexto, não citar literalmente): ${opts.parecer}.` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const userPrompt = `Escreva o pedido de reajuste.
+
+Parceiro: ${company.name}. ${contactLine}
+Clínica: ${brand.label}.
+${dados || "Sem dados de cláusula extraídos — peça uma conversa para alinhar o reajuste com base no aniversário do contrato."}
+
+Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
+
+  const parsed = parseJsonObject(
+    await ask(REAJUSTE_SYSTEM, userPrompt, 3000, "medium"),
+  ) as Partial<GeneratedDraft>;
+  const body = `${(parsed.body ?? "").trim()}\n\n${brand.signature}`;
+  return {
+    subject: parsed.subject ?? `Reajuste contratual — ${brand.label}`,
+    body,
+  };
+}
+
 // --- Réplica a uma resposta do parceiro (continuar a cobrança) --------------
 
 const REPLY_SYSTEM = `Você é o assistente comercial da MenthalHelp (clínica \
@@ -593,32 +647,36 @@ Gere o assunto e o corpo seguindo as diretrizes do sistema.`;
 
 // --- Análise de contrato para REAJUSTE (advogado + comercial) --------------
 
-const ANALYSIS_SYSTEM = `Você é um assistente que analisa CONTRATOS de \
-credenciamento entre a clínica MenthalHelp e OPERADORAS DE SAÚDE, combinando a \
-visão de um ADVOGADO (leitura da cláusula) e de um SETOR COMERCIAL (estratégia \
-de reajuste). Sua análise é um APOIO à decisão do CEO — não é parecer jurídico \
-definitivo.
+const ANALYSIS_SYSTEM = `Você é um assistente que analisa CONTRATOS entre a \
+clínica (MenthalHelp ou Therapy Minds) e um PARCEIRO (operadora de saúde, \
+empresa, escola, sindicato, médico), combinando a visão de um ADVOGADO (leitura \
+da cláusula) e de um SETOR COMERCIAL (estratégia de reajuste). Sua análise é um \
+APOIO à decisão do CEO — não é parecer jurídico definitivo.
 
 Podem ser anexados VÁRIOS documentos: o CONTRATO ORIGINAL e seus ADENDOS/\
 ADITIVOS (extensões, alterações ao longo do tempo). Considere TODOS em conjunto: \
 um adendo mais recente PREVALECE sobre o contrato original na parte que ele \
 altera. Baseie a cláusula de reajuste na versão mais atual/vigente.
 
-Leia os documentos em anexo e identifique a CLÁUSULA DE REAJUSTE vigente. Determine:
-1. O ÍNDICE/critério de reajuste previsto (ex: IPCA, IGP-M, percentual fixo, \
+Leia os documentos em anexo e determine:
+1. A DATA DE ASSINATURA / INÍCIO DA VIGÊNCIA do contrato (a mais antiga, que \
+marca o início do vínculo), no formato AAAA-MM-DD. Se só houver mês/ano, use o \
+dia 01. Se não achar, deixe vazio.
+2. O ÍNDICE/critério de reajuste previsto (ex: IPCA, IGP-M, percentual fixo, \
 negociação anual) e o percentual que faz sentido pleitear com base nele.
-2. A JANELA/DATA ideal para enviar o pedido de reajuste (ex: data-base/aniversário \
+3. A JANELA/DATA ideal para enviar o pedido de reajuste (ex: data-base/aniversário \
 do contrato, antecedência exigida em cláusula, periodicidade permitida).
-3. Um PARECER curto e prático (2-4 frases) unindo o lado jurídico e o comercial.
+4. Um PARECER curto e prático (2-4 frases) unindo o lado jurídico e o comercial.
 
 Se o contrato não trouxer a informação com clareza, diga isso honestamente no \
 campo correspondente (não invente números nem datas).
 
 FORMATO DE SAÍDA: responda SOMENTE com JSON válido, sem texto antes/depois e \
 sem blocos de código:
-{"clausula": "<resumo da cláusula de reajuste>", "percentual": "<percentual/índice sugerido>", "janela": "<janela/data ideal para pedir>", "parecer": "<parecer curto jurídico+comercial>"}`;
+{"dataInicio": "<AAAA-MM-DD ou vazio>", "clausula": "<resumo da cláusula de reajuste>", "percentual": "<percentual/índice sugerido>", "janela": "<janela/data ideal para pedir>", "parecer": "<parecer curto jurídico+comercial>"}`;
 
 export interface ContractAnalysis {
+  dataInicio: string; // AAAA-MM-DD ou "" quando não identificada
   clausula: string;
   percentual: string;
   janela: string;
@@ -626,8 +684,8 @@ export interface ContractAnalysis {
 }
 
 /**
- * Analisa um contrato (PDF em base64) e devolve um parecer de reajuste:
- * cláusula, percentual/índice sugerido, janela ideal e um parecer curto.
+ * Analisa um contrato (PDF em base64) e devolve: data de início do vínculo,
+ * cláusula de reajuste, percentual/índice sugerido, janela ideal e um parecer.
  */
 export async function analyzeContract(opts: {
   pdfs: { base64: string; name: string }[];
@@ -685,6 +743,7 @@ export async function analyzeContract(opts: {
   }
   const p = parseJsonObject(joined) as Partial<ContractAnalysis>;
   return {
+    dataInicio: (p.dataInicio ?? "").trim(),
     clausula: p.clausula ?? "Não identificado no contrato.",
     percentual: p.percentual ?? "Não identificado — definir manualmente.",
     janela: p.janela ?? "Não identificada — definir manualmente.",
