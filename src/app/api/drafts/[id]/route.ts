@@ -182,14 +182,21 @@ export async function PATCH(
       // Threading: mantém a conversa amarrada (mesmo assunto "Re:" +
       // In-Reply-To), para o destinatário ver o histórico/contexto.
       const seqId = (pre as { sequence_id?: string } | null)?.sequence_id ?? null;
-      let seqThread: { last_message_id: string | null; thread_subject: string | null } | null =
-        null;
+      let seqThread: {
+        last_message_id: string | null;
+        thread_subject: string | null;
+        thread_refs: string | null;
+      } | null = null;
       if (seqId) {
         const { data } = await supabase
           .from("sequences")
-          .select("last_message_id, thread_subject")
+          .select("last_message_id, thread_subject, thread_refs")
           .eq("id", seqId)
-          .single<{ last_message_id: string | null; thread_subject: string | null }>();
+          .single<{
+            last_message_id: string | null;
+            thread_subject: string | null;
+            thread_refs: string | null;
+          }>();
         seqThread = data ?? null;
       }
       const draftSubject = (pre?.subject as string) ?? "";
@@ -199,7 +206,12 @@ export async function PATCH(
       const sendSubject = seqThread?.thread_subject
         ? `Re: ${seqThread.thread_subject}`
         : draftSubject;
+      // In-Reply-To = a ÚLTIMA mensagem da conversa (nosso envio OU a resposta do
+      // parceiro). References = a CADEIA inteira (é o que agrupa tudo num só
+      // e-mail no Gmail/Outlook/Titan).
       const inReplyTo = seqThread?.last_message_id ?? undefined;
+      const referencesChain =
+        seqThread?.thread_refs?.trim() || inReplyTo || undefined;
 
       // Remetente = marca dona do lead (bases/remetentes separados).
       const brand =
@@ -216,7 +228,7 @@ export async function PATCH(
           extraCc,
           attachments,
           inReplyTo,
-          references: inReplyTo,
+          references: referencesChain,
           brand,
         });
       } catch (err) {
@@ -226,14 +238,20 @@ export async function PATCH(
         );
       }
 
-      // Atualiza o estado da thread: guarda o Message-ID enviado e fixa o
-      // assunto raiz (se ainda não houver).
+      // Atualiza o estado da thread: guarda o Message-ID enviado, ACUMULA na
+      // cadeia de References e fixa o assunto raiz (se ainda não houver).
       if (seqId) {
+        const novoId = sentInfo.messageId ?? null;
+        const cadeia = [seqThread?.thread_refs?.trim(), novoId]
+          .filter((x): x is string => Boolean(x))
+          .join(" ")
+          .trim();
         await supabase
           .from("sequences")
           .update({
-            last_message_id: sentInfo.messageId ?? seqThread?.last_message_id ?? null,
+            last_message_id: novoId ?? seqThread?.last_message_id ?? null,
             thread_subject: seqThread?.thread_subject ?? (semRe || draftSubject),
+            thread_refs: cadeia || null,
           })
           .eq("id", seqId);
       }

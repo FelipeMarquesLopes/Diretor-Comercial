@@ -266,6 +266,28 @@ export async function checkInbox(
           message_id: parsed.messageId ?? null, // p/ responder na mesma thread
         });
 
+        // ENCADEAMENTO: a resposta do parceiro entra na cadeia da conversa e
+        // passa a ser a ÚLTIMA mensagem — assim nosso próximo e-mail responde a
+        // ELA (In-Reply-To) e tudo fica num histórico só (como os parceiros pedem).
+        if (parsed.messageId) {
+          const { data: seqRow } = await supabase
+            .from("sequences")
+            .select("id, thread_refs")
+            .eq("company_id", match.company_id)
+            .eq("channel", "email")
+            .maybeSingle<{ id: string; thread_refs: string | null }>();
+          if (seqRow) {
+            const cadeia = [seqRow.thread_refs?.trim(), parsed.messageId]
+              .filter((x): x is string => Boolean(x))
+              .join(" ")
+              .trim();
+            await supabase
+              .from("sequences")
+              .update({ last_message_id: parsed.messageId, thread_refs: cadeia || null })
+              .eq("id", seqRow.id);
+          }
+        }
+
         // A partir da INTENÇÃO, o motor decide o próximo passo (Nível 1 —
         // apoio automático). Disparo de mensagem continua sendo Nível 2.
         if (nextActionIso) {
