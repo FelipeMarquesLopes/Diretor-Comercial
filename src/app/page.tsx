@@ -67,6 +67,34 @@ function fmtDataCurta(iso: string): string {
   });
 }
 
+// Mostra quando a Lara revisou os e-mails pela última vez, com um empurrãozinho
+// quando já passou de 30 dias (hora de clicar no botão de novo).
+function RevisaoInfo({ iso }: { iso: string | null }) {
+  if (!iso) {
+    return (
+      <p className="text-xs text-gray-500 sm:text-right">
+        E-mails ainda não revisados pela Lara.
+      </p>
+    );
+  }
+  const data = new Date(iso);
+  const dias = Math.floor((Date.now() - data.getTime()) / 86_400_000);
+  const dataFmt = data.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const vencido = dias >= 30;
+  return (
+    <p className={`text-xs sm:text-right ${vencido ? "font-medium text-amber-700" : "text-gray-500"}`}>
+      Última revisão da Lara: {dataFmt}
+      {dias === 0 ? " (hoje)" : ` (há ${dias} dia${dias === 1 ? "" : "s"})`}
+      {vencido ? " — já passou de 30 dias, vale revisar de novo." : ""}
+    </p>
+  );
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +102,7 @@ export default function Dashboard() {
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const [revisando, setRevisando] = useState(false);
   const [revisarMsg, setRevisarMsg] = useState<string | null>(null);
+  const [ultimaRevisao, setUltimaRevisao] = useState<string | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [reativar, setReativar] = useState<
@@ -136,6 +165,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadStats();
+    fetch("/api/manutencao/emails")
+      .then((r) => r.json())
+      .then((d) => setUltimaRevisao(d.ultimaRevisao ?? null))
+      .catch(() => {});
   }, []);
 
   async function runFollowup() {
@@ -169,7 +202,7 @@ export default function Dashboard() {
       const r = await fetch("/api/manutencao/emails", { method: "POST" });
       const d = await r.json();
       if (d.error) setRevisarMsg(`Erro: ${d.error}`);
-      else
+      else {
         setRevisarMsg(
           `Pronto: ${d.verificados ?? 0} e-mail(s) verificado(s), ` +
             `${d.trocados ?? 0} trocado(s), ${d.vinculados ?? 0} novo(s) vinculado(s), ` +
@@ -178,6 +211,8 @@ export default function Dashboard() {
               ? " Ainda sobrou base — clique de novo para continuar a varredura."
               : " Base revisada."),
         );
+        if (d.ultimaRevisao) setUltimaRevisao(d.ultimaRevisao);
+      }
       loadStats();
     } catch (e) {
       setRevisarMsg(String(e));
@@ -338,6 +373,7 @@ export default function Dashboard() {
             >
               {revisando ? "Revisando…" : "Revisar e-mails da base agora"}
             </button>
+            <RevisaoInfo iso={ultimaRevisao} />
           </div>
         </div>
         {runMsg && <p className="mt-2 text-sm text-gray-600">{runMsg}</p>}
