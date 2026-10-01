@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { revisarBaseEmailsCompleto } from "@/lib/manutencaoBase";
+import { revisarBaseEmailsCompleto, contarPendentes } from "@/lib/manutencaoBase";
 
 // Revisar e-mails revela no Apollo + verifica — pode demorar. Usamos o tempo
 // máximo e fazemos a varredura em lotes até o prazo.
@@ -34,7 +34,10 @@ export async function GET() {
     );
   }
   try {
-    return NextResponse.json({ ultimaRevisao: await ultimaRevisao(supabase) });
+    return NextResponse.json({
+      ultimaRevisao: await ultimaRevisao(supabase),
+      pendentes: await contarPendentes(supabase),
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Falha" },

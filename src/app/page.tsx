@@ -209,6 +209,7 @@ export default function Dashboard() {
     semSubstituto: { parceiro: string; categoria: string | null; email: string }[];
   }>({ vinculos: [], trocas: [], semSubstituto: [] });
   const [revisaoConcluida, setRevisaoConcluida] = useState(false);
+  const [progresso, setProgresso] = useState<number | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [reativar, setReativar] = useState<
@@ -314,7 +315,30 @@ export default function Dashboard() {
     };
     setRelatorio({ vinculos: [], trocas: [], semSubstituto: [] });
     setRevisaoConcluida(false);
+    setProgresso(0);
     setRevisarMsg("Revisando a base inteira (as duas clínicas)… pode levar alguns minutos. Pode deixar esta aba aberta.");
+
+    // Total a revisar no começo = denominador da barra de progresso.
+    let totalInicial = 0;
+    let totalConhecido = false;
+    try {
+      const g = await fetch("/api/manutencao/emails");
+      const gd = await g.json();
+      if (typeof gd.pendentes === "number") {
+        totalInicial = gd.pendentes;
+        totalConhecido = true;
+      }
+    } catch {
+      // segue sem o total — a barra começa quando a 1ª leva responder
+    }
+    if (totalConhecido && totalInicial === 0) {
+      // Nada vencido — já está tudo revisado.
+      setProgresso(100);
+      setRevisarMsg("✅ Tudo em dia — não havia e-mails a revisar.");
+      setRevisaoConcluida(true);
+      setRevisando(false);
+      return;
+    }
 
     let totVinc = 0;
     let totTroc = 0;
@@ -329,6 +353,18 @@ export default function Dashboard() {
         if (d.error) {
           setRevisarMsg(`Erro: ${d.error}`);
           break;
+        }
+
+        // Atualiza a barra: quanto já saiu da fila de "vencidos".
+        if (typeof d.restantes === "number") {
+          // Se não soubemos o total pelo GET, usa a 1ª leva como denominador.
+          if (!totalConhecido) {
+            totalInicial = d.restantes + (d.processados ?? 0);
+            totalConhecido = true;
+          }
+          const feito = Math.max(0, totalInicial - d.restantes);
+          const pct = totalInicial > 0 ? Math.min(99, Math.round((feito / totalInicial) * 100)) : 0;
+          setProgresso(d.concluido !== false ? 100 : pct);
         }
 
         // Acumula o relatório.
@@ -542,12 +578,31 @@ export default function Dashboard() {
         </div>
         {runMsg && <p className="mt-2 text-sm text-gray-600">{runMsg}</p>}
         {revisarMsg && <p className="mt-2 text-sm text-gray-600">{revisarMsg}</p>}
+        {progresso !== null && (
+          <div className="mt-2">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-brand-100">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  progresso >= 100 ? "bg-green-500" : "bg-brand-500"
+                }`}
+                style={{ width: `${progresso}%` }}
+              />
+            </div>
+            <p className="mt-1 text-xs text-brand-800/60">
+              {progresso >= 100
+                ? "Concluído — pode fechar a tela."
+                : `${progresso}% — revisando… pode deixar a tela aberta.`}
+            </p>
+          </div>
+        )}
         <RelatorioRevisao
           relatorio={relatorio}
           concluida={revisaoConcluida}
           onLimpar={() => {
             setRelatorio({ vinculos: [], trocas: [], semSubstituto: [] });
             setRevisaoConcluida(false);
+            setProgresso(null);
+            setRevisarMsg(null);
           }}
         />
       </section>

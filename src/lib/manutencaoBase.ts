@@ -97,6 +97,18 @@ function vazio(): ResultadoRevisao {
   };
 }
 
+// Quantos contatos de prospecção AINDA estão "vencidos" (a revisar). É a fonte
+// da verdade para saber se a varredura terminou e para a barra de progresso.
+export async function contarPendentes(supabase: SupabaseClient): Promise<number> {
+  const cutoff = new Date(Date.now() - 28 * DIA).toISOString();
+  const { count } = await supabase
+    .from("contacts")
+    .select("id, companies!inner(contract_only)", { count: "exact", head: true })
+    .eq("companies.contract_only", false)
+    .or(`email_checked_at.is.null,email_checked_at.lt.${cutoff}`);
+  return count ?? 0;
+}
+
 // Revisa um LOTE de contatos de prospecção (das DUAS marcas) cuja checagem está
 // vencida (28+ dias ou nunca checada). Idempotente e seguro para rodar todo
 // dia: só pega os vencidos, então cada contato é revisto ~1x/mês.
@@ -444,13 +456,12 @@ async function tentarRevelar(
 export async function revisarBaseEmailsCompleto(
   supabase: SupabaseClient,
   opts?: { deadlineMs?: number; maxApollo?: number; loteMax?: number },
-): Promise<ResultadoRevisao & { concluido: boolean }> {
+): Promise<ResultadoRevisao & { concluido: boolean; restantes: number }> {
   const deadline = Date.now() + (opts?.deadlineMs ?? 45_000);
   let apolloRestante = opts?.maxApollo ?? 25;
   const loteMax = opts?.loteMax ?? 40;
 
   const total = vazio();
-  let concluido = true;
 
   while (Date.now() < deadline && apolloRestante > 0) {
     const r = await revisarBaseEmails(supabase, {
@@ -474,17 +485,14 @@ export async function revisarBaseEmailsCompleto(
     // Disjuntor disparou numa leva → PARA tudo e sinaliza (não insiste).
     if (r.suspeitaVerificador) {
       total.suspeitaVerificador = true;
-      concluido = false;
       break;
     }
 
-    if (r.processados === 0) break; // base limpa — nada vencido sobrando
-    if (r.processados < loteMax) {
-      concluido = true; // último pedaço de vencidos
-      break;
-    }
-    concluido = false; // havia lote cheio; pode ter mais — o loop continua
+    if (r.processados === 0) break; // nada veio nesta leva — nada a fazer agora
   }
 
-  return { ...total, concluido };
+  // CONCLUÍDO = fonte da verdade: não sobrou NINGUÉM vencido. Isso corrige o
+  // caso em que uma leva curta era cortada pelo teto e marcava "concluído" cedo.
+  const restantes = await contarPendentes(supabase);
+  return { ...total, concluido: restantes === 0, restantes };
 }
