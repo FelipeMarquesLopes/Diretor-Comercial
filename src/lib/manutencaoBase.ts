@@ -25,8 +25,11 @@
 //      ele reprova o novo também → nenhuma troca acontece).
 //   C. TETO de trocas por rodada (cinto de segurança extra).
 //
-// CUSTO: NÃO usa a IA (Anthropic). Gasta VERIFICADOR (1 por e-mail checado) e
-// APOLLO (1 por revelação, só nos mortos/faltantes, com teto por rodada).
+// CUSTO: NÃO usa a IA (Anthropic). No modo ECONÔMICO (padrão), o VERIFICADOR
+// (ZeroBounce) é gasto só para validar os e-mails NOVOS achados no Apollo — NÃO
+// reverifica a base inteira (isso fica por conta do detector de bounce, grátis).
+// APOLLO: 1 por revelação, só nos mortos/faltantes, com teto por rodada. Para
+// reverificar TODA a base no ZeroBounce, use REVISAO_VERIFICAR_TODOS=1.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revealPerson, searchDecisionMakers, isEmailVerified } from "./apollo";
@@ -125,6 +128,12 @@ export async function revisarBaseEmails(
   res.processados = linhas.length;
 
   const verificar = verifierConfigured();
+  // Modo ECONÔMICO (padrão): NÃO gasta ZeroBounce reverificando e-mails que já
+  // estão EM USO — confia no detector de bounce (grátis, já roda no inbox). O
+  // ZeroBounce é gasto só para validar os e-mails NOVOS achados no Apollo (em
+  // tentarRevelar). Para reverificar TODA a base no ZeroBounce todo mês, defina
+  // REVISAO_VERIFICAR_TODOS=1 nas variáveis de ambiente.
+  const verificarExistentes = verificar && process.env.REVISAO_VERIFICAR_TODOS === "1";
 
   // ===== PASSO 1: classifica. Age já nos VIVOS (carimba). Enfileira os alvos.
   type Alvo = { c: LinhaContato; tipo: "bounce" | "verif" | "faltando" };
@@ -143,7 +152,7 @@ export async function revisarBaseEmails(
         fila.push({ c, tipo: "bounce" }); // bounce/descadastro real — morto seguro
         continue;
       }
-      if (verificar) {
+      if (verificarExistentes) {
         const verdict = await verifyEmail(emailLower);
         res.verificados++;
         if (verdict === "invalid") {
@@ -158,7 +167,8 @@ export async function revisarBaseEmails(
           .eq("id", c.id);
         continue;
       }
-      // Sem verificador não dá para afirmar que morreu → mantém e carimba.
+      // ECONÔMICO: não gasta ZeroBounce no e-mail que já está em uso — confia no
+      // bounce. Mantém e carimba (só sai daqui se um dia der bounce → supressão).
       await supabase.from("contacts").update({ email_checked_at: agora }).eq("id", c.id);
       continue;
     }
