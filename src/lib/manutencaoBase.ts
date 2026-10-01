@@ -71,7 +71,10 @@ export type ResultadoRevisao = {
   rascunhosCorrigidos: number;
   apolloUsados: number;
   suspeitaVerificador: boolean;
-  trocas: { parceiro: string; de: string; para: string }[];
+  // Detalhes para o RELATÓRIO:
+  trocas: { parceiro: string; categoria: string | null; de: string; para: string }[];
+  vinculos: { parceiro: string; categoria: string | null; para: string }[];
+  semSubstituto: { parceiro: string; categoria: string | null; email: string }[];
 };
 
 function vazio(): ResultadoRevisao {
@@ -86,6 +89,8 @@ function vazio(): ResultadoRevisao {
     apolloUsados: 0,
     suspeitaVerificador: false,
     trocas: [],
+    vinculos: [],
+    semSubstituto: [],
   };
 }
 
@@ -267,9 +272,10 @@ export async function revisarBaseEmails(
 
       if (temEmail) {
         res.trocados++;
-        res.trocas.push({ parceiro, de: emailAtual, para: novo.email });
+        res.trocas.push({ parceiro, categoria, de: emailAtual, para: novo.email });
       } else {
         res.vinculados++;
+        res.vinculos.push({ parceiro, categoria, para: novo.email });
       }
     } else {
       // Tentou e não achou substituto.
@@ -284,6 +290,7 @@ export async function revisarBaseEmails(
           description: `Revisão mensal: o e-mail ${emailAtual} parou de funcionar e a Lara não achou substituto no Apollo. Vale conferir manualmente.`,
         });
         res.mortos++;
+        res.semSubstituto.push({ parceiro, categoria, email: emailAtual });
       } else {
         // Sem e-mail e Apollo não achou — carimba para não reprocessar todo dia.
         await supabase
@@ -399,6 +406,8 @@ export async function revisarBaseEmailsCompleto(
     total.rascunhosCorrigidos += r.rascunhosCorrigidos;
     total.apolloUsados += r.apolloUsados;
     total.trocas.push(...r.trocas);
+    total.vinculos.push(...r.vinculos);
+    total.semSubstituto.push(...r.semSubstituto);
     apolloRestante -= r.apolloUsados;
 
     // Disjuntor disparou numa leva → PARA tudo e sinaliza (não insiste).

@@ -95,6 +95,106 @@ function RevisaoInfo({ iso }: { iso: string | null }) {
   );
 }
 
+const CAT_LABEL_REV: Record<string, string> = {
+  operadora: "Operadora",
+  empresa: "Empresa",
+  escola: "Escola",
+  medico: "Médico",
+  sindicato: "Sindicato",
+  igreja: "Igreja",
+  agenda_aberta: "Agenda Aberta",
+  reajuste: "Reajuste",
+};
+function catLabel(c: string | null): string {
+  return c ? CAT_LABEL_REV[c] ?? c : "Parceiro";
+}
+
+// Relatório da revisão de e-mails: vai somando o que a Lara atualizou a cada
+// clique (a varredura é fatiada). No fim, você tem a lista completa.
+function RelatorioRevisao({
+  relatorio,
+  concluida,
+  onLimpar,
+}: {
+  relatorio: {
+    vinculos: { parceiro: string; categoria: string | null; para: string }[];
+    trocas: { parceiro: string; categoria: string | null; de: string; para: string }[];
+    semSubstituto: { parceiro: string; categoria: string | null; email: string }[];
+  };
+  concluida: boolean;
+  onLimpar: () => void;
+}) {
+  const { vinculos, trocas, semSubstituto } = relatorio;
+  const total = vinculos.length + trocas.length + semSubstituto.length;
+  if (total === 0) return null;
+  return (
+    <div className="mt-3 rounded-xl border border-brand-100 bg-brand-50/50 p-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-brand-800">
+          {concluida ? "Relatório da revisão (concluída)" : "Relatório parcial da revisão"}
+        </h3>
+        <button onClick={onLimpar} className="text-xs text-brand-400 hover:text-brand-700">
+          limpar
+        </button>
+      </div>
+
+      {vinculos.length > 0 && (
+        <div className="mt-2">
+          <p className="text-xs font-medium text-green-700">
+            ✅ {vinculos.length} e-mail(s) novo(s) vinculado(s)
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {vinculos.map((v, i) => (
+              <li key={`v${i}`} className="text-xs text-gray-700">
+                <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-brand-700">
+                  {catLabel(v.categoria)}
+                </span>{" "}
+                <b>{v.parceiro}</b> → {v.para}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {trocas.length > 0 && (
+        <div className="mt-2">
+          <p className="text-xs font-medium text-amber-700">
+            🔄 {trocas.length} e-mail(s) trocado(s) (o antigo parou de funcionar)
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {trocas.map((t, i) => (
+              <li key={`t${i}`} className="text-xs text-gray-700">
+                <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-brand-700">
+                  {catLabel(t.categoria)}
+                </span>{" "}
+                <b>{t.parceiro}</b>: <s className="text-gray-400">{t.de}</s> → {t.para}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {semSubstituto.length > 0 && (
+        <div className="mt-2">
+          <p className="text-xs font-medium text-red-600">
+            ⚠️ {semSubstituto.length} sem substituto (conferir manualmente)
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {semSubstituto.map((s, i) => (
+              <li key={`s${i}`} className="text-xs text-gray-700">
+                <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-brand-700">
+                  {catLabel(s.categoria)}
+                </span>{" "}
+                <b>{s.parceiro}</b>: {s.email}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +203,12 @@ export default function Dashboard() {
   const [revisando, setRevisando] = useState(false);
   const [revisarMsg, setRevisarMsg] = useState<string | null>(null);
   const [ultimaRevisao, setUltimaRevisao] = useState<string | null>(null);
+  const [relatorio, setRelatorio] = useState<{
+    vinculos: { parceiro: string; categoria: string | null; para: string }[];
+    trocas: { parceiro: string; categoria: string | null; de: string; para: string }[];
+    semSubstituto: { parceiro: string; categoria: string | null; email: string }[];
+  }>({ vinculos: [], trocas: [], semSubstituto: [] });
+  const [revisaoConcluida, setRevisaoConcluida] = useState(false);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [reativar, setReativar] = useState<
@@ -217,9 +323,16 @@ export default function Dashboard() {
             `${d.rascunhosCorrigidos ?? 0} rascunho(s) corrigido(s).` +
             (d.concluido === false
               ? " Ainda sobrou base — clique de novo para continuar a varredura."
-              : " Base revisada."),
+              : " ✅ Base revisada — varredura concluída."),
         );
         if (d.ultimaRevisao) setUltimaRevisao(d.ultimaRevisao);
+        // Vai somando o relatório a cada clique (a varredura é fatiada).
+        setRelatorio((r) => ({
+          vinculos: [...r.vinculos, ...((d.vinculos ?? []) as typeof r.vinculos)],
+          trocas: [...r.trocas, ...((d.trocas ?? []) as typeof r.trocas)],
+          semSubstituto: [...r.semSubstituto, ...((d.semSubstituto ?? []) as typeof r.semSubstituto)],
+        }));
+        setRevisaoConcluida(d.concluido !== false);
       }
       loadStats();
     } catch (e) {
@@ -386,6 +499,14 @@ export default function Dashboard() {
         </div>
         {runMsg && <p className="mt-2 text-sm text-gray-600">{runMsg}</p>}
         {revisarMsg && <p className="mt-2 text-sm text-gray-600">{revisarMsg}</p>}
+        <RelatorioRevisao
+          relatorio={relatorio}
+          concluida={revisaoConcluida}
+          onLimpar={() => {
+            setRelatorio({ vinculos: [], trocas: [], semSubstituto: [] });
+            setRevisaoConcluida(false);
+          }}
+        />
       </section>
 
       <section>
