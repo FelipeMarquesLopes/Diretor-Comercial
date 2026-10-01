@@ -301,42 +301,85 @@ export default function Dashboard() {
     }
   }
 
+  // UM clique = varredura COMPLETA. O botão chama o motor em sequência sozinho
+  // (cada chamada respeita o limite de 60s da Vercel) até terminar a base toda,
+  // mostrando o progresso e montando o relatório final.
   async function revisarEmails() {
     setRevisando(true);
-    setRevisarMsg("Revisando os e-mails da base (as duas clínicas)… isso pode levar alguns segundos.");
+    // Começa do zero para o relatório final ficar limpo.
+    const acc = {
+      vinculos: [] as { parceiro: string; categoria: string | null; para: string }[],
+      trocas: [] as { parceiro: string; categoria: string | null; de: string; para: string }[],
+      semSubstituto: [] as { parceiro: string; categoria: string | null; email: string }[],
+    };
+    setRelatorio({ vinculos: [], trocas: [], semSubstituto: [] });
+    setRevisaoConcluida(false);
+    setRevisarMsg("Revisando a base inteira (as duas clínicas)… pode levar alguns minutos. Pode deixar esta aba aberta.");
+
+    let totVinc = 0;
+    let totTroc = 0;
+    let totMortos = 0;
+    let ciclos = 0;
     try {
-      const r = await fetch("/api/manutencao/emails", { method: "POST" });
-      const d = await r.json();
-      if (d.error) setRevisarMsg(`Erro: ${d.error}`);
-      else if (d.suspeitaVerificador) {
-        setRevisarMsg(
-          `⚠️ Parei por segurança: o verificador reprovou muitos e-mails de uma vez, ` +
-            `o que indica que ELE pode estar com defeito (não a sua base). ` +
-            `Não troquei nada por isso (${d.segurados ?? 0} segurado(s)). ` +
-            `Verifique a chave/saldo do verificador e rode de novo.`,
-        );
+      while (true) {
+        ciclos++;
+        const r = await fetch("/api/manutencao/emails", { method: "POST" });
+        const d = await r.json();
+
+        if (d.error) {
+          setRevisarMsg(`Erro: ${d.error}`);
+          break;
+        }
+
+        // Acumula o relatório.
+        acc.vinculos.push(...((d.vinculos ?? []) as typeof acc.vinculos));
+        acc.trocas.push(...((d.trocas ?? []) as typeof acc.trocas));
+        acc.semSubstituto.push(...((d.semSubstituto ?? []) as typeof acc.semSubstituto));
+        setRelatorio({
+          vinculos: [...acc.vinculos],
+          trocas: [...acc.trocas],
+          semSubstituto: [...acc.semSubstituto],
+        });
+        totVinc += d.vinculados ?? 0;
+        totTroc += d.trocados ?? 0;
+        totMortos += d.mortos ?? 0;
         if (d.ultimaRevisao) setUltimaRevisao(d.ultimaRevisao);
-      } else {
+
+        if (d.suspeitaVerificador) {
+          setRevisarMsg(
+            `⚠️ Parei por segurança: o verificador reprovou muitos e-mails de uma vez, ` +
+              `o que indica que ELE pode estar com defeito (não a sua base). ` +
+              `Não troquei nada por isso. Verifique a chave/saldo do verificador e rode de novo.`,
+          );
+          break;
+        }
+
+        if (d.concluido !== false) {
+          setRevisarMsg(
+            `✅ Varredura completa: ${totTroc} e-mail(s) trocado(s), ` +
+              `${totVinc} novo(s) vinculado(s), ${totMortos} sem substituto.`,
+          );
+          setRevisaoConcluida(true);
+          break;
+        }
+
+        // Ainda tem base — continua sozinho, mostrando o progresso.
         setRevisarMsg(
-          `Pronto: ${d.verificados ?? 0} e-mail(s) verificado(s), ` +
-            `${d.trocados ?? 0} trocado(s), ${d.vinculados ?? 0} novo(s) vinculado(s), ` +
-            `${d.rascunhosCorrigidos ?? 0} rascunho(s) corrigido(s).` +
-            (d.concluido === false
-              ? " Ainda sobrou base — clique de novo para continuar a varredura."
-              : " ✅ Base revisada — varredura concluída."),
+          `Revisando… já foram ${totVinc} vinculado(s) e ${totTroc} trocado(s). Continuando a varredura…`,
         );
-        if (d.ultimaRevisao) setUltimaRevisao(d.ultimaRevisao);
-        // Vai somando o relatório a cada clique (a varredura é fatiada).
-        setRelatorio((r) => ({
-          vinculos: [...r.vinculos, ...((d.vinculos ?? []) as typeof r.vinculos)],
-          trocas: [...r.trocas, ...((d.trocas ?? []) as typeof r.trocas)],
-          semSubstituto: [...r.semSubstituto, ...((d.semSubstituto ?? []) as typeof r.semSubstituto)],
-        }));
-        setRevisaoConcluida(d.concluido !== false);
+
+        // Trava de segurança contra loop infinito (não deveria acontecer).
+        if (ciclos >= 200) {
+          setRevisarMsg(
+            `Parei após muitos ciclos por segurança (${totVinc} vinculado(s), ${totTroc} trocado(s)). ` +
+              `Clique de novo para continuar, se precisar.`,
+          );
+          break;
+        }
       }
       loadStats();
     } catch (e) {
-      setRevisarMsg(String(e));
+      setRevisarMsg(`Conexão interrompida (${String(e)}). O que já foi revisado está salvo — clique de novo para continuar de onde parou.`);
     } finally {
       setRevisando(false);
     }
