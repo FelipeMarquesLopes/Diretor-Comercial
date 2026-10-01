@@ -112,23 +112,28 @@ export async function revisarBaseEmails(
     const temEmail = emailAtual.length > 0;
     const emailLower = emailAtual.toLowerCase();
 
-    // 1) Se tem e-mail, confere se ainda serve (verificador + supressão).
+    // 1) Se tem e-mail, confere se ainda serve. Para MANUTENÇÃO somos
+    //    CONSERVADORES: só trocamos e-mail COMPROVADAMENTE morto — suprimido
+    //    (bounce/descadastro) OU o verificador devolveu "invalid". "catch_all"
+    //    e "unknown" NÃO são troca (podem ser hiccup do verificador ou domínio
+    //    que aceita tudo) — mantemos o e-mail e evitamos churn da base + gasto
+    //    de Apollo à toa.
     if (temEmail) {
-      let vivo: boolean;
+      let morto = false;
+      let verdict = "unknown";
       const suprimidos = await getSuppressedSet(supabase, [emailLower]);
       if (suprimidos.has(emailLower)) {
-        vivo = false; // já deu bounce/descadastro antes — está morto
+        morto = true;
+        verdict = "invalid";
       } else if (verificar) {
-        const vr = await verifyEmail(emailLower);
+        verdict = await verifyEmail(emailLower);
         res.verificados++;
-        vivo = isSendable(vr);
-      } else {
-        vivo = true; // sem verificador não dá para afirmar que morreu — mantém
+        morto = verdict === "invalid";
       }
-      if (vivo) {
+      if (!morto) {
         await supabase
           .from("contacts")
-          .update({ email_checked_at: agora, email_verdict: "valid" })
+          .update({ email_checked_at: agora, email_verdict: verdict })
           .eq("id", c.id);
         continue;
       }
