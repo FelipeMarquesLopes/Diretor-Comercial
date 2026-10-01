@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { revisarBaseEmails } from "@/lib/manutencaoBase";
+import { revisarBaseEmailsCompleto } from "@/lib/manutencaoBase";
 
-// Revisar e-mails revela no Apollo + verifica — pode demorar.
+// Revisar e-mails revela no Apollo + verifica — pode demorar. Usamos o tempo
+// máximo e fazemos a varredura em lotes até o prazo.
 export const maxDuration = 60;
 
-// POST /api/manutencao/emails   { max?, maxApollo? }
-// Dispara um LOTE da revisão mensal dos e-mails da base de prospecção:
-// reverifica os e-mails vencidos e, nos que morreram, acha um substituto no
-// Apollo e troca sozinha. Usado pela Lara (sob demanda) e por um botão manual.
+// POST /api/manutencao/emails   { maxApollo? }
+// Dispara AGORA a revisão dos e-mails da base de prospecção das DUAS marcas:
+// reverifica os e-mails vencidos, acha substituto no Apollo nos que morreram/
+// faltam, troca sozinha e corrige os rascunhos parados. Faz o máximo possível
+// numa chamada (lotes dentro de ~45s). Usado pela Lara e por um botão manual.
 export async function POST(req: Request) {
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -20,7 +22,7 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { max?: number; maxApollo?: number } = {};
+  let body: { maxApollo?: number } = {};
   try {
     body = await req.json();
   } catch {
@@ -28,9 +30,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const r = await revisarBaseEmails(supabase, {
-      max: Math.min(Math.max(body.max ?? 40, 1), 80),
-      maxApollo: Math.min(Math.max(body.maxApollo ?? 12, 0), 25),
+    const r = await revisarBaseEmailsCompleto(supabase, {
+      deadlineMs: 45_000,
+      maxApollo: Math.min(Math.max(body.maxApollo ?? 25, 0), 60),
     });
     return NextResponse.json({ ok: true, ...r });
   } catch (err) {

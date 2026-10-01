@@ -1,21 +1,27 @@
 // REVISÃO MENSAL DA BASE DE PROSPECÇÃO (manutenção automática dos e-mails).
 //
+// Roda para AS DUAS marcas (MenthalHelp e Therapy Minds) — não filtra por marca,
+// então cuida de toda a base de uma vez.
+//
 // O que a Lara faz, toda rodada, com os parceiros de PROSPECÇÃO (operadoras,
 // empresas, escolas, médicos, sindicatos, igrejas — tudo que NÃO é só contrato):
 //
 //   1. Reverifica o e-mail cadastrado de cada contato (barato — verificador).
 //   2. Se o e-mail ainda é válido → só carimba a data e segue.
-//   3. Se o e-mail MORREU → usa o Apollo para achar um substituto:
-//        a) revela de novo o próprio decisor (o e-mail dele pode ter mudado);
-//        b) se não achar, busca outro decisor no mesmo domínio.
-//      Achou um e-mail válido? TROCA sozinha e registra na atividade do
-//      parceiro. Não achou? Marca o e-mail como inválido e sinaliza.
+//   3. Se o e-mail MORREU (ou o contato ainda não tem e-mail) → usa o Apollo
+//      para achar um e-mail bom: revela de novo o próprio decisor e, se preciso,
+//      busca outro decisor no mesmo domínio. Achou? VINCULA sozinha, suprime o
+//      antigo (se havia) e registra na atividade do parceiro.
+//   4. Se o parceiro tinha RASCUNHO parado, corrige o rascunho para o novo
+//      e-mail/contato (o destinatário já é resolvido na hora do envio; aqui só
+//      ajustamos o nome na saudação e religamos o rascunho ao contato certo).
+//      Isso NÃO usa a IA.
 //
-// CUSTO: isto NÃO usa a IA (Anthropic) — é rotina de backend. Gasta créditos do
+// CUSTO: NÃO usa a IA (Anthropic) — é rotina de backend. Gasta créditos do
 // VERIFICADOR (1 por e-mail checado) e do APOLLO (1 por revelação) — e o Apollo
-// só é tocado nos e-mails que falharam, com teto por rodada. A varredura é
-// fatiada (um pouco por dia) para cada contato ser revisto ~1x/mês sem estourar
-// o tempo do cron nem os créditos.
+// só é tocado nos e-mails que falharam/faltam, com teto por rodada. A varredura
+// é fatiada (um lote por vez, só os "vencidos" há 28+ dias) para cada contato
+// ser revisto ~1x/mês sem estourar o tempo do cron nem os créditos.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revealPerson, searchDecisionMakers, isEmailVerified } from "./apollo";
@@ -48,42 +54,50 @@ type LinhaContato = {
 export type ResultadoRevisao = {
   processados: number;
   verificados: number;
-  trocados: number;
-  mortos: number;
+  trocados: number; // e-mail morto substituído
+  vinculados: number; // contato sem e-mail que ganhou um
+  mortos: number; // morto e sem substituto
+  rascunhosCorrigidos: number;
   apolloUsados: number;
   trocas: { parceiro: string; de: string; para: string }[];
 };
 
-// Revisa um LOTE de contatos de prospecção cuja checagem está vencida (28+ dias
-// ou nunca checada). Idempotente e seguro para rodar todo dia: só pega os
-// vencidos, então cada contato é revisto ~1x/mês.
+function vazio(): ResultadoRevisao {
+  return {
+    processados: 0,
+    verificados: 0,
+    trocados: 0,
+    vinculados: 0,
+    mortos: 0,
+    rascunhosCorrigidos: 0,
+    apolloUsados: 0,
+    trocas: [],
+  };
+}
+
+// Revisa um LOTE de contatos de prospecção (das DUAS marcas) cuja checagem está
+// vencida (28+ dias ou nunca checada). Idempotente e seguro para rodar todo
+// dia: só pega os vencidos, então cada contato é revisto ~1x/mês.
 export async function revisarBaseEmails(
   supabase: SupabaseClient,
   opts?: { max?: number; maxApollo?: number },
 ): Promise<ResultadoRevisao> {
-  const max = opts?.max ?? 40; // contatos reverificados por rodada
+  const max = opts?.max ?? 40; // contatos por rodada
   const maxApollo = opts?.maxApollo ?? 12; // teto de revelações Apollo por rodada
   const cutoff = new Date(Date.now() - 28 * DIA).toISOString();
 
-  const res: ResultadoRevisao = {
-    processados: 0,
-    verificados: 0,
-    trocados: 0,
-    mortos: 0,
-    apolloUsados: 0,
-    trocas: [],
-  };
+  const res = vazio();
 
-  // Contatos de parceiros de PROSPECÇÃO (contract_only=false) que têm e-mail e
-  // cuja última checagem está vencida. `!inner` garante o filtro no join.
+  // Contatos de parceiros de PROSPECÇÃO (contract_only=false), de QUALQUER marca,
+  // cuja checagem está vencida E que têm e-mail OU apollo_id (dá para agir).
   const { data, error } = await supabase
     .from("contacts")
     .select(
       "id, company_id, name, title, email, apollo_id, companies!inner(name, domain, category, contract_only)",
     )
     .eq("companies.contract_only", false)
-    .not("email", "is", null)
     .or(`email_checked_at.is.null,email_checked_at.lt.${cutoff}`)
+    .or("email.not.is.null,apollo_id.not.is.null")
     .limit(max);
 
   if (error) throw new Error(error.message);
@@ -95,44 +109,48 @@ export async function revisarBaseEmails(
   for (const c of linhas) {
     const agora = new Date().toISOString();
     const emailAtual = (c.email ?? "").trim();
-    if (!emailAtual) {
-      await carimbar(supabase, c.id, agora);
-      continue;
-    }
+    const temEmail = emailAtual.length > 0;
     const emailLower = emailAtual.toLowerCase();
 
-    // 1) O e-mail atual ainda serve? (verificador + lista de supressão)
-    let vivo: boolean;
-    const suprimidos = await getSuppressedSet(supabase, [emailLower]);
-    if (suprimidos.has(emailLower)) {
-      vivo = false; // já deu bounce/descadastro antes — está morto
-    } else if (verificar) {
-      const vr = await verifyEmail(emailLower);
-      res.verificados++;
-      vivo = isSendable(vr);
-    } else {
-      // Sem verificador configurado não dá para afirmar que morreu — mantém.
-      vivo = true;
+    // 1) Se tem e-mail, confere se ainda serve (verificador + supressão).
+    if (temEmail) {
+      let vivo: boolean;
+      const suprimidos = await getSuppressedSet(supabase, [emailLower]);
+      if (suprimidos.has(emailLower)) {
+        vivo = false; // já deu bounce/descadastro antes — está morto
+      } else if (verificar) {
+        const vr = await verifyEmail(emailLower);
+        res.verificados++;
+        vivo = isSendable(vr);
+      } else {
+        vivo = true; // sem verificador não dá para afirmar que morreu — mantém
+      }
+      if (vivo) {
+        await supabase
+          .from("contacts")
+          .update({ email_checked_at: agora, email_verdict: "valid" })
+          .eq("id", c.id);
+        continue;
+      }
     }
 
-    if (vivo) {
-      await supabase
-        .from("contacts")
-        .update({ email_checked_at: agora, email_verdict: "valid" })
-        .eq("id", c.id);
-      continue;
-    }
+    // 2) Precisa achar um e-mail (morto OU inexistente). Sem orçamento de Apollo
+    //    nesta rodada? Deixa para a próxima (NÃO carimba, para não perder o
+    //    contato) — assim nunca marcamos como inválido sem ao menos tentar.
+    if (res.apolloUsados >= maxApollo) continue;
 
-    // 2) E-mail morto → procura substituto no Apollo (se ainda há orçamento).
     const parceiro = c.companies?.name ?? "parceiro";
     const domain = c.companies?.domain ?? null;
     const categoria = c.companies?.category ?? null;
-    let novo: { email: string; apolloId?: string | null; name?: string | null; title?: string | null; phone?: string | null } | null = null;
+    let novo:
+      | { email: string; apolloId?: string | null; name?: string | null; title?: string | null; phone?: string | null }
+      | null = null;
 
-    // 2a) Revela de novo o MESMO decisor — o e-mail dele pode ter mudado.
-    if (!novo && c.apollo_id && res.apolloUsados < maxApollo) {
+    // 2a) Revela de novo o MESMO decisor — o e-mail dele pode ter mudado/aparecido.
+    if (c.apollo_id && res.apolloUsados < maxApollo) {
       res.apolloUsados++;
-      novo = await tentarRevelar(c.apollo_id, emailLower, verificar);
+      const r = await tentarRevelar(c.apollo_id, emailLower, verificar);
+      if (r) novo = { ...r };
     }
 
     // 2b) Nada? Busca OUTRO decisor no mesmo domínio e revela até achar um bom.
@@ -163,13 +181,15 @@ export async function revisarBaseEmails(
 
     // 3) Aplica o resultado.
     if (novo) {
-      // Suprime o e-mail morto (não voltamos a tentar enviar para ele).
-      await suppressEmail(supabase, {
-        email: emailLower,
-        reason: "manual",
-        source: "revisao_mensal",
-        companyId: c.company_id,
-      });
+      if (temEmail) {
+        // suprime o e-mail morto (não voltamos a tentar enviar para ele)
+        await suppressEmail(supabase, {
+          email: emailLower,
+          reason: "manual",
+          source: "revisao_mensal",
+          companyId: c.company_id,
+        });
+      }
       await supabase
         .from("contacts")
         .update({
@@ -183,30 +203,106 @@ export async function revisarBaseEmails(
           ...(novo.phone ? { phone: novo.phone } : {}),
         })
         .eq("id", c.id);
+
+      // 4) Corrige rascunhos parados do parceiro (religar contato + nome). Sem IA.
+      const corrigidos = await corrigirRascunhos(
+        supabase,
+        c.company_id,
+        c.id,
+        c.name,
+        novo.name ?? c.name,
+      );
+      res.rascunhosCorrigidos += corrigidos;
+
       await supabase.from("activities").insert({
         company_id: c.company_id,
         type: "prospeccao",
-        description: `Revisão mensal: o e-mail ${emailAtual} não respondia mais — a Lara atualizou para ${novo.email} (encontrado no Apollo).`,
+        description: temEmail
+          ? `Revisão mensal: o e-mail ${emailAtual} não respondia mais — a Lara atualizou para ${novo.email} (Apollo)${corrigidos ? ` e corrigiu ${corrigidos} rascunho(s)` : ""}.`
+          : `Revisão mensal: a Lara encontrou e vinculou o e-mail ${novo.email} (Apollo) para destravar a prospecção${corrigidos ? ` e corrigiu ${corrigidos} rascunho(s)` : ""}.`,
       });
-      res.trocados++;
-      res.trocas.push({ parceiro, de: emailAtual, para: novo.email });
+
+      if (temEmail) {
+        res.trocados++;
+        res.trocas.push({ parceiro, de: emailAtual, para: novo.email });
+      } else {
+        res.vinculados++;
+      }
     } else {
-      // Sem substituto: marca inválido e carimba (só tenta de novo no próximo
-      // ciclo, não todo dia) e registra para o CEO ver.
-      await supabase
-        .from("contacts")
-        .update({ email_verdict: "invalid", email_checked_at: agora })
-        .eq("id", c.id);
-      await supabase.from("activities").insert({
-        company_id: c.company_id,
-        type: "prospeccao",
-        description: `Revisão mensal: o e-mail ${emailAtual} parou de funcionar e a Lara não achou substituto no Apollo. Vale conferir manualmente.`,
-      });
-      res.mortos++;
+      // Tentou e não achou substituto.
+      if (temEmail) {
+        await supabase
+          .from("contacts")
+          .update({ email_verdict: "invalid", email_checked_at: agora })
+          .eq("id", c.id);
+        await supabase.from("activities").insert({
+          company_id: c.company_id,
+          type: "prospeccao",
+          description: `Revisão mensal: o e-mail ${emailAtual} parou de funcionar e a Lara não achou substituto no Apollo. Vale conferir manualmente.`,
+        });
+        res.mortos++;
+      } else {
+        // Sem e-mail e Apollo não achou — carimba para não reprocessar todo dia.
+        await supabase
+          .from("contacts")
+          .update({ email_status: "unavailable", email_checked_at: agora })
+          .eq("id", c.id);
+      }
     }
   }
 
   return res;
+}
+
+// Corrige os RASCUNHOS pendentes (e-mail) do parceiro para o contato atualizado:
+// religa rascunhos sem contato a este contato e troca o nome antigo pelo novo na
+// saudação/assunto. Não toca em rascunhos de outro contato válido. Sem IA.
+async function corrigirRascunhos(
+  supabase: SupabaseClient,
+  companyId: string,
+  contactId: string,
+  nomeAntigo: string | null,
+  nomeNovo: string | null,
+): Promise<number> {
+  const { data } = await supabase
+    .from("drafts")
+    .select("id, subject, body, contact_id")
+    .eq("company_id", companyId)
+    .eq("channel", "email")
+    .eq("status", "pendente");
+  const rascunhos =
+    (data as { id: string; subject: string | null; body: string; contact_id: string | null }[] | null) ?? [];
+
+  let n = 0;
+  for (const d of rascunhos) {
+    // Pertence a OUTRO contato válido? não mexe.
+    if (d.contact_id && d.contact_id !== contactId) continue;
+    const upd: Record<string, unknown> = {};
+    if (!d.contact_id) upd.contact_id = contactId;
+    if (nomeAntigo && nomeNovo && nomeAntigo.trim() && nomeAntigo !== nomeNovo) {
+      if (d.subject) upd.subject = substituirNome(d.subject, nomeAntigo, nomeNovo);
+      upd.body = substituirNome(d.body, nomeAntigo, nomeNovo);
+    }
+    if (Object.keys(upd).length > 0) {
+      await supabase.from("drafts").update(upd).eq("id", d.id);
+      n++;
+    }
+  }
+  return n;
+}
+
+// Troca o nome antigo pelo novo (nome completo e primeiro nome) num texto.
+function substituirNome(texto: string, antigo: string, novo: string): string {
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let out = texto;
+  const full = antigo.trim();
+  if (full) out = out.replace(new RegExp(esc(full), "g"), novo.trim());
+  const primeiroAntigo = full.split(/\s+/)[0];
+  const primeiroNovo = novo.trim().split(/\s+/)[0];
+  if (primeiroAntigo && primeiroNovo && primeiroAntigo !== primeiroNovo) {
+    out = out.replace(new RegExp(`\\b${esc(primeiroAntigo)}\\b`, "g"), primeiroNovo);
+  }
+  return out;
 }
 
 // Revela um apolloId e devolve o e-mail SE for diferente do atual e passar na
@@ -219,8 +315,7 @@ async function tentarRevelar(
   try {
     const r = await revealPerson(apolloId);
     if (!r.email) return null;
-    if (r.email.toLowerCase() === emailAtualLower) return null; // mesmo e-mail morto
-    // Verificado pelo Apollo já basta; senão, passa pelo verificador.
+    if (emailAtualLower && r.email.toLowerCase() === emailAtualLower) return null; // mesmo e-mail morto
     if (isEmailVerified(r.emailStatus) || (await emailBom(r.email, verificar))) {
       return { email: r.email, phone: r.phone };
     }
@@ -236,6 +331,40 @@ async function emailBom(email: string, verificar: boolean): Promise<boolean> {
   return isSendable(await verifyEmail(email.toLowerCase()));
 }
 
-async function carimbar(supabase: SupabaseClient, contactId: string, agora: string) {
-  await supabase.from("contacts").update({ email_checked_at: agora }).eq("id", contactId);
+// Varre a base inteira em lotes, respeitando um prazo (tempo do cron) e um teto
+// GLOBAL de Apollo. Usado pelo disparo "rodar agora" — faz o máximo possível
+// numa chamada só. Devolve o total somado + se ainda sobrou base para a próxima.
+export async function revisarBaseEmailsCompleto(
+  supabase: SupabaseClient,
+  opts?: { deadlineMs?: number; maxApollo?: number; loteMax?: number },
+): Promise<ResultadoRevisao & { concluido: boolean }> {
+  const deadline = Date.now() + (opts?.deadlineMs ?? 45_000);
+  let apolloRestante = opts?.maxApollo ?? 25;
+  const loteMax = opts?.loteMax ?? 40;
+
+  const total = vazio();
+  let concluido = true;
+
+  while (Date.now() < deadline && apolloRestante > 0) {
+    const r = await revisarBaseEmails(supabase, { max: loteMax, maxApollo: apolloRestante });
+    total.processados += r.processados;
+    total.verificados += r.verificados;
+    total.trocados += r.trocados;
+    total.vinculados += r.vinculados;
+    total.mortos += r.mortos;
+    total.rascunhosCorrigidos += r.rascunhosCorrigidos;
+    total.apolloUsados += r.apolloUsados;
+    total.trocas.push(...r.trocas);
+    apolloRestante -= r.apolloUsados;
+
+    if (r.processados === 0) break; // base limpa — nada vencido sobrando
+    if (r.processados < loteMax) {
+      // lote menor que o teto = era o último pedaço de vencidos
+      concluido = true;
+      break;
+    }
+    concluido = false; // havia lote cheio; pode ter mais — o loop continua
+  }
+
+  return { ...total, concluido };
 }

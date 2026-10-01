@@ -72,6 +72,8 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [runMsg, setRunMsg] = useState<string | null>(null);
+  const [revisando, setRevisando] = useState(false);
+  const [revisarMsg, setRevisarMsg] = useState<string | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [reativar, setReativar] = useState<
@@ -157,6 +159,30 @@ export default function Dashboard() {
       setRunMsg(String(e));
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function revisarEmails() {
+    setRevisando(true);
+    setRevisarMsg("Revisando os e-mails da base (as duas clínicas)… isso pode levar alguns segundos.");
+    try {
+      const r = await fetch("/api/manutencao/emails", { method: "POST" });
+      const d = await r.json();
+      if (d.error) setRevisarMsg(`Erro: ${d.error}`);
+      else
+        setRevisarMsg(
+          `Pronto: ${d.verificados ?? 0} e-mail(s) verificado(s), ` +
+            `${d.trocados ?? 0} trocado(s), ${d.vinculados ?? 0} novo(s) vinculado(s), ` +
+            `${d.rascunhosCorrigidos ?? 0} rascunho(s) corrigido(s).` +
+            (d.concluido === false
+              ? " Ainda sobrou base — clique de novo para continuar a varredura."
+              : " Base revisada."),
+        );
+      loadStats();
+    } catch (e) {
+      setRevisarMsg(String(e));
+    } finally {
+      setRevisando(false);
     }
   }
 
@@ -297,15 +323,25 @@ export default function Dashboard() {
               online 24/7). Você também pode rodar agora:
             </p>
           </div>
-          <button
-            onClick={runFollowup}
-            disabled={running}
-            className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
-          >
-            {running ? "Rodando…" : "Rodar follow-up agora"}
-          </button>
+          <div className="flex flex-col gap-2 sm:items-end">
+            <button
+              onClick={runFollowup}
+              disabled={running}
+              className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              {running ? "Rodando…" : "Rodar follow-up agora"}
+            </button>
+            <button
+              onClick={revisarEmails}
+              disabled={revisando}
+              className="rounded-md border border-brand-300 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+            >
+              {revisando ? "Revisando…" : "Revisar e-mails da base agora"}
+            </button>
+          </div>
         </div>
         {runMsg && <p className="mt-2 text-sm text-gray-600">{runMsg}</p>}
+        {revisarMsg && <p className="mt-2 text-sm text-gray-600">{revisarMsg}</p>}
       </section>
 
       <section>

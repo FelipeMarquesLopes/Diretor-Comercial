@@ -217,14 +217,17 @@ extraídos). Todo Jan-Fev o sistema já faz isso automaticamente para os \
 elegíveis; mas você pode preparar sob demanda quando o Felipe pedir.
 
 MANUTENÇÃO DA BASE (e-mails sempre vivos): você revisa os e-mails de TODA a \
-base de prospecção (operadoras, empresas, escolas, médicos, sindicatos, \
-igrejas) uma vez por mês — automaticamente, um pouco por dia. Para cada \
-contato: reverifica se o e-mail ainda funciona; se morreu, procura um \
-substituto no Apollo e TROCA sozinha, registrando na atividade do parceiro \
-(com atenção especial às operadoras). Isso NÃO consome créditos da sua IA — só \
-o verificador (barato) e o Apollo (só nos e-mails que falharam). Quando o \
-Felipe pedir para "revisar/atualizar os e-mails agora", use \
-'revisar_emails_base'.
+base de prospecção das DUAS marcas (MenthalHelp e Therapy Minds) — operadoras, \
+empresas, escolas, médicos, sindicatos, igrejas — uma vez por mês, \
+automaticamente, um pouco por dia. Para cada contato: reverifica se o e-mail \
+ainda funciona; se morreu OU falta, procura um e-mail bom no Apollo e \
+VINCULA/TROCA sozinha, registrando na atividade do parceiro (atenção especial \
+às operadoras). E se aquele parceiro tiver RASCUNHO parado, você corrige o \
+rascunho para o novo contato/e-mail (destrava a prospecção). Isso NÃO consome \
+créditos da sua IA — só o verificador (barato) e o Apollo (só nos e-mails que \
+falharam/faltam). Quando o Felipe pedir para "revisar/atualizar os e-mails \
+agora", use 'revisar_emails_base' (se vier concluido=false, chame de novo para \
+continuar a varredura).
 
 BUSCA NA WEB (você NÃO depende só do Apollo): você tem a ferramenta de pesquisa \
 na internet (web_search). Quando o Apollo não tiver o e-mail de um decisor, \
@@ -488,11 +491,11 @@ const TOOLS: Tool[] = [
   {
     name: "revisar_emails_base",
     description:
-      "Faz a REVISÃO DE E-MAILS da base de prospecção (operadoras, empresas, escolas, médicos, sindicatos, igrejas): reverifica os e-mails cadastrados e, nos que pararam de funcionar, procura um substituto no Apollo e TROCA sozinha, registrando na atividade do parceiro. Isso já roda automático um pouco por dia (cada contato revisto ~1x/mês); use esta ferramenta quando o CEO pedir para revisar/atualizar os e-mails AGORA. Não usa créditos da sua IA — gasta verificador (barato) e Apollo só nos que falharam. 'max' = quantos reverificar nesta rodada (padrão 40).",
+      "Faz AGORA a REVISÃO DE E-MAILS de toda a base de prospecção das DUAS marcas (MenthalHelp e Therapy Minds) — operadoras, empresas, escolas, médicos, sindicatos, igrejas. Para cada parceiro: reverifica o e-mail; se morreu ou falta, acha um no Apollo e VINCULA/TROCA sozinha; se tinha rascunho parado, corrige o rascunho para o novo contato. Varre o máximo possível numa chamada (em lotes). Também roda automático um pouco por dia (cada contato ~1x/mês). Use quando o Felipe pedir para revisar/atualizar os e-mails. NÃO usa créditos da sua IA — gasta verificador (barato) e Apollo só nos que falharam. Se devolver concluido=false, ainda sobrou base: chame de novo para continuar.",
     input_schema: {
       type: "object",
       properties: {
-        max: { type: "number", description: "quantos contatos reverificar nesta rodada (padrão 40)" },
+        maxApollo: { type: "number", description: "teto de buscas no Apollo nesta rodada (padrão 25)" },
       },
     },
   },
@@ -951,7 +954,7 @@ async function executar(
       return api(ctx, "POST", `/api/contratos/${input.contractId}/reajuste`);
     case "revisar_emails_base":
       return api(ctx, "POST", "/api/manutencao/emails", {
-        max: typeof input.max === "number" ? input.max : undefined,
+        maxApollo: typeof input.maxApollo === "number" ? input.maxApollo : undefined,
       });
     case "listar_licitacoes": {
       const p = new URLSearchParams();
