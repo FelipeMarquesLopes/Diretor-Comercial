@@ -239,6 +239,44 @@ export async function revisarBaseEmails(
 
     // 3) Aplica o resultado.
     if (novo) {
+      // Grava o e-mail novo. IMPORTANTE: há índice único (apollo_id, company_id).
+      // Se o novo decisor já existir na empresa, incluir o apollo_id causa
+      // conflito e a gravação FALHA — por isso checamos o erro e, se falhar,
+      // tentamos SEM mexer no apollo_id. O carimbo (email_checked_at) tem que
+      // colar de qualquer jeito, senão o contato volta e repete (bug corrigido).
+      const campos = {
+        email: novo.email,
+        email_verdict: "valid",
+        email_status: "verified",
+        email_checked_at: agora,
+        name: novo.name ?? c.name,
+        title: novo.title ?? c.title,
+        ...(novo.phone ? { phone: novo.phone } : {}),
+      };
+
+      let gravou = false;
+      const r1 = await supabase
+        .from("contacts")
+        .update({ ...campos, apollo_id: novo.apolloId ?? c.apollo_id })
+        .eq("id", c.id);
+      if (!r1.error) {
+        gravou = true;
+      } else {
+        // Conflito (ou outro erro): tenta sem trocar o apollo_id.
+        const r2 = await supabase.from("contacts").update(campos).eq("id", c.id);
+        if (!r2.error) gravou = true;
+      }
+
+      if (!gravou) {
+        // Não conseguimos gravar o e-mail novo. Carimba mesmo assim para NÃO
+        // reprocessar/re-gastar nos mesmos, e segue (não conta como vínculo).
+        await supabase
+          .from("contacts")
+          .update({ email_checked_at: agora })
+          .eq("id", c.id);
+        continue;
+      }
+
       if (temEmail) {
         // suprime o e-mail morto (não voltamos a tentar enviar para ele)
         await suppressEmail(supabase, {
@@ -248,19 +286,6 @@ export async function revisarBaseEmails(
           companyId: c.company_id,
         });
       }
-      await supabase
-        .from("contacts")
-        .update({
-          email: novo.email,
-          email_verdict: "valid",
-          email_status: "verified",
-          email_checked_at: agora,
-          apollo_id: novo.apolloId ?? c.apollo_id,
-          name: novo.name ?? c.name,
-          title: novo.title ?? c.title,
-          ...(novo.phone ? { phone: novo.phone } : {}),
-        })
-        .eq("id", c.id);
 
       // 4) Corrige rascunhos parados do parceiro (religar contato + nome). Sem IA.
       const corrigidos = await corrigirRascunhos(
