@@ -7,6 +7,7 @@ import {
 } from "@/lib/outreach";
 import { checkInbox, isInboxConfigured } from "@/lib/inbox";
 import { varrerReajustesAnuais } from "@/lib/reajusteAnual";
+import { revisarBaseEmails } from "@/lib/manutencaoBase";
 import type { Company, Sequence } from "@/lib/types";
 
 // Data (YYYY-MM-DD) daqui a N dias.
@@ -153,6 +154,24 @@ async function run() {
     }
   }
 
+  // 5. REVISÃO MENSAL DA BASE: reverifica os e-mails dos parceiros de
+  //    prospecção e, quando um morre, acha um substituto no Apollo e troca
+  //    sozinha. A varredura é fatiada (um lote por dia, só os "vencidos" há
+  //    28+ dias), então cada contato é revisto ~1x/mês sem pesar no custo nem
+  //    estourar o tempo do cron. NÃO usa a IA (Anthropic) — só verificador +
+  //    Apollo, e o Apollo só nos e-mails que falharam.
+  let emailsRevisados = 0;
+  let emailsTrocados = 0;
+  let emailsMortos = 0;
+  try {
+    const r = await revisarBaseEmails(supabase, { max: 40, maxApollo: 12 });
+    emailsRevisados = r.verificados;
+    emailsTrocados = r.trocados;
+    emailsMortos = r.mortos;
+  } catch {
+    // falha de verificador/Apollo numa rodada não derruba o motor
+  }
+
   return NextResponse.json({
     respostas_lidas: respostas,
     bounces_bloqueados: bounces,
@@ -161,5 +180,8 @@ async function run() {
     rascunhos_gerados: gerados,
     informativos_agenda: informativos,
     reajustes_anuais: reajustesAnuais,
+    emails_revisados: emailsRevisados,
+    emails_trocados: emailsTrocados,
+    emails_sem_substituto: emailsMortos,
   });
 }
