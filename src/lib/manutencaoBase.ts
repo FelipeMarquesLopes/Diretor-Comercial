@@ -112,7 +112,10 @@ export async function revisarBaseEmails(
   const res = vazio();
 
   // Contatos de parceiros de PROSPECÇÃO (contract_only=false), de QUALQUER marca,
-  // cuja checagem está vencida E que têm e-mail OU apollo_id (dá para agir).
+  // cuja checagem está vencida. Usamos UM ÚNICO filtro OR (o de "vencido") — dois
+  // .or() combinados não são confiáveis no PostgREST e faziam o filtro de
+  // "já revisado" se perder, criando loop. O recorte "tem e-mail ou apollo_id" é
+  // feito no código (linhas sem nada são carimbadas e puladas).
   const { data, error } = await supabase
     .from("contacts")
     .select(
@@ -120,7 +123,6 @@ export async function revisarBaseEmails(
     )
     .eq("companies.contract_only", false)
     .or(`email_checked_at.is.null,email_checked_at.lt.${cutoff}`)
-    .or("email.not.is.null,apollo_id.not.is.null")
     .limit(max);
 
   if (error) throw new Error(error.message);
@@ -173,8 +175,13 @@ export async function revisarBaseEmails(
       continue;
     }
 
-    // Sem e-mail (mas com apollo_id) → candidato a VINCULAR um e-mail novo.
-    fila.push({ c, tipo: "faltando" });
+    // Sem e-mail: só dá para agir se tiver apollo_id (para buscar no Apollo).
+    if (c.apollo_id) {
+      fila.push({ c, tipo: "faltando" });
+    } else {
+      // Nada a fazer (sem e-mail e sem apollo_id) → carimba para não reaparecer.
+      await supabase.from("contacts").update({ email_checked_at: agora }).eq("id", c.id);
+    }
   }
 
   // ===== DISJUNTOR: verificador reprovou fração anormal? então está suspeito.
@@ -239,6 +246,25 @@ export async function revisarBaseEmails(
 
     // 3) Aplica o resultado.
     if (novo) {
+      // ANTI-DUPLICATA: se esse e-mail JÁ existe em outro contato da mesma
+      // empresa (comum em sindicatos, que têm várias linhas vazias apontando
+      // para o mesmo decisor), NÃO duplica. Marca esta linha como resolvida e
+      // segue — assim não fica "repetindo" o mesmo parceiro/e-mail.
+      const { data: jaExiste } = await supabase
+        .from("contacts")
+        .select("id")
+        .eq("company_id", c.company_id)
+        .ilike("email", novo.email)
+        .neq("id", c.id)
+        .limit(1);
+      if (jaExiste && jaExiste.length > 0) {
+        await supabase
+          .from("contacts")
+          .update({ email_status: "unavailable", email_checked_at: agora })
+          .eq("id", c.id);
+        continue; // não conta como novo vínculo (o e-mail já está na empresa)
+      }
+
       // Grava o e-mail novo. IMPORTANTE: há índice único (apollo_id, company_id).
       // Se o novo decisor já existir na empresa, incluir o apollo_id causa
       // conflito e a gravação FALHA — por isso checamos o erro e, se falhar,
