@@ -202,7 +202,15 @@ export default function Dashboard() {
       const r = await fetch("/api/manutencao/emails", { method: "POST" });
       const d = await r.json();
       if (d.error) setRevisarMsg(`Erro: ${d.error}`);
-      else {
+      else if (d.suspeitaVerificador) {
+        setRevisarMsg(
+          `⚠️ Parei por segurança: o verificador reprovou muitos e-mails de uma vez, ` +
+            `o que indica que ELE pode estar com defeito (não a sua base). ` +
+            `Não troquei nada por isso (${d.segurados ?? 0} segurado(s)). ` +
+            `Verifique a chave/saldo do verificador e rode de novo.`,
+        );
+        if (d.ultimaRevisao) setUltimaRevisao(d.ultimaRevisao);
+      } else {
         setRevisarMsg(
           `Pronto: ${d.verificados ?? 0} e-mail(s) verificado(s), ` +
             `${d.trocados ?? 0} trocado(s), ${d.vinculados ?? 0} novo(s) vinculado(s), ` +

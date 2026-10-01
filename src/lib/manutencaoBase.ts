@@ -7,21 +7,26 @@
 // empresas, escolas, médicos, sindicatos, igrejas — tudo que NÃO é só contrato):
 //
 //   1. Reverifica o e-mail cadastrado de cada contato (barato — verificador).
-//   2. Se o e-mail ainda é válido → só carimba a data e segue.
-//   3. Se o e-mail MORREU (ou o contato ainda não tem e-mail) → usa o Apollo
-//      para achar um e-mail bom: revela de novo o próprio decisor e, se preciso,
-//      busca outro decisor no mesmo domínio. Achou? VINCULA sozinha, suprime o
-//      antigo (se havia) e registra na atividade do parceiro.
+//   2. Só considera MORTO o que é comprovadamente morto: suprimido (bounce/
+//      descadastro) OU reprovado como "invalid" pelo verificador. "catch_all" e
+//      "unknown" são MANTIDOS (podem ser hiccup do verificador ou domínio que
+//      aceita tudo).
+//   3. Nos mortos (ou nos contatos SEM e-mail), usa o Apollo para achar um
+//      e-mail bom — e SÓ troca se o novo e-mail for aprovado pelo verificador.
 //   4. Se o parceiro tinha RASCUNHO parado, corrige o rascunho para o novo
-//      e-mail/contato (o destinatário já é resolvido na hora do envio; aqui só
-//      ajustamos o nome na saudação e religamos o rascunho ao contato certo).
-//      Isso NÃO usa a IA.
+//      contato/e-mail. Sem IA.
 //
-// CUSTO: NÃO usa a IA (Anthropic) — é rotina de backend. Gasta créditos do
-// VERIFICADOR (1 por e-mail checado) e do APOLLO (1 por revelação) — e o Apollo
-// só é tocado nos e-mails que falharam/faltam, com teto por rodada. A varredura
-// é fatiada (um lote por vez, só os "vencidos" há 28+ dias) para cada contato
-// ser revisto ~1x/mês sem estourar o tempo do cron nem os créditos.
+// TRAVAS DE SEGURANÇA (para NUNCA churnar a base por defeito do verificador):
+//   A. DISJUNTOR: se o verificador reprovar uma fração anormal da amostra
+//      (> LIMITE_ANOMALIA de uma leva com MIN_AMOSTRA+ e-mails), assumimos que
+//      ele está com problema e NÃO trocamos nada por causa dele (deixa para a
+//      próxima rodada, sem carimbar) — só bounces reais e faltantes seguem.
+//   B. O e-mail NOVO precisa passar no verificador como válido (se quebrado,
+//      ele reprova o novo também → nenhuma troca acontece).
+//   C. TETO de trocas por rodada (cinto de segurança extra).
+//
+// CUSTO: NÃO usa a IA (Anthropic). Gasta VERIFICADOR (1 por e-mail checado) e
+// APOLLO (1 por revelação, só nos mortos/faltantes, com teto por rodada).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revealPerson, searchDecisionMakers, isEmailVerified } from "./apollo";
@@ -29,6 +34,11 @@ import { verifierConfigured, verifyEmail, isSendable } from "./emailVerify";
 import { getSuppressedSet, suppressEmail } from "./suppression";
 
 const DIA = 86_400_000;
+
+// Disjuntor: a partir de MIN_AMOSTRA e-mails testados numa leva, se mais de
+// LIMITE_ANOMALIA deles forem "invalid", o verificador é considerado suspeito.
+const MIN_AMOSTRA = 8;
+const LIMITE_ANOMALIA = 0.5;
 
 // Categorias que o Apollo sabe buscar decisores por domínio. As demais
 // (agenda_aberta, reajuste…) caem no fallback "empresa" só na hora de procurar
@@ -57,8 +67,10 @@ export type ResultadoRevisao = {
   trocados: number; // e-mail morto substituído
   vinculados: number; // contato sem e-mail que ganhou um
   mortos: number; // morto e sem substituto
+  segurados: number; // reprovados segurados pelo disjuntor (não mexidos)
   rascunhosCorrigidos: number;
   apolloUsados: number;
+  suspeitaVerificador: boolean;
   trocas: { parceiro: string; de: string; para: string }[];
 };
 
@@ -69,8 +81,10 @@ function vazio(): ResultadoRevisao {
     trocados: 0,
     vinculados: 0,
     mortos: 0,
+    segurados: 0,
     rascunhosCorrigidos: 0,
     apolloUsados: 0,
+    suspeitaVerificador: false,
     trocas: [],
   };
 }
@@ -80,10 +94,11 @@ function vazio(): ResultadoRevisao {
 // dia: só pega os vencidos, então cada contato é revisto ~1x/mês.
 export async function revisarBaseEmails(
   supabase: SupabaseClient,
-  opts?: { max?: number; maxApollo?: number },
+  opts?: { max?: number; maxApollo?: number; tetoTrocas?: number },
 ): Promise<ResultadoRevisao> {
   const max = opts?.max ?? 40; // contatos por rodada
   const maxApollo = opts?.maxApollo ?? 12; // teto de revelações Apollo por rodada
+  const tetoTrocas = opts?.tetoTrocas ?? 20; // teto de trocas+vínculos por rodada
   const cutoff = new Date(Date.now() - 28 * DIA).toISOString();
 
   const res = vazio();
@@ -106,43 +121,73 @@ export async function revisarBaseEmails(
 
   const verificar = verifierConfigured();
 
+  // ===== PASSO 1: classifica. Age já nos VIVOS (carimba). Enfileira os alvos.
+  type Alvo = { c: LinhaContato; tipo: "bounce" | "verif" | "faltando" };
+  const fila: Alvo[] = [];
+  let invalidosVerif = 0;
+
   for (const c of linhas) {
     const agora = new Date().toISOString();
     const emailAtual = (c.email ?? "").trim();
     const temEmail = emailAtual.length > 0;
     const emailLower = emailAtual.toLowerCase();
 
-    // 1) Se tem e-mail, confere se ainda serve. Para MANUTENÇÃO somos
-    //    CONSERVADORES: só trocamos e-mail COMPROVADAMENTE morto — suprimido
-    //    (bounce/descadastro) OU o verificador devolveu "invalid". "catch_all"
-    //    e "unknown" NÃO são troca (podem ser hiccup do verificador ou domínio
-    //    que aceita tudo) — mantemos o e-mail e evitamos churn da base + gasto
-    //    de Apollo à toa.
     if (temEmail) {
-      let morto = false;
-      let verdict = "unknown";
       const suprimidos = await getSuppressedSet(supabase, [emailLower]);
       if (suprimidos.has(emailLower)) {
-        morto = true;
-        verdict = "invalid";
-      } else if (verificar) {
-        verdict = await verifyEmail(emailLower);
-        res.verificados++;
-        morto = verdict === "invalid";
+        fila.push({ c, tipo: "bounce" }); // bounce/descadastro real — morto seguro
+        continue;
       }
-      if (!morto) {
+      if (verificar) {
+        const verdict = await verifyEmail(emailLower);
+        res.verificados++;
+        if (verdict === "invalid") {
+          invalidosVerif++;
+          fila.push({ c, tipo: "verif" });
+          continue;
+        }
+        // vivo (valid/catch_all/unknown) → mantém e carimba
         await supabase
           .from("contacts")
           .update({ email_checked_at: agora, email_verdict: verdict })
           .eq("id", c.id);
         continue;
       }
+      // Sem verificador não dá para afirmar que morreu → mantém e carimba.
+      await supabase.from("contacts").update({ email_checked_at: agora }).eq("id", c.id);
+      continue;
     }
 
-    // 2) Precisa achar um e-mail (morto OU inexistente). Sem orçamento de Apollo
-    //    nesta rodada? Deixa para a próxima (NÃO carimba, para não perder o
-    //    contato) — assim nunca marcamos como inválido sem ao menos tentar.
-    if (res.apolloUsados >= maxApollo) continue;
+    // Sem e-mail (mas com apollo_id) → candidato a VINCULAR um e-mail novo.
+    fila.push({ c, tipo: "faltando" });
+  }
+
+  // ===== DISJUNTOR: verificador reprovou fração anormal? então está suspeito.
+  const suspeitaVerificador =
+    verificar &&
+    res.verificados >= MIN_AMOSTRA &&
+    invalidosVerif / res.verificados > LIMITE_ANOMALIA;
+  res.suspeitaVerificador = suspeitaVerificador;
+
+  // ===== PASSO 2: age nos alvos (com as travas).
+  for (const { c, tipo } of fila) {
+    const agora = new Date().toISOString();
+    const emailAtual = (c.email ?? "").trim();
+    const temEmail = emailAtual.length > 0;
+    const emailLower = emailAtual.toLowerCase();
+
+    // TRAVA A: verificador suspeito → NÃO mexe nos reprovados por ele (deixa
+    // para a próxima rodada, sem carimbar). Bounces reais e faltantes seguem.
+    if (tipo === "verif" && suspeitaVerificador) {
+      res.segurados++;
+      continue;
+    }
+
+    // TRAVA C: teto de trocas/vínculos por rodada — para de agir, resto fica
+    // para a próxima (sem carimbar, para não perder).
+    if (res.trocados + res.vinculados >= tetoTrocas) break;
+    // Orçamento de Apollo esgotado → idem (não marca inválido sem tentar).
+    if (res.apolloUsados >= maxApollo) break;
 
     const parceiro = c.companies?.name ?? "parceiro";
     const domain = c.companies?.domain ?? null;
@@ -165,13 +210,6 @@ export async function revisarBaseEmails(
         for (const p of pessoas) {
           if (res.apolloUsados >= maxApollo) break;
           if (!p.apolloId) continue;
-          // Se o Apollo já entrega o e-mail verificado, aproveita sem revelar.
-          if (p.email && isEmailVerified(p.emailStatus)) {
-            if (p.email.toLowerCase() !== emailLower && (await emailBom(p.email, verificar))) {
-              novo = { email: p.email, apolloId: p.apolloId, name: p.name, title: p.title };
-              break;
-            }
-          }
           res.apolloUsados++;
           const r = await tentarRevelar(p.apolloId, emailLower, verificar);
           if (r) {
@@ -310,8 +348,10 @@ function substituirNome(texto: string, antigo: string, novo: string): string {
   return out;
 }
 
-// Revela um apolloId e devolve o e-mail SE for diferente do atual e passar na
-// validação. Caso contrário, null.
+// Revela um apolloId e devolve o e-mail SE for diferente do atual e for BOM.
+// TRAVA B: quando o verificador existe, o e-mail NOVO precisa passar nele como
+// válido (não basta o Apollo dizer "verified"). Assim, verificador quebrado =
+// nenhuma troca. Sem verificador, confiamos no status do Apollo.
 async function tentarRevelar(
   apolloId: string,
   emailAtualLower: string,
@@ -321,19 +361,13 @@ async function tentarRevelar(
     const r = await revealPerson(apolloId);
     if (!r.email) return null;
     if (emailAtualLower && r.email.toLowerCase() === emailAtualLower) return null; // mesmo e-mail morto
-    if (isEmailVerified(r.emailStatus) || (await emailBom(r.email, verificar))) {
-      return { email: r.email, phone: r.phone };
-    }
-    return null;
+    const bom = verificar
+      ? isSendable(await verifyEmail(r.email.toLowerCase())) // nosso verificador manda
+      : isEmailVerified(r.emailStatus); // sem verificador, confia no Apollo
+    return bom ? { email: r.email, phone: r.phone } : null;
   } catch {
     return null;
   }
-}
-
-// O e-mail é bom o bastante para enviar? (usa o verificador quando existe)
-async function emailBom(email: string, verificar: boolean): Promise<boolean> {
-  if (!verificar) return true; // sem verificador, aceita (melhor que o morto)
-  return isSendable(await verifyEmail(email.toLowerCase()));
 }
 
 // Varre a base inteira em lotes, respeitando um prazo (tempo do cron) e um teto
@@ -351,21 +385,32 @@ export async function revisarBaseEmailsCompleto(
   let concluido = true;
 
   while (Date.now() < deadline && apolloRestante > 0) {
-    const r = await revisarBaseEmails(supabase, { max: loteMax, maxApollo: apolloRestante });
+    const r = await revisarBaseEmails(supabase, {
+      max: loteMax,
+      maxApollo: apolloRestante,
+      tetoTrocas: 20,
+    });
     total.processados += r.processados;
     total.verificados += r.verificados;
     total.trocados += r.trocados;
     total.vinculados += r.vinculados;
     total.mortos += r.mortos;
+    total.segurados += r.segurados;
     total.rascunhosCorrigidos += r.rascunhosCorrigidos;
     total.apolloUsados += r.apolloUsados;
     total.trocas.push(...r.trocas);
     apolloRestante -= r.apolloUsados;
 
+    // Disjuntor disparou numa leva → PARA tudo e sinaliza (não insiste).
+    if (r.suspeitaVerificador) {
+      total.suspeitaVerificador = true;
+      concluido = false;
+      break;
+    }
+
     if (r.processados === 0) break; // base limpa — nada vencido sobrando
     if (r.processados < loteMax) {
-      // lote menor que o teto = era o último pedaço de vencidos
-      concluido = true;
+      concluido = true; // último pedaço de vencidos
       break;
     }
     concluido = false; // havia lote cheio; pode ter mais — o loop continua
