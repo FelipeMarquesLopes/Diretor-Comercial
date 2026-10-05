@@ -80,6 +80,17 @@ async function apolloPost<T>(path: string, body: unknown): Promise<T> {
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    // Falta de crédito do Apollo: mensagem clara (em vez do JSON técnico).
+    if (
+      res.status === 402 ||
+      /insufficient credits|CREDITS_EXHAUSTED|credit_limit|BILLING\.LIMIT/i.test(text)
+    ) {
+      throw new Error(
+        "Apollo sem créditos. Os créditos de lead do Apollo acabaram — " +
+          "recarregue/suba o plano em app.apollo.io (Settings → Plans/Billing) " +
+          "para voltar a revelar contatos.",
+      );
+    }
     throw new Error(
       `Apollo respondeu ${res.status} em ${path}: ${text.slice(0, 300)}`,
     );
