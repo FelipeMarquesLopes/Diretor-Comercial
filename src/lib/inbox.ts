@@ -9,6 +9,7 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { senderConfig, isBrandId, DEFAULT_BRAND, type BrandId } from "./brands";
 import { classifyResponse } from "./anthropic";
 import { resumeAtAfterNegative } from "./followup";
 import { suppressEmail } from "./suppression";
@@ -63,20 +64,26 @@ function detectBounce(
   return { isBounce: true, failed: Array.from(failed) };
 }
 
-export function imapConfig() {
-  const host =
-    process.env.IMAP_HOST ??
-    (process.env.SMTP_HOST
-      ? process.env.SMTP_HOST.replace(/^smtp\./, "imap.")
-      : "imap.titan.email");
-  const port = Number(process.env.IMAP_PORT ?? "993");
-  const user = process.env.SMTP_USER ?? process.env.GMAIL_USER;
-  const pass = process.env.SMTP_PASSWORD ?? process.env.GMAIL_APP_PASSWORD;
-  return { host, port, user, pass };
+function resolverBrand(b?: string | null): BrandId {
+  return isBrandId(b) ? b : DEFAULT_BRAND;
 }
 
-export function isInboxConfigured(): boolean {
-  const { user, pass } = imapConfig();
+// Configuração de LEITURA (IMAP) POR MARCA. Reaproveita as credenciais de ENVIO
+// da marca (mesma conta): MenthalHelp = Titan; Therapy Minds = Google Workspace
+// (Gmail). O host de IMAP é derivado do host de SMTP (smtp. → imap.); dá para
+// sobrescrever por marca com IMAP_HOST / IMAP_HOST_TM e IMAP_PORT / IMAP_PORT_TM.
+export function imapConfig(brand?: string | null) {
+  const b = resolverBrand(brand);
+  const s = senderConfig(b);
+  const envHost = b === "therapy_minds" ? process.env.IMAP_HOST_TM : process.env.IMAP_HOST;
+  const envPort = b === "therapy_minds" ? process.env.IMAP_PORT_TM : process.env.IMAP_PORT;
+  const host = envHost ?? s.host.replace(/^smtp\./, "imap.");
+  const port = Number(envPort ?? "993");
+  return { host, port, user: s.user, pass: s.pass };
+}
+
+export function isInboxConfigured(brand?: string | null): boolean {
+  const { user, pass } = imapConfig(brand);
   return Boolean(user && pass);
 }
 
@@ -92,8 +99,10 @@ const MAX_POR_RODADA = 8;
 
 export async function checkInbox(
   supabase: SupabaseClient,
+  brand?: string | null,
 ): Promise<{ processadas: number; positivas: string[]; bounces: number }> {
-  const { host, port, user, pass } = imapConfig();
+  const marca = resolverBrand(brand);
+  const { host, port, user, pass } = imapConfig(marca);
   if (!user || !pass) return { processadas: 0, positivas: [], bounces: 0 };
 
   const client = new ImapFlow({
@@ -133,8 +142,9 @@ export async function checkInbox(
             // Tenta vincular ao cadastro (para contexto), sem exigir.
             const { data: c } = await supabase
               .from("contacts")
-              .select("company_id")
+              .select("company_id, companies!inner(brand)")
               .ilike("email", email)
+              .eq("companies.brand", marca)
               .limit(1);
             const companyId =
               (c as { company_id: string }[] | null)?.[0]?.company_id ?? null;
@@ -164,8 +174,9 @@ export async function checkInbox(
         // Só processa se o remetente estiver no nosso cadastro.
         const { data } = await supabase
           .from("contacts")
-          .select("id, company_id, email, companies(name, category)")
+          .select("id, company_id, email, companies!inner(name, category, brand)")
           .ilike("email", fromAddr)
+          .eq("companies.brand", marca)
           .limit(1);
         const match = (data as unknown as ContactRow[] | null)?.[0];
         if (!match || !match.company_id || !match.companies) {

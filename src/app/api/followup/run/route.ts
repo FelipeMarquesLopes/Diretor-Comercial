@@ -52,19 +52,21 @@ async function run() {
 
   const now = new Date().toISOString();
 
-  // 0. Ler as respostas por e-mail (só de contatos cadastrados) e classificar.
+  // 0. Ler as respostas por e-mail (só de contatos cadastrados) e classificar,
+  //    nas DUAS marcas (MenthalHelp=Titan, Therapy Minds=Google Workspace).
   //    Também captura RETORNOS (bounce) e bloqueia esses e-mails.
   let respostas = 0;
   let positivas: string[] = [];
   let bounces = 0;
-  if (isInboxConfigured()) {
+  for (const brand of ["menthalhelp", "therapy_minds"] as const) {
+    if (!isInboxConfigured(brand)) continue;
     try {
-      const r = await checkInbox(supabase);
-      respostas = r.processadas;
-      positivas = r.positivas;
-      bounces = r.bounces;
+      const r = await checkInbox(supabase, brand);
+      respostas += r.processadas;
+      positivas = positivas.concat(r.positivas);
+      bounces += r.bounces;
     } catch {
-      // se o IMAP falhar numa rodada, segue o resto do motor
+      // se o IMAP de uma marca falhar numa rodada, segue com a outra e o motor
     }
   }
 

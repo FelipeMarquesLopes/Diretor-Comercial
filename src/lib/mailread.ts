@@ -16,23 +16,26 @@ export interface EmailResumo {
   data: string | null;
 }
 
-function conectar(): ImapFlow {
-  const { host, port, user, pass } = imapConfig();
+function conectar(brand?: string | null): ImapFlow {
+  const { host, port, user, pass } = imapConfig(brand);
   if (!user || !pass) {
-    throw new Error("Caixa de e-mail não configurada (IMAP/Titan).");
+    throw new Error("Caixa de e-mail não configurada (IMAP) para esta marca.");
   }
   return new ImapFlow({ host, port, secure: true, auth: { user, pass }, logger: false });
 }
 
 // Lista os e-mails recentes da caixa (últimos ~30 dias), com filtros opcionais
-// por remetente e/ou termo (assunto/corpo).
-export async function listarEmails(opts?: {
-  termo?: string;
-  remetente?: string;
-  max?: number;
-}): Promise<EmailResumo[]> {
+// por remetente e/ou termo (assunto/corpo). `brand` escolhe a caixa (marca ativa).
+export async function listarEmails(
+  opts?: {
+    termo?: string;
+    remetente?: string;
+    max?: number;
+  },
+  brand?: string | null,
+): Promise<EmailResumo[]> {
   const max = Math.min(Math.max(opts?.max ?? 15, 1), 30);
-  const client = conectar();
+  const client = conectar(brand);
   await client.connect();
   try {
     const lock = await client.getMailboxLock("INBOX");
@@ -69,7 +72,10 @@ export async function listarEmails(opts?: {
 }
 
 // Lê o conteúdo completo de um e-mail pelo uid.
-export async function lerEmail(uid: number): Promise<{
+export async function lerEmail(
+  uid: number,
+  brand?: string | null,
+): Promise<{
   de: string;
   para: string;
   cc: string;
@@ -77,7 +83,7 @@ export async function lerEmail(uid: number): Promise<{
   data: string | null;
   texto: string;
 } | null> {
-  const client = conectar();
+  const client = conectar(brand);
   await client.connect();
   try {
     const lock = await client.getMailboxLock("INBOX");
