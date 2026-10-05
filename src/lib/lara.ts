@@ -283,11 +283,13 @@ CAIXA DE E-MAIL (por marca): você lê a caixa da MARCA ATIVA — MenthalHelp \
 (Titan, credenciamento@clinicamenthalhelp.com.br) ou Therapy Minds (Google \
 Workspace/Gmail, adm@therapyminds.com.br). Ou seja, no painel da Therapy você lê \
 a caixa da Therapy; no da MenthalHelp, a da MenthalHelp. Você pode ABRIR a caixa \
-e ler os e-mails que chegam — inclusive os que NÃO entraram na automação (ex: \
-uma resposta que veio em cópia). Quando o Felipe pedir para ver/analisar um \
+e ler os e-mails que chegam — e isso cobre TODAS as pastas: a Inbox E as pastas/\
+labels que o Felipe criou no provedor (ex: "Retorno operadoras"), não só a Inbox. \
+Quando o Felipe pedir para ver/analisar um \
 e-mail que ele diz não ter aparecido no painel: use 'ler_caixa_email' (filtre \
 por remetente e/ou termo, ex: o nome da operadora) para achar, e 'ler_email' \
-(pelo uid) para ler o conteúdo. Se ele pedir para responder, ache o parceiro com \
+(passando o uid E a 'caixa' que vieram de ler_caixa_email) para ler o conteúdo. \
+Se ele pedir para responder, ache o parceiro com \
 'listar_empresas' e use 'preparar_replica' (companyId + o texto lido + a \
 orientação) — e, se pedirem documentos, combine com o Drive. Só leitura da \
 caixa; nada é apagado.
@@ -692,7 +694,7 @@ const TOOLS: Tool[] = [
   {
     name: "ler_caixa_email",
     description:
-      "Abre a CAIXA DE ENTRADA da MARCA ATIVA (MenthalHelp=Titan; Therapy Minds=Google Workspace/Gmail) e lista e-mails recentes (últimos ~30 dias) — inclusive os que ficaram FORA da automação (ex: resposta que chegou em cópia). Filtros opcionais: remetente (nome/e-mail) e termo (assunto/corpo). Retorna uid, remetente, assunto e data. Só leitura.",
+      "Abre a CAIXA da MARCA ATIVA (MenthalHelp=Titan; Therapy Minds=Google Workspace/Gmail) e lista e-mails recentes (últimos ~30 dias) de TODAS as pastas — a Inbox E as pastas/labels que o CEO criou (ex: 'Retorno operadoras') — inclusive os que ficaram FORA da automação. Filtros opcionais: remetente (nome/e-mail) e termo (assunto/corpo). Retorna uid, caixa (a pasta), remetente, assunto e data. Só leitura.",
     input_schema: {
       type: "object",
       properties: {
@@ -705,10 +707,13 @@ const TOOLS: Tool[] = [
   {
     name: "ler_email",
     description:
-      "Lê o CONTEÚDO completo de um e-mail da caixa pelo uid (retornado por ler_caixa_email): remetente, para, cópia, assunto e corpo.",
+      "Lê o CONTEÚDO completo de um e-mail pelo uid (retornado por ler_caixa_email): remetente, para, cópia, assunto e corpo. Passe também 'caixa' (a pasta retornada junto do uid em ler_caixa_email) — se o e-mail não estava na Inbox, isso é obrigatório para achá-lo.",
     input_schema: {
       type: "object",
-      properties: { uid: { type: "number" } },
+      properties: {
+        uid: { type: "number" },
+        caixa: { type: "string", description: "a pasta retornada por ler_caixa_email (ex: 'Retorno operadoras'); padrão INBOX" },
+      },
       required: ["uid"],
     },
   },
@@ -1085,7 +1090,11 @@ async function executar(
         return { erro: "A caixa de e-mail (IMAP) da marca ativa não está configurada." };
       }
       try {
-        const email = await lerEmail(Number(input.uid), ctx.brand);
+        const email = await lerEmail(
+          Number(input.uid),
+          ctx.brand,
+          input.caixa ? String(input.caixa) : undefined,
+        );
         return email ?? { erro: "E-mail não encontrado." };
       } catch (e) {
         return { erro: e instanceof Error ? e.message : "Falha ao ler o e-mail." };

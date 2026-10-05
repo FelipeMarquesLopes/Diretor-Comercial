@@ -7,10 +7,11 @@
 
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
-import { imapConfig } from "./inbox";
+import { imapConfig, listarCaixas } from "./inbox";
 
 export interface EmailResumo {
   uid: number;
+  caixa: string; // pasta onde está (ex: "INBOX", "Retorno operadoras")
   de: string;
   assunto: string;
   data: string | null;
@@ -38,34 +39,48 @@ export async function listarEmails(
   const client = conectar(brand);
   await client.connect();
   try {
-    const lock = await client.getMailboxLock("INBOX");
-    try {
-      const criteria: Record<string, unknown> = {
-        since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      };
-      if (opts?.remetente?.trim()) criteria.from = opts.remetente.trim();
-      if (opts?.termo?.trim()) criteria.text = opts.termo.trim();
+    const criteria: Record<string, unknown> = {
+      since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    };
+    if (opts?.remetente?.trim()) criteria.from = opts.remetente.trim();
+    if (opts?.termo?.trim()) criteria.text = opts.termo.trim();
 
-      let uids = (await client.search(criteria, { uid: true })) || [];
-      if (uids.length === 0) return [];
-      uids = uids.slice(-max); // os mais recentes
+    const caixas = await listarCaixas(client);
+    const vistos = new Set<string>(); // dedupe por Message-ID (Gmail repete em labels)
+    const out: EmailResumo[] = [];
 
-      const out: EmailResumo[] = [];
-      for await (const msg of client.fetch(uids, { envelope: true }, { uid: true })) {
-        const env = msg.envelope;
-        const f = env?.from?.[0];
-        out.push({
-          uid: msg.uid,
-          de: f ? `${f.name ?? ""} <${f.address ?? ""}>`.trim() : "",
-          assunto: env?.subject ?? "(sem assunto)",
-          data: env?.date ? new Date(env.date).toISOString() : null,
-        });
+    for (const caixa of caixas) {
+      let lock!: Awaited<ReturnType<typeof client.getMailboxLock>>;
+      try {
+        lock = await client.getMailboxLock(caixa);
+      } catch {
+        continue; // pasta não selecionável — pula
       }
-      out.sort((a, b) => (b.data ?? "").localeCompare(a.data ?? ""));
-      return out;
-    } finally {
-      lock.release();
+      try {
+        let uids = (await client.search(criteria, { uid: true })) || [];
+        if (uids.length === 0) continue;
+        uids = uids.slice(-max); // os mais recentes desta pasta
+        for await (const msg of client.fetch(uids, { envelope: true }, { uid: true })) {
+          const env = msg.envelope;
+          const mid = env?.messageId ?? `${caixa}:${msg.uid}`;
+          if (vistos.has(mid)) continue;
+          vistos.add(mid);
+          const f = env?.from?.[0];
+          out.push({
+            uid: msg.uid,
+            caixa,
+            de: f ? `${f.name ?? ""} <${f.address ?? ""}>`.trim() : "",
+            assunto: env?.subject ?? "(sem assunto)",
+            data: env?.date ? new Date(env.date).toISOString() : null,
+          });
+        }
+      } finally {
+        lock.release();
+      }
     }
+
+    out.sort((a, b) => (b.data ?? "").localeCompare(a.data ?? ""));
+    return out.slice(0, max);
   } finally {
     await client.logout().catch(() => {});
   }
@@ -75,6 +90,7 @@ export async function listarEmails(
 export async function lerEmail(
   uid: number,
   brand?: string | null,
+  caixa?: string | null,
 ): Promise<{
   de: string;
   para: string;
@@ -86,7 +102,7 @@ export async function lerEmail(
   const client = conectar(brand);
   await client.connect();
   try {
-    const lock = await client.getMailboxLock("INBOX");
+    const lock = await client.getMailboxLock(caixa?.trim() || "INBOX");
     try {
       const msg = await client.fetchOne(uid, { source: true }, { uid: true });
       if (!msg || !msg.source) return null;

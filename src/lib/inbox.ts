@@ -87,6 +87,40 @@ export function isInboxConfigured(brand?: string | null): boolean {
   return Boolean(user && pass);
 }
 
+// Caixas a VARRER: a Inbox + as pastas/labels que o CEO criou (ex: "Retorno
+// operadoras"). Pula Enviados/Rascunhos/Lixeira/Spam/Arquivo e, no Gmail, a
+// "All Mail" (evita duplicar) e containers não selecionáveis. Assim achamos as
+// respostas mesmo quando um filtro move o e-mail para uma pasta própria.
+const CAIXAS_IGNORADAS = new Set([
+  "\\Sent",
+  "\\Drafts",
+  "\\Trash",
+  "\\Junk",
+  "\\All",
+  "\\Archive",
+  "\\Flagged",
+  "\\Important",
+]);
+
+export async function listarCaixas(client: ImapFlow): Promise<string[]> {
+  const caixas: string[] = [];
+  try {
+    for (const mb of await client.list()) {
+      const su = (mb.specialUse as string | undefined) ?? "";
+      if (su && CAIXAS_IGNORADAS.has(su)) continue;
+      // pula containers não selecionáveis (ex: "[Gmail]")
+      const flags = mb.flags as Set<string> | undefined;
+      if (flags?.has("\\Noselect")) continue;
+      caixas.push(mb.path);
+    }
+  } catch {
+    // se o provedor não listar, fica só com a Inbox
+  }
+  // Garante a Inbox e sem duplicatas, com a Inbox primeiro.
+  const semInbox = caixas.filter((c) => c.toUpperCase() !== "INBOX");
+  return ["INBOX", ...Array.from(new Set(semInbox))];
+}
+
 interface ContactRow {
   id: string;
   company_id: string;
@@ -119,12 +153,22 @@ export async function checkInbox(
 
   await client.connect();
   try {
-    const lock = await client.getMailboxLock("INBOX");
-    try {
-      const uids = await client.search({ seen: false }, { uid: true });
-      if (!uids || uids.length === 0) return { processadas, positivas, bounces };
-
-      for (const uid of uids.slice(0, MAX_POR_RODADA)) {
+    // Varre a Inbox E as pastas próprias (ex: "Retorno operadoras"), para pegar
+    // respostas que um filtro moveu para fora da Inbox.
+    const caixas = await listarCaixas(client);
+    for (const caixa of caixas) {
+      if (processadas + bounces >= MAX_POR_RODADA) break; // teto por rodada
+      let lock!: Awaited<ReturnType<typeof client.getMailboxLock>>;
+      try {
+        lock = await client.getMailboxLock(caixa);
+      } catch {
+        continue; // pasta não selecionável — pula
+      }
+      try {
+        const uids = await client.search({ seen: false }, { uid: true });
+        if (!uids || uids.length === 0) continue;
+        const restante = MAX_POR_RODADA - (processadas + bounces);
+        for (const uid of uids.slice(0, restante)) {
         const msg = await client.fetchOne(uid, { source: true }, { uid: true });
         if (!msg || !msg.source) continue;
 
@@ -366,9 +410,10 @@ export async function checkInbox(
         // Marca como lida para não processar de novo.
         await client.messageFlagsAdd(uid, ["\\Seen"], { uid: true });
         processadas++;
+        }
+      } finally {
+        lock.release();
       }
-    } finally {
-      lock.release();
     }
   } finally {
     await client.logout();
