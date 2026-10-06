@@ -37,17 +37,15 @@ const REGIAO = new Set(
   ].map(norm),
 );
 
-// Âncoras de localização passadas ao Apollo (as maiores cidades da região). O
-// recorte fino é feito depois por REGIAO.
-const ANCORAS = [
-  "São Paulo, Brazil", "Guarulhos, Brazil", "Osasco, Brazil", "Barueri, Brazil",
-  "Santo André, Brazil", "São Bernardo do Campo, Brazil", "Diadema, Brazil",
-  "Mauá, Brazil", "Mogi das Cruzes, Brazil", "Suzano, Brazil",
-  "Itaquaquecetuba, Brazil", "Carapicuíba, Brazil", "Cotia, Brazil",
-  "Taboão da Serra, Brazil", "Itapevi, Brazil", "Santana de Parnaíba, Brazil",
-  "Arujá, Brazil", "Bragança Paulista, Brazil", "Atibaia, Brazil",
-  "São Caetano do Sul, Brazil",
-];
+// Localização passada ao Apollo: o ESTADO de São Paulo (formato padrão do
+// Apollo). O recorte fino por cidade é feito depois, de forma TOLERANTE.
+const LOCALIZACOES = ["São Paulo, Brazil"];
+
+// Estado de SP (para aceitar organizações sem cidade, mas dentro de SP).
+function ehSaoPaulo(uf: string | null | undefined): boolean {
+  const s = norm(uf);
+  return s === "sao paulo" || s === "sp";
+}
 
 export interface CandidatoSindicato {
   apolloId: string;
@@ -58,21 +56,27 @@ export interface CandidatoSindicato {
   website: string | null;
 }
 
+export interface DiagSindicatos {
+  brutos: number; // quantas orgs o Apollo devolveu
+  comCidade: number; // quantas vieram com cidade preenchida
+  exemplos: { name: string; city: string; state: string }[]; // amostra crua
+}
+
 export async function descobrirSindicatosRegiao(
   supabase: SupabaseClient,
   brand: string,
   opts?: { max?: number; paginas?: number },
-): Promise<{ total: number; candidatos: CandidatoSindicato[] }> {
+): Promise<{ total: number; candidatos: CandidatoSindicato[]; diag: DiagSindicatos }> {
   const max = opts?.max ?? 120;
-  const paginas = opts?.paginas ?? 3;
+  const paginas = opts?.paginas ?? 5;
 
-  // Busca organizações "sindicato" na região (sem filtro de porte — sindicato
-  // raramente tem headcount no Apollo).
+  // Busca organizações "sindicato" no estado de SP (sem filtro de porte —
+  // sindicato raramente tem headcount no Apollo).
   const encontrados: Awaited<ReturnType<typeof searchCompanies>> = [];
   for (let page = 1; page <= paginas; page++) {
     const orgs = await searchCompanies({
       name: "sindicato",
-      locations: ANCORAS,
+      locations: LOCALIZACOES,
       skipEmployeeRanges: true,
       perPage: 100,
       page,
@@ -81,12 +85,26 @@ export async function descobrirSindicatosRegiao(
     if (orgs.length < 100) break; // acabaram os resultados
   }
 
-  // Filtra: país Brasil + cidade na REGIÃO + nome "cheira" a sindicato.
+  const diag: DiagSindicatos = {
+    brutos: encontrados.length,
+    comCidade: encontrados.filter((o) => o.city).length,
+    exemplos: encontrados.slice(0, 5).map((o) => ({
+      name: o.name,
+      city: o.city ?? "",
+      state: o.state ?? "",
+    })),
+  };
+
+  // Filtro TOLERANTE: nome cheira a sindicato E (cidade na região OU — quando o
+  // Apollo não trouxe cidade — está no estado de SP). Assim não zeramos quando a
+  // cidade vem vazia na busca de organizações.
   const naRegiao = encontrados.filter((o) => {
-    const cidadeOk = REGIAO.has(norm(o.city));
-    const brasil = !o.country || norm(o.country).includes("bra");
-    const pareceSindicato = norm(o.name).includes("sindicato") || norm(o.name).includes("sind ");
-    return cidadeOk && brasil && pareceSindicato;
+    const pareceSindicato = norm(o.name).includes("sind");
+    if (!pareceSindicato) return false;
+    const cidadeNorm = norm(o.city);
+    if (cidadeNorm) return REGIAO.has(cidadeNorm);
+    // sem cidade: aceita se o estado é SP (ou desconhecido) — refinamos depois
+    return ehSaoPaulo(o.state) || !o.state;
   });
 
   // Nomes já cadastrados como SINDICATO na marca ativa (para não duplicar).
@@ -125,6 +143,12 @@ export async function descobrirSindicatosRegiao(
     });
   }
 
-  candidatos.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  return { total: candidatos.length, candidatos: candidatos.slice(0, max) };
+  // Cidade conhecida da região primeiro; depois por nome.
+  candidatos.sort((a, b) => {
+    const aReg = REGIAO.has(norm(a.cidade)) ? 0 : 1;
+    const bReg = REGIAO.has(norm(b.cidade)) ? 0 : 1;
+    if (aReg !== bReg) return aReg - bReg;
+    return a.name.localeCompare(b.name, "pt-BR");
+  });
+  return { total: candidatos.length, candidatos: candidatos.slice(0, max), diag };
 }

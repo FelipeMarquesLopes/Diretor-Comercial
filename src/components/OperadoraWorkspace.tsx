@@ -1315,9 +1315,26 @@ function DescobrirSindicatos({ onCadastrou }: { onCadastrou: () => void }) {
         setLista([]);
       } else {
         setLista(d.candidatos ?? []);
-        setMsg(
-          `${d.total ?? 0} sindicato(s) na sua região que ainda não estão na base. Cadastre e revele os contatos no Apollo.`,
-        );
+        if ((d.total ?? 0) === 0) {
+          // Diagnóstico: mostra o que o Apollo devolveu (para afinar o filtro).
+          const diag = d.diag ?? {};
+          const ex = (diag.exemplos ?? [])
+            .map((e: { name: string; city: string; state: string }) =>
+              `${e.name}${e.city ? ` (${e.city}${e.state ? "/" + e.state : ""})` : " (sem cidade)"}`,
+            )
+            .join("; ");
+          setMsg(
+            `Nenhum sindicato novo encontrado. Diagnóstico: o Apollo retornou ${diag.brutos ?? 0} organização(ões) (${diag.comCidade ?? 0} com cidade).` +
+              (ex ? ` Exemplos: ${ex}.` : "") +
+              (diag.brutos === 0
+                ? " Como o Apollo não devolveu nada, pode ser plano/limite — me avise."
+                : ""),
+          );
+        } else {
+          setMsg(
+            `${d.total} sindicato(s) na sua região que ainda não estão na base. Cadastre e revele os contatos no Apollo.`,
+          );
+        }
       }
     } catch (e) {
       setMsg(`Falha: ${e instanceof Error ? e.message : String(e)}`);
