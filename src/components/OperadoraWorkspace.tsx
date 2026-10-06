@@ -595,6 +595,50 @@ function OperadoraCard({
     }
   }
 
+  // Quando os e-mails individuais não validam, tenta as caixas INSTITUCIONAIS
+  // do domínio (contato@, secretaria@, jurídico@, comercial@…) — que quase
+  // sempre existem e são a porta de entrada do sindicato/operadora.
+  async function tentarInstitucionais() {
+    if (
+      !confirm(
+        "Testar as caixas institucionais do domínio (contato@, secretaria@, jurídico@, comercial@, administrativo@…)? Valida cada uma (consome algumas verificações) e aplica as que EXISTEM como destinatário + cópia (CC).",
+      )
+    )
+      return;
+    setApolloBusy(true);
+    setApolloNote("Testando caixas institucionais do domínio…");
+    try {
+      const r = await fetch(`/api/operadoras/${op.id}/apollo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "institucional" }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.error) {
+        setApolloNote(`Erro: ${d.error ?? `resposta ${r.status}`}`);
+        return;
+      }
+      if (d.ok === false) {
+        setApolloNote(d.message ?? "Nenhuma caixa institucional válida.");
+        return;
+      }
+      setApolloNote(
+        `${d.validos?.length ?? 0} caixa(s) institucional(is) válida(s). Gerando rascunho…`,
+      );
+      const draftMsg = await gerarRascunho();
+      setApolloNote(
+        `Pronto: ${d.principal?.email} como destinatário${d.ccCount ? ` e ${d.ccCount} em cópia (CC)` : ""}.` +
+          draftMsg,
+      );
+      setShowApollo(false);
+      onChanged();
+    } catch (err) {
+      setApolloNote(String(err));
+    } finally {
+      setApolloBusy(false);
+    }
+  }
+
   async function usarCredenciamento(p: ApolloPerson) {
     const ok = isVerified(p.emailStatus);
     const aviso = ok
@@ -950,6 +994,14 @@ function OperadoraCard({
                       ? "Todos são revelados e checados — só os e-mails que EXISTEM entram no disparo (os inativos são descartados antes, sem bounce). Ou revele um a um abaixo:"
                       : "Só e-mails ✓ verificados entram — os adivinhados voltam (bounce) e podem suspender a conta de envio. Ou revele um a um abaixo:"}
                   </p>
+                  <button
+                    onClick={tentarInstitucionais}
+                    disabled={apolloBusy}
+                    className="w-full rounded-md border border-brand-300 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                    title="Testa as caixas institucionais do domínio (contato@, secretaria@, jurídico@…) e usa as que existem"
+                  >
+                    🏛️ Nenhum validou? Tentar e-mails institucionais (contato@, secretaria@…)
+                  </button>
                 </>
               );
             })()}

@@ -409,6 +409,128 @@ export async function POST(
     });
   }
 
+  // --- Ação: E-MAILS INSTITUCIONAIS (contato@, secretaria@, juridico@...) -----
+  // Quando os e-mails INDIVIDUAIS dos decisores não validam (caixas inativas),
+  // tentamos as caixas INSTITUCIONAIS do domínio — que quase sempre existem e
+  // são a porta de entrada do sindicato/operadora. Valida cada uma e aplica as
+  // VÁLIDAS (principal + CC). Catch-all/inválidas NÃO são aplicadas.
+  if (body.action === "institucional") {
+    const domain = (company.domain ?? "").trim().toLowerCase();
+    if (!domain) {
+      return NextResponse.json(
+        {
+          error:
+            "Ainda não sei o domínio deste parceiro. Clique em 'Buscar credenciamento no Apollo' primeiro (ele resolve o domínio).",
+        },
+        { status: 400 },
+      );
+    }
+    if (!verifierConfigured()) {
+      return NextResponse.json(
+        {
+          error:
+            "Verificador de e-mail não configurado — não dá para validar os palpites institucionais com segurança.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const LOCAIS: { local: string; rotulo: string }[] = [
+      { local: "contato", rotulo: "Contato" },
+      { local: "secretaria", rotulo: "Secretaria" },
+      { local: "atendimento", rotulo: "Atendimento" },
+      { local: "administrativo", rotulo: "Administrativo" },
+      { local: "comercial", rotulo: "Comercial" },
+      { local: "juridico", rotulo: "Jurídico" },
+      { local: "financeiro", rotulo: "Financeiro" },
+      { local: "diretoria", rotulo: "Diretoria" },
+      { local: "convenios", rotulo: "Convênios" },
+      { local: "faleconosco", rotulo: "Fale Conosco" },
+      { local: "presidencia", rotulo: "Presidência" },
+      { local: "rh", rotulo: "RH" },
+    ];
+
+    const suprimidos = await getSuppressedSet(
+      supabase,
+      LOCAIS.map((l) => `${l.local}@${domain}`),
+    );
+
+    const validos: { email: string; rotulo: string }[] = [];
+    const catchAll: string[] = [];
+    let checados = 0;
+    for (const l of LOCAIS) {
+      const email = `${l.local}@${domain}`;
+      if (suprimidos.has(email)) continue;
+      const v = await verifyEmail(email);
+      checados++;
+      if (isSendable(v)) validos.push({ email, rotulo: l.rotulo });
+      else if (v === "catch_all") catchAll.push(email);
+    }
+
+    if (validos.length === 0) {
+      return NextResponse.json({
+        ok: false,
+        checados,
+        catchAll,
+        message:
+          catchAll.length > 0
+            ? `O domínio ${domain} não confirma caixas (catch-all). Prováveis: ${catchAll
+                .slice(0, 4)
+                .join(", ")}. Se quiser tentar, use "+ já tenho o e-mail" com um desses.`
+            : `Nenhuma caixa institucional válida em ${domain}. Tente achar o e-mail no site/Google e use "+ já tenho o e-mail".`,
+      });
+    }
+
+    // Aplica: 1ª válida = destinatário principal (Para); o resto = cópia (CC).
+    const principal = validos[0];
+    const ccFinal: string[] = [];
+    const vistos = new Set<string>([principal.email.toLowerCase()]);
+    for (const c of validos.slice(1)) {
+      const k = c.email.toLowerCase();
+      if (vistos.has(k)) continue;
+      vistos.add(k);
+      ccFinal.push(c.email);
+    }
+
+    const { data: existing } = await supabase
+      .from("contacts")
+      .select("*")
+      .eq("company_id", id)
+      .limit(1);
+    const current = (existing as Contact[] | null)?.[0];
+    const nomePrincipal = (current?.name || principal.rotulo).slice(0, 120);
+    if (current) {
+      await supabase
+        .from("contacts")
+        .update({ name: nomePrincipal, email: principal.email })
+        .eq("id", current.id);
+    } else {
+      await supabase.from("contacts").insert({
+        company_id: id,
+        name: nomePrincipal,
+        email: principal.email,
+        is_decision_maker: true,
+      });
+    }
+    await supabase
+      .from("companies")
+      .update({ cc_emails: ccFinal.join(", ") || null })
+      .eq("id", id);
+    await supabase.from("activities").insert({
+      company_id: id,
+      type: "cadastro",
+      description: `E-mails institucionais validados: ${principal.email} (Para)${ccFinal.length ? ` + ${ccFinal.length} em cópia` : ""}.`,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      principal: { name: nomePrincipal, email: principal.email },
+      ccCount: ccFinal.length,
+      checados,
+      validos: validos.map((v) => v.email),
+    });
+  }
+
   // --- Ação: E-MAIL MANUAL — o CEO achou o e-mail (ex: no LinkedIn) ----------
   // Valida (verificador + supressão) e salva como destinatário: vira o Para se
   // ainda não houver, senão entra no CC. Resolve as operadoras catch-all.
