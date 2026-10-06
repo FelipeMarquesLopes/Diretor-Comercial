@@ -430,9 +430,32 @@ const DECISION_TITLES = {
     "Diretor Comercial",
     "Gerente Comercial",
     "Coordenador Comercial",
+    "Supervisor Comercial",
     "Comercial",
     "Assistente Social",
     "Coordenador de Ação Social",
+    // Jurídico (muitas parcerias passam pelo jurídico do sindicato)
+    "Diretor Jurídico",
+    "Gerente Jurídico",
+    "Coordenador Jurídico",
+    "Assessor Jurídico",
+    "Assessoria Jurídica",
+    "Consultor Jurídico",
+    "Departamento Jurídico",
+    "Advogado",
+    "Advogada",
+    "Jurídico",
+    // Administrativo (amplo) + supervisão — âncoras que o Apollo casa por "contém"
+    "Administrativo",
+    "Supervisor",
+    "Supervisora",
+    "Supervisor Administrativo",
+    "Gerente",
+    "Coordenador",
+    "Analista Administrativo",
+    "Assistente Administrativo",
+    "Auxiliar Administrativo",
+    "Gestor Administrativo",
     // Direção (fallback)
     "Owner",
     "Founder",
@@ -512,25 +535,18 @@ export async function searchDecisionMakers(
     | "igreja"
     | "sindicato" = "empresa",
 ): Promise<ApolloContact[]> {
-  // SINDICATO: qualquer pessoa dentro do sindicato serve (o CEO confirmou). O
-  // Apollo raramente tem os cargos "certos" mapeados numa entidade pequena, e
-  // filtrar por cargo+senioridade fazia quase ninguém passar. Então NÃO
-  // filtramos por cargo/senioridade — trazemos TODO mundo que o Apollo tiver
-  // naquele domínio, e o CEO escolhe quem abordar.
-  const body: Record<string, unknown> =
-    category === "sindicato"
-      ? {
-          page: 1,
-          per_page: perPage,
-          q_organization_domains_list: [organizationDomain],
-        }
-      : {
-          page: 1,
-          per_page: perPage,
-          q_organization_domains_list: [organizationDomain],
-          person_seniorities: DECISION_SENIORITIES[category],
-          person_titles: DECISION_TITLES[category],
-        };
+  // SINDICATO: buscamos os decisores das áreas ADMINISTRATIVA, COMERCIAL e
+  // JURÍDICA (gerentes, coordenadores, supervisores, administradores, diretores,
+  // advogados) — e a liderança/convênios. A lista de cargos usa âncoras amplas
+  // (ex: "Administrativo", "Comercial", "Jurídico", "Gerente") que o Apollo casa
+  // por "contém", pegando um leque grande sem trazer cargos irrelevantes.
+  const body: Record<string, unknown> = {
+    page: 1,
+    per_page: perPage,
+    q_organization_domains_list: [organizationDomain],
+    person_seniorities: DECISION_SENIORITIES[category],
+    person_titles: DECISION_TITLES[category],
+  };
 
   // Endpoint NOVO de busca de pessoas (o /mixed_people/search foi descontinuado).
   const data = await apolloPost<{ people?: RawPerson[]; contacts?: RawPerson[] }>(
