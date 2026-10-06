@@ -494,6 +494,12 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "descobrir_sindicatos",
+    description:
+      "Descobre SINDICATOS atuantes na Grande São Paulo e região (via Apollo) que ainda NÃO estão na nossa base (marca ativa) — para prospectar parcerias (convênio/credenciamento, igual operadora). Retorna nome, cidade e domínio. Para cadastrar um, use 'cadastrar_parceiro' com category 'sindicato' e o nome retornado.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "descobrir_operadoras_ans",
     description:
       "Descobre operadoras de SAÚDE da Grande São Paulo na base PÚBLICA da ANS que ainda NÃO estão na nossa base (marca ativa) — ótimo para achar operadoras regionais novas (perfil HBC Saúde / São Miguel) para prospectar. Retorna nome, modalidade, cidade e registro ANS. Para cadastrar uma na prospecção, use 'cadastrar_parceiro' com category 'operadora' e o nome retornado (depois o Felipe revela os contatos de credenciamento no Apollo).",
@@ -966,6 +972,18 @@ async function executar(
     }
     case "preparar_reajuste":
       return api(ctx, "POST", `/api/contratos/${input.contractId}/reajuste`);
+    case "descobrir_sindicatos": {
+      const d = (await api(ctx, "GET", "/api/sindicatos/descobrir")) as {
+        total?: number;
+        candidatos?: unknown[];
+        error?: string;
+      };
+      if (d.error) return { erro: d.error };
+      return {
+        total: d.total ?? 0,
+        sindicatos: enxugar(d.candidatos, ["name", "cidade", "uf", "domain"]),
+      };
+    }
     case "descobrir_operadoras_ans": {
       const d = (await api(ctx, "GET", "/api/ans/operadoras")) as {
         total?: number;

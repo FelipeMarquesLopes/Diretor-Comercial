@@ -17,7 +17,9 @@ export type WorkspaceCfg = {
   Singular: string; // "Operadora" / "Sindicato"
   tituloForm: string;
   placeholderNome: string;
-  mostrarANS: boolean;
+  // Qual painel de DESCOBERTA aparece no topo: ANS (operadoras) ou Apollo
+  // (sindicatos) ou nenhum.
+  descoberta: "ans" | "sindicato" | null;
 };
 
 export const OPERADORA_CFG: WorkspaceCfg = {
@@ -26,7 +28,7 @@ export const OPERADORA_CFG: WorkspaceCfg = {
   Singular: "Operadora",
   tituloForm: "Cadastrar operadora de saúde",
   placeholderNome: "ex: Bradesco Saúde",
-  mostrarANS: true,
+  descoberta: "ans",
 };
 
 export const SINDICATO_CFG: WorkspaceCfg = {
@@ -35,7 +37,7 @@ export const SINDICATO_CFG: WorkspaceCfg = {
   Singular: "Sindicato",
   tituloForm: "Cadastrar sindicato",
   placeholderNome: "ex: SINTHORESP, SEESP, Sindicato dos Metalúrgicos…",
-  mostrarANS: false,
+  descoberta: "sindicato",
 };
 
 export function OperadoraWorkspace({ cfg }: { cfg: WorkspaceCfg }) {
@@ -146,7 +148,8 @@ export function OperadoraWorkspace({ cfg }: { cfg: WorkspaceCfg }) {
 
   return (
     <div className="space-y-6">
-      {cfg.mostrarANS && <DescobrirANS onCadastrou={load} />}
+      {cfg.descoberta === "ans" && <DescobrirANS onCadastrou={load} />}
+      {cfg.descoberta === "sindicato" && <DescobrirSindicatos onCadastrou={load} />}
       <form
         onSubmit={submit}
         className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
@@ -1271,6 +1274,134 @@ function DescobrirANS({ onCadastrou }: { onCadastrou: () => void }) {
                     className="shrink-0 rounded-md border border-brand-300 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
                   >
                     {addKey === chave ? "Cadastrando…" : "Cadastrar"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Descoberta de sindicatos via Apollo (Grande SP) — espelho do DescobrirANS,
+// mas a fonte é o Apollo. Lista sindicatos da região fora da base, com botão
+// para cadastrar direto na prospecção (guardando o domínio para o Apollo).
+type CandSind = {
+  apolloId: string;
+  name: string;
+  cidade: string;
+  uf: string;
+  domain: string | null;
+  website: string | null;
+};
+
+function DescobrirSindicatos({ onCadastrou }: { onCadastrou: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [lista, setLista] = useState<CandSind[] | null>(null);
+  const [addKey, setAddKey] = useState<string | null>(null);
+  const [feitos, setFeitos] = useState<Set<string>>(new Set());
+
+  async function carregar() {
+    setBusy(true);
+    setMsg("Varrendo sindicatos da Grande SP no Apollo… pode levar alguns segundos.");
+    try {
+      const r = await fetch("/api/sindicatos/descobrir");
+      const d = await r.json();
+      if (d.error) {
+        setMsg(`Não consegui buscar: ${d.error}`);
+        setLista([]);
+      } else {
+        setLista(d.candidatos ?? []);
+        setMsg(
+          `${d.total ?? 0} sindicato(s) na sua região que ainda não estão na base. Cadastre e revele os contatos no Apollo.`,
+        );
+      }
+    } catch (e) {
+      setMsg(`Falha: ${e instanceof Error ? e.message : String(e)}`);
+      setLista([]);
+    }
+    setBusy(false);
+  }
+
+  async function cadastrar(c: CandSind) {
+    setAddKey(c.apolloId);
+    try {
+      const r = await fetch("/api/sindicatos/descobrir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: c.name,
+          cidade: c.cidade,
+          apolloId: c.apolloId,
+          domain: c.domain,
+        }),
+      });
+      const d = await r.json();
+      if (d.error) setMsg(`Erro ao cadastrar: ${d.error}`);
+      else {
+        setFeitos((prev) => new Set(prev).add(c.apolloId));
+        onCadastrou();
+      }
+    } catch (e) {
+      setMsg(`Erro: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    setAddKey(null);
+  }
+
+  return (
+    <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-semibold text-brand-800">
+            Descobrir sindicatos na Grande SP
+          </h2>
+          <p className="mt-0.5 text-xs text-brand-800/60">
+            Sindicatos atuantes na Grande São Paulo e região (via Apollo) que
+            ainda não estão no seu radar. Cadastre e depois revele os contatos da
+            diretoria/convênios no Apollo.
+          </p>
+        </div>
+        <button
+          onClick={carregar}
+          disabled={busy}
+          className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+        >
+          {busy ? "Buscando…" : "Buscar sindicatos"}
+        </button>
+      </div>
+      {msg && <p className="mt-2 text-xs text-brand-800/70">{msg}</p>}
+
+      {lista && lista.length > 0 && (
+        <div className="mt-3 max-h-96 space-y-1.5 overflow-y-auto">
+          {lista.map((c) => {
+            const feito = feitos.has(c.apolloId);
+            return (
+              <div
+                key={c.apolloId}
+                className="flex items-center justify-between gap-2 rounded-md border border-brand-100 bg-white px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-brand-800">{c.name}</span>
+                  <div className="text-[11px] text-brand-800/60">
+                    {c.cidade}
+                    {c.uf ? ` · ${c.uf}` : ""}
+                    {c.domain ? ` · ${c.domain}` : ""}
+                  </div>
+                </div>
+                {feito ? (
+                  <span className="shrink-0 text-xs font-medium text-green-600">
+                    cadastrado ✓
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => cadastrar(c)}
+                    disabled={addKey === c.apolloId}
+                    className="shrink-0 rounded-md border border-brand-300 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                  >
+                    {addKey === c.apolloId ? "Cadastrando…" : "Cadastrar"}
                   </button>
                 )}
               </div>
