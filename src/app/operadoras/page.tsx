@@ -116,6 +116,7 @@ export default function Operadoras() {
 
   return (
     <div className="space-y-6">
+      <DescobrirANS onCadastrou={load} />
       <form
         onSubmit={submit}
         className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
@@ -1108,6 +1109,142 @@ function OperadoraCard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Descoberta de operadoras novas via ANS (Grande SP) — Fase 1 (cadastro de
+// operadoras ativas da ANS). Lista operadoras de saúde da Grande SP que ainda
+// não estão na base, com botão para cadastrar direto na prospecção.
+type CandAns = {
+  registroAns: string;
+  cnpj: string;
+  razaoSocial: string;
+  nomeFantasia: string;
+  modalidade: string;
+  cidade: string;
+};
+
+function DescobrirANS({ onCadastrou }: { onCadastrou: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [lista, setLista] = useState<CandAns[] | null>(null);
+  const [addKey, setAddKey] = useState<string | null>(null);
+  const [feitos, setFeitos] = useState<Set<string>>(new Set());
+
+  const chaveDe = (c: CandAns) => c.cnpj || c.registroAns || c.nomeFantasia || c.razaoSocial;
+
+  async function carregar() {
+    setBusy(true);
+    setMsg("Consultando a ANS (Grande SP)… pode levar alguns segundos.");
+    try {
+      const r = await fetch("/api/ans/operadoras");
+      const d = await r.json();
+      if (d.error) {
+        setMsg(`Não consegui consultar a ANS: ${d.error}`);
+        setLista([]);
+      } else {
+        setLista(d.candidatos ?? []);
+        setMsg(
+          `${d.total ?? 0} operadora(s) de saúde na Grande SP que ainda não estão na sua base.`,
+        );
+      }
+    } catch (e) {
+      setMsg(`Falha: ${e instanceof Error ? e.message : String(e)}`);
+      setLista([]);
+    }
+    setBusy(false);
+  }
+
+  async function cadastrar(c: CandAns) {
+    const chave = chaveDe(c);
+    setAddKey(chave);
+    try {
+      const r = await fetch("/api/ans/operadoras", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: c.razaoSocial,
+          nomeFantasia: c.nomeFantasia,
+          cidade: c.cidade,
+          registroAns: c.registroAns,
+          cnpj: c.cnpj,
+          modalidade: c.modalidade,
+        }),
+      });
+      const d = await r.json();
+      if (d.error) setMsg(`Erro ao cadastrar: ${d.error}`);
+      else {
+        setFeitos((prev) => new Set(prev).add(chave));
+        onCadastrou();
+      }
+    } catch (e) {
+      setMsg(`Erro: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    setAddKey(null);
+  }
+
+  return (
+    <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-semibold text-brand-800">
+            Descobrir operadoras novas na ANS (Grande SP)
+          </h2>
+          <p className="mt-0.5 text-xs text-brand-800/60">
+            Operadoras de saúde com sede na Grande São Paulo (base pública da
+            ANS) que ainda não estão no seu radar. Cadastre e depois revele os
+            contatos de credenciamento no Apollo.
+          </p>
+        </div>
+        <button
+          onClick={carregar}
+          disabled={busy}
+          className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+        >
+          {busy ? "Buscando…" : "Buscar na ANS"}
+        </button>
+      </div>
+      {msg && <p className="mt-2 text-xs text-brand-800/70">{msg}</p>}
+
+      {lista && lista.length > 0 && (
+        <div className="mt-3 max-h-96 space-y-1.5 overflow-y-auto">
+          {lista.map((c) => {
+            const chave = chaveDe(c);
+            const feito = feitos.has(chave);
+            return (
+              <div
+                key={chave}
+                className="flex items-center justify-between gap-2 rounded-md border border-brand-100 bg-white px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-brand-800">
+                    {c.nomeFantasia || c.razaoSocial}
+                  </span>
+                  <div className="text-[11px] text-brand-800/60">
+                    {c.modalidade}
+                    {c.cidade ? ` · ${c.cidade}` : ""}
+                    {c.registroAns ? ` · ANS ${c.registroAns}` : ""}
+                  </div>
+                </div>
+                {feito ? (
+                  <span className="shrink-0 text-xs font-medium text-green-600">
+                    cadastrada ✓
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => cadastrar(c)}
+                    disabled={addKey === chave}
+                    className="shrink-0 rounded-md border border-brand-300 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                  >
+                    {addKey === chave ? "Cadastrando…" : "Cadastrar"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

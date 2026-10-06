@@ -494,6 +494,12 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "descobrir_operadoras_ans",
+    description:
+      "Descobre operadoras de SAÚDE da Grande São Paulo na base PÚBLICA da ANS que ainda NÃO estão na nossa base (marca ativa) — ótimo para achar operadoras regionais novas (perfil HBC Saúde / São Miguel) para prospectar. Retorna nome, modalidade, cidade e registro ANS. Para cadastrar uma na prospecção, use 'cadastrar_parceiro' com category 'operadora' e o nome retornado (depois o Felipe revela os contatos de credenciamento no Apollo).",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "revisar_emails_base",
     description:
       "Faz AGORA a REVISÃO DE E-MAILS de toda a base de prospecção das DUAS marcas (MenthalHelp e Therapy Minds) — operadoras, empresas, escolas, médicos, sindicatos, igrejas. Para cada parceiro: reverifica o e-mail; se morreu ou falta, acha um no Apollo e VINCULA/TROCA sozinha; se tinha rascunho parado, corrige o rascunho para o novo contato. Varre o máximo possível numa chamada (em lotes). Também roda automático um pouco por dia (cada contato ~1x/mês). Use quando o Felipe pedir para revisar/atualizar os e-mails. NÃO usa créditos da sua IA — gasta verificador (barato) e Apollo só nos que falharam. Se devolver concluido=false, ainda sobrou base: chame de novo para continuar.",
@@ -960,6 +966,24 @@ async function executar(
     }
     case "preparar_reajuste":
       return api(ctx, "POST", `/api/contratos/${input.contractId}/reajuste`);
+    case "descobrir_operadoras_ans": {
+      const d = (await api(ctx, "GET", "/api/ans/operadoras")) as {
+        total?: number;
+        candidatos?: unknown[];
+        error?: string;
+      };
+      if (d.error) return { erro: d.error };
+      return {
+        total: d.total ?? 0,
+        operadoras: enxugar(d.candidatos, [
+          "nomeFantasia",
+          "razaoSocial",
+          "modalidade",
+          "cidade",
+          "registroAns",
+        ]),
+      };
+    }
     case "revisar_emails_base":
       return api(ctx, "POST", "/api/manutencao/emails", {
         maxApollo: typeof input.maxApollo === "number" ? input.maxApollo : undefined,
