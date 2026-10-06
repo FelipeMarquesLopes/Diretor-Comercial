@@ -130,10 +130,14 @@ export async function POST(
 
   if (!company) {
     return NextResponse.json(
-      { error: "Operadora não encontrada" },
+      { error: "Parceiro não encontrado" },
       { status: 404 },
     );
   }
+
+  // Sindicato usa a MESMA máquina, mas sem o filtro de "operadora de saúde"
+  // (um sindicato não é do setor saúde) e buscando QUALQUER pessoa do domínio.
+  const ehSindicato = company.category === "sindicato";
 
   // --- Ação: USAR um contato encontrado (revela + define como principal) -----
   if (body.action === "usar") {
@@ -497,8 +501,8 @@ export async function POST(
   //    e escolhemos a de SAÚDE/SEGURO, descartando escola/educação.
   let domain = company.domain;
   // Se o domínio salvo é de escola/educação (casou errado numa busca anterior),
-  // ignora e re-busca a empresa certa.
-  if (domain && dominioEhEducacao(domain)) domain = null;
+  // ignora e re-busca a empresa certa. (Não se aplica a sindicato.)
+  if (domain && !ehSindicato && dominioEhEducacao(domain)) domain = null;
   if (!domain) {
     try {
       const orgs = await searchCompanies({
@@ -507,7 +511,10 @@ export async function POST(
         minEmployees: 1,
         perPage: 10,
       });
-      const melhor = escolherOperadora(orgs, company.name);
+      // Sindicato: pega a melhor candidata com domínio (sem exigir "saúde").
+      const melhor = ehSindicato
+        ? orgs.find((o) => o.domain) ?? orgs[0]
+        : escolherOperadora(orgs, company.name);
       domain = melhor?.domain ?? null;
       if (domain) {
         await supabase
@@ -526,8 +533,9 @@ export async function POST(
   if (!domain) {
     return NextResponse.json(
       {
-        error:
-          "Não encontrei uma OPERADORA DE SAÚDE com esse nome no Apollo (os resultados pareciam de outro setor, ex: escola). Confira o nome (ex: 'Porto Seguro Saúde', 'Bradesco Saúde') ou cadastre o e-mail manualmente na edição.",
+        error: ehSindicato
+          ? "Não encontrei o site/domínio deste sindicato no Apollo. Confira o nome (ex: razão social do sindicato) ou cadastre o e-mail manualmente na edição."
+          : "Não encontrei uma OPERADORA DE SAÚDE com esse nome no Apollo (os resultados pareciam de outro setor, ex: escola). Confira o nome (ex: 'Porto Seguro Saúde', 'Bradesco Saúde') ou cadastre o e-mail manualmente na edição.",
       },
       { status: 404 },
     );
@@ -535,7 +543,7 @@ export async function POST(
 
   let people;
   try {
-    people = await searchDecisionMakers(domain, 25, "operadora");
+    people = await searchDecisionMakers(domain, 25, ehSindicato ? "sindicato" : "operadora");
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Erro no Apollo" },

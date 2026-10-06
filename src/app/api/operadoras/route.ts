@@ -4,9 +4,17 @@ import { ensureSequences, generateDraftForSequence } from "@/lib/outreach";
 import { brandFromRequest } from "@/lib/brands";
 import type { Company, Sequence } from "@/lib/types";
 
-// GET /api/operadoras — lista operadoras com contatos e sequências, da marca ativa.
+// A mesma máquina serve para operadoras E sindicatos (parceria tipo
+// credenciamento). A categoria vem por query (GET) ou no body (POST).
+function categoriaDe(v: unknown): "operadora" | "sindicato" {
+  return v === "sindicato" ? "sindicato" : "operadora";
+}
+
+// GET /api/operadoras?categoria=operadora|sindicato — lista com contatos e
+// sequências, da marca ativa.
 export async function GET(req: Request) {
   const brand = brandFromRequest(req);
+  const categoria = categoriaDe(new URL(req.url).searchParams.get("categoria"));
 
   let supabase: ReturnType<typeof getServerSupabase>;
   try {
@@ -22,7 +30,7 @@ export async function GET(req: Request) {
     .from("companies")
     .select("*, contacts(*), sequences(*)")
     .eq("brand", brand)
-    .eq("category", "operadora")
+    .eq("category", categoria)
     .eq("contract_only", false)
     .order("created_at", { ascending: false });
 
@@ -44,6 +52,7 @@ export async function POST(req: Request) {
     operatorType?: string;
     briefing?: string;
     ccEmails?: string;
+    categoria?: string;
     generateNow?: boolean;
   };
   try {
@@ -52,8 +61,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
+  const categoria = categoriaDe(body.categoria);
   if (!body.name) {
-    return NextResponse.json({ error: "Nome da operadora é obrigatório" }, { status: 400 });
+    return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 });
   }
 
   let supabase: ReturnType<typeof getServerSupabase>;
@@ -66,11 +76,11 @@ export async function POST(req: Request) {
     );
   }
 
-  // 1. Cria o parceiro (categoria operadora, já qualificado — abordagem manual).
+  // 1. Cria o parceiro (operadora ou sindicato, já qualificado — abordagem manual).
   const { data: company, error: cErr } = await supabase
     .from("companies")
     .insert({
-      category: "operadora",
+      category: categoria,
       brand: brandFromRequest(req),
       operator_type: body.operatorType === "ativa" ? "ativa" : "nova",
       briefing: body.briefing ?? null,

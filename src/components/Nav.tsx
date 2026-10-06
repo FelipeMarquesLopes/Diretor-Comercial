@@ -21,11 +21,11 @@ const GROUPS: { href: string; label: string }[][] = [
     { href: "/medicos", label: "Médicos" },
     { href: "/escolas", label: "Escolas" },
     { href: "/igrejas", label: "Igrejas" },
-    { href: "/sindicatos", label: "Sindicatos" },
     { href: "/territorio", label: "Territórios" },
   ],
   [
     { href: "/operadoras", label: "Operadoras" },
+    { href: "/sindicatos", label: "Sindicatos" },
     { href: "/contratos", label: "Reajustes" },
     { href: "/licitacoes", label: "Licitações" },
   ],

@@ -1,12 +1,13 @@
 "use client";
 
-import { ProspeccaoView } from "@/components/ProspeccaoView";
+import { OperadoraWorkspace, SINDICATO_CFG } from "@/components/OperadoraWorkspace";
 
-// Frente "Sindicatos": mesma máquina de prospecção, no modo sindicato — um
-// sindicato agrega milhares de associados, então uma parceria (convênio com
-// desconto e/ou repasse) vale por centenas de leads. Falamos com a diretoria e
-// o setor de convênios/benefícios. Nunca há dado de paciente — o parceiro é a
-// entidade sindical.
+// Frente "Sindicatos": a parceria com um sindicato é do mesmo tipo de uma
+// operadora (credenciamento/convênio) — então usa a MESMA máquina de prospecção
+// das operadoras (cadastro nova/ativa, briefing, busca de contatos no Apollo,
+// gerar rascunho, registrar resposta), no modo sindicato. Falamos com a
+// diretoria e o setor de convênios/benefícios. Nunca há dado de paciente — o
+// parceiro é a entidade sindical.
 export default function Sindicatos() {
-  return <ProspeccaoView mode="sindicato" />;
+  return <OperadoraWorkspace cfg={SINDICATO_CFG} />;
 }
