@@ -54,6 +54,9 @@ export async function POST(req: Request) {
     ccEmails?: string;
     categoria?: string;
     generateNow?: boolean;
+    // Só cadastro (banco de dados): NÃO cria sequência nem rascunho. Usado nas
+    // Operadoras Ativas — o relacionamento começa só no botão "Iniciar".
+    cadastroApenas?: boolean;
   };
   try {
     body = await req.json();
@@ -118,6 +121,11 @@ export async function POST(req: Request) {
     type: "cadastro",
     description: "Operadora cadastrada manualmente pelo CEO.",
   });
+
+  // Só cadastro (banco de dados): para aqui — nada de sequência/rascunho.
+  if (body.cadastroApenas) {
+    return NextResponse.json({ company });
+  }
 
   // 3. Cria as sequências de follow-up (e-mail + WhatsApp se houver).
   await ensureSequences(supabase, company.id, hasWhatsapp);

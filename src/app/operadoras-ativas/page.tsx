@@ -1,12 +1,10 @@
 "use client";
 
-import {
-  OperadoraWorkspace,
-  OPERADORA_ATIVA_CFG,
-} from "@/components/OperadoraWorkspace";
+import { OperadorasAtivas } from "@/components/OperadorasAtivas";
 
-// Operadoras ATIVAS: operadoras em que JÁ somos credenciados — relacionamento
-// (extensão de procedimentos, reajuste, inclusão de endereços/unidades).
-export default function OperadorasAtivas() {
-  return <OperadoraWorkspace cfg={OPERADORA_ATIVA_CFG} />;
+// Operadoras ATIVAS: banco de cadastro das operadoras em que já somos
+// credenciados. O relacionamento (copy + follow-up) começa só no botão
+// "Iniciar relacionamento" de cada card.
+export default function OperadorasAtivasPage() {
+  return <OperadorasAtivas />;
 }
