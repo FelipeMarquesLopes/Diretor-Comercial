@@ -90,6 +90,22 @@ function isTransient(err: unknown): boolean {
 
 // Envia com até 3 tentativas e espera crescente (2s, 4s). Em falha de conexão,
 // descarta o transporte para reconectar do zero na próxima tentativa.
+// Erro de AUTENTICAÇÃO do SMTP (usuário/senha recusados) — 535 / EAUTH.
+function ehErroAuth(err: unknown): boolean {
+  const e = err as { code?: string; responseCode?: number; message?: string };
+  if (e?.code === "EAUTH") return true;
+  if (e?.responseCode === 535) return true;
+  const m = (e?.message ?? "").toLowerCase();
+  return m.includes("535") || m.includes("authentication failed") || m.includes("invalid login");
+}
+function mensagemAuth(brand: BrandId): string {
+  return brand === "therapy_minds"
+    ? "Falha de login no e-mail (SMTP) da Therapy Minds: usuário/senha recusados (535). " +
+        "Verifique SMTP_USER_TM e SMTP_PASSWORD_TM na Vercel — o Gmail/Workspace exige SENHA DE APP (não a senha normal). Depois faça Redeploy."
+    : "Falha de login no e-mail (SMTP) da MenthalHelp (Titan): usuário/senha recusados (535). " +
+        "Verifique SMTP_USER e SMTP_PASSWORD na Vercel (a senha da caixa pode ter mudado/expirado). Depois faça Redeploy.";
+}
+
 async function sendMailWithRetry(
   brand: BrandId,
   mailOptions: Parameters<nodemailer.Transporter["sendMail"]>[0],
@@ -101,6 +117,8 @@ async function sendMailWithRetry(
       return await getTransporter(brand).sendMail(mailOptions);
     } catch (err) {
       ultimoErro = err;
+      // Erro de login não adianta repetir — mensagem clara e para.
+      if (ehErroAuth(err)) throw new Error(mensagemAuth(brand));
       if (!isTransient(err) || i === maxTentativas - 1) throw err;
       transporters.delete(brand); // força reconexão limpa
       await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
