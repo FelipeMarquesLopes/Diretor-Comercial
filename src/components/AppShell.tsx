@@ -38,7 +38,8 @@ const GRUPOS: { titulo: string; itens: { href: string; label: string }[] }[] = [
   {
     titulo: "Convênios",
     itens: [
-      { href: "/operadoras", label: "Operadoras" },
+      { href: "/operadoras", label: "Operadoras Captação" },
+      { href: "/operadoras-ativas", label: "Operadoras Ativas" },
       { href: "/sindicatos", label: "Sindicatos" },
       { href: "/contratos", label: "Reajustes" },
       { href: "/licitacoes", label: "Licitações" },
@@ -103,8 +104,12 @@ function SidebarContent({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  // Match exato ou subrota (href + "/") — evita que "/operadoras" acenda junto
+  // com "/operadoras-ativas".
   const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+    href === "/"
+      ? pathname === "/"
+      : pathname === href || pathname.startsWith(href + "/");
 
   return (
     <div className="relative flex h-full flex-col">

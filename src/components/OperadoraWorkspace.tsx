@@ -20,15 +20,33 @@ export type WorkspaceCfg = {
   // Qual painel de DESCOBERTA aparece no topo: ANS (operadoras) ou Apollo
   // (sindicatos) ou nenhum.
   descoberta: "ans" | "sindicato" | null;
+  // Quando definido, a tela trata SÓ deste tipo (captação=nova, ativa=ativa) —
+  // esconde o seletor de Tipo e as abas, virando uma aba dedicada no menu.
+  tipoFixo?: "nova" | "ativa";
 };
 
-export const OPERADORA_CFG: WorkspaceCfg = {
+// CAPTAÇÃO: operadoras que queremos credenciar (em prospecção). Tem a descoberta
+// ANS (achar novas) no topo.
+export const OPERADORA_CAPTACAO_CFG: WorkspaceCfg = {
   categoria: "operadora",
   singular: "operadora",
   Singular: "Operadora",
-  tituloForm: "Cadastrar operadora de saúde",
+  tituloForm: "Cadastrar operadora (captação)",
   placeholderNome: "ex: Bradesco Saúde",
   descoberta: "ans",
+  tipoFixo: "nova",
+};
+
+// ATIVAS: operadoras em que JÁ somos credenciados (extensão, reajuste, inclusão
+// de endereços). Sem descoberta ANS.
+export const OPERADORA_ATIVA_CFG: WorkspaceCfg = {
+  categoria: "operadora",
+  singular: "operadora",
+  Singular: "Operadora",
+  tituloForm: "Cadastrar operadora ativa (já credenciados)",
+  placeholderNome: "ex: Amil, SulAmérica Saúde…",
+  descoberta: null,
+  tipoFixo: "ativa",
 };
 
 export const SINDICATO_CFG: WorkspaceCfg = {
@@ -48,12 +66,16 @@ export function OperadoraWorkspace({ cfg }: { cfg: WorkspaceCfg }) {
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [excluindo, setExcluindo] = useState(false);
 
-  // filtro: novas / ativas / todas
-  const [filtro, setFiltro] = useState<"nova" | "ativa" | "todas">("nova");
+  // filtro: novas / ativas / todas (travado quando a tela é dedicada a um tipo)
+  const [filtro, setFiltro] = useState<"nova" | "ativa" | "todas">(
+    cfg.tipoFixo ?? "nova",
+  );
 
   // formulário
   const [name, setName] = useState("");
-  const [operatorType, setOperatorType] = useState<"nova" | "ativa">("nova");
+  const [operatorType, setOperatorType] = useState<"nova" | "ativa">(
+    cfg.tipoFixo ?? "nova",
+  );
   const [briefing, setBriefing] = useState("");
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
@@ -158,22 +180,26 @@ export function OperadoraWorkspace({ cfg }: { cfg: WorkspaceCfg }) {
           {cfg.tituloForm}
         </h2>
         <p className="mb-3 text-xs text-gray-500">
-          <b>Nova</b> = captar credenciamento. <b>Ativa</b> = parceira atual
-          (extensão, reajuste, inclusão de endereços). No <b>briefing</b> você
-          diz o que a IA deve enviar — ela monta o e-mail a partir disso.
+          {cfg.tipoFixo === "ativa"
+            ? "Operadoras em que já somos credenciados (extensão, reajuste, inclusão de endereços). No briefing você diz o que a IA deve enviar."
+            : cfg.tipoFixo === "nova"
+              ? "Operadoras que queremos credenciar. No briefing você diz o que a IA deve enviar — ela monta o e-mail a partir disso."
+              : "Nova = captar credenciamento. Ativa = parceira atual. No briefing você diz o que a IA deve enviar."}
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="text-sm">
-            <span className="text-gray-600">Tipo *</span>
-            <select
-              value={operatorType}
-              onChange={(e) => setOperatorType(e.target.value as "nova" | "ativa")}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
-            >
-              <option value="nova">{cfg.Singular} nova (captação)</option>
-              <option value="ativa">{cfg.Singular} ativa (relacionamento)</option>
-            </select>
-          </label>
+          {!cfg.tipoFixo && (
+            <label className="text-sm">
+              <span className="text-gray-600">Tipo *</span>
+              <select
+                value={operatorType}
+                onChange={(e) => setOperatorType(e.target.value as "nova" | "ativa")}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              >
+                <option value="nova">{cfg.Singular} nova (captação)</option>
+                <option value="ativa">{cfg.Singular} ativa (relacionamento)</option>
+              </select>
+            </label>
+          )}
           <label className="text-sm">
             <span className="text-gray-600">{cfg.Singular} *</span>
             <input
@@ -269,38 +295,42 @@ export function OperadoraWorkspace({ cfg }: { cfg: WorkspaceCfg }) {
       </form>
 
       <section>
-        <div className="mb-3 flex gap-2">
-          {(
-            [
-              ["nova", "Novas"],
-              ["ativa", "Ativas"],
-              ["todas", "Todas"],
-            ] as const
-          ).map(([key, label]) => {
-            const n =
-              key === "todas"
-                ? operadoras.length
-                : operadoras.filter((o) => (o.operator_type ?? "nova") === key).length;
-            return (
-              <button
-                key={key}
-                onClick={() => setFiltro(key)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                  filtro === key
-                    ? "bg-brand-500 text-white"
-                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                }`}
-              >
-                {label} ({n})
-              </button>
-            );
-          })}
-        </div>
+        {!cfg.tipoFixo && (
+          <div className="mb-3 flex gap-2">
+            {(
+              [
+                ["nova", "Novas"],
+                ["ativa", "Ativas"],
+                ["todas", "Todas"],
+              ] as const
+            ).map(([key, label]) => {
+              const n =
+                key === "todas"
+                  ? operadoras.length
+                  : operadoras.filter((o) => (o.operator_type ?? "nova") === key).length;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setFiltro(key)}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                    filtro === key
+                      ? "bg-brand-500 text-white"
+                      : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  {label} ({n})
+                </button>
+              );
+            })}
+          </div>
+        )}
         {(() => {
+          // Com tela dedicada (tipoFixo), filtra sempre por aquele tipo.
+          const alvo = cfg.tipoFixo ?? filtro;
           const lista =
-            filtro === "todas"
+            alvo === "todas"
               ? operadoras
-              : operadoras.filter((o) => (o.operator_type ?? "nova") === filtro);
+              : operadoras.filter((o) => (o.operator_type ?? "nova") === alvo);
           const todosSel = lista.length > 0 && lista.every((o) => sel.has(o.id));
           const toggleTodos = () =>
             setSel(todosSel ? new Set() : new Set(lista.map((o) => o.id)));

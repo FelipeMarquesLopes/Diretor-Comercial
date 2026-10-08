@@ -1,10 +1,12 @@
 "use client";
 
-import { OperadoraWorkspace, OPERADORA_CFG } from "@/components/OperadoraWorkspace";
+import {
+  OperadoraWorkspace,
+  OPERADORA_CAPTACAO_CFG,
+} from "@/components/OperadoraWorkspace";
 
-// Operadoras: a máquina de prospecção (cadastro nova/ativa, briefing, busca de
-// contatos de credenciamento no Apollo, gerar rascunho, registrar resposta) +
+// Operadoras CAPTAÇÃO: operadoras que queremos credenciar (em prospecção) +
 // a descoberta de operadoras novas na ANS (Grande SP).
-export default function Operadoras() {
-  return <OperadoraWorkspace cfg={OPERADORA_CFG} />;
+export default function OperadorasCaptacao() {
+  return <OperadoraWorkspace cfg={OPERADORA_CAPTACAO_CFG} />;
 }
