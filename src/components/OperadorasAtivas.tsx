@@ -14,7 +14,17 @@ import { useEffect, useState } from "react";
 import type { Company, Contact, Sequence } from "@/lib/types";
 import { SEQUENCE_STATUS_LABELS } from "@/lib/types";
 
-type Row = Company & { contacts: Contact[]; sequences: Sequence[] };
+type DraftLite = {
+  id: string;
+  subject: string | null;
+  created_at: string;
+  status: string;
+};
+type Row = Company & {
+  contacts: Contact[];
+  sequences: Sequence[];
+  drafts?: DraftLite[];
+};
 
 function norm(s: string) {
   return s
@@ -28,10 +38,20 @@ function emailSeq(r: Row): Sequence | undefined {
   return r.sequences?.find((s) => s.channel === "email");
 }
 function assuntoLabel(r: Row): string {
+  // 1º: o ASSUNTO do e-mail gerado (subject do rascunho mais recente).
+  const drafts = (r.drafts ?? []).filter((d) => d.subject && d.subject.trim());
+  if (drafts.length > 0) {
+    const maisRecente = drafts
+      .slice()
+      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))[0];
+    if (maisRecente?.subject) return maisRecente.subject.trim();
+  }
+  // 2º: título curto que o CEO deu ao abrir o assunto.
   const m = (r.notes ?? "").match(/^Assunto:\s*(.+)/);
   if (m) return m[1];
+  // 3º: 1ª linha da copy (fallback).
   const b = (r.briefing ?? "").trim();
-  return b ? b.split("\n")[0].slice(0, 120) : "(sem copy)";
+  return b ? b.split("\n")[0].slice(0, 120) : "(assunto do e-mail ainda não gerado)";
 }
 
 export function OperadorasAtivas() {

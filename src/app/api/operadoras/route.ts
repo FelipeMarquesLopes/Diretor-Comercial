@@ -28,7 +28,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabase
     .from("companies")
-    .select("*, contacts(*), sequences(*)")
+    .select("*, contacts(*), sequences(*), drafts(id, subject, created_at, status)")
     .eq("brand", brand)
     .eq("category", categoria)
     .eq("contract_only", false)
