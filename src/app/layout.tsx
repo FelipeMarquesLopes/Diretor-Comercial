@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Nav } from "@/components/Nav";
-import { BrandHeader } from "@/components/BrandHeader";
+import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
   title: "Growth AI — Diretor Comercial Digital",
@@ -29,15 +28,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className="min-h-screen antialiased">
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
-          {/* Cabeçalho premium com as duas marcas — clicar na logo troca a
-              marca ativa; no 1º acesso, pede para escolher. */}
-          <BrandHeader />
-          <div className="mt-5">
-            <Nav />
-          </div>
-          <main className="mt-6">{children}</main>
-        </div>
+        {/* App shell premium: menu lateral à esquerda + conteúdo à direita.
+            O seletor de marca e o gate de primeiro acesso ficam na sidebar. */}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
