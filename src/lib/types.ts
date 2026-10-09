@@ -141,6 +141,7 @@ export interface Contact {
   title: string | null;
   email: string | null;
   phone: string | null;
+  phone2: string | null; // 2º telefone (ex: celular + fixo)
   linkedin_url: string | null;
   email_status: string | null;
   // Veredito da validação do e-mail (ZeroBounce): valid | catch_all | invalid |

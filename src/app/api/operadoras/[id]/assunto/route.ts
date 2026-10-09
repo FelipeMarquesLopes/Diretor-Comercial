@@ -100,12 +100,13 @@ export async function POST(
     );
   }
 
-  // Copia o analista (destinatário) + telefone.
+  // Copia o analista (destinatário) + telefones.
   await supabase.from("contacts").insert({
     company_id: nova.id,
     name: contactName,
     email,
     phone: baseContact?.phone ?? null,
+    phone2: (baseContact as { phone2?: string | null } | null)?.phone2 ?? null,
     is_decision_maker: true,
   });
 

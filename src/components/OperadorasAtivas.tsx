@@ -62,7 +62,9 @@ export function OperadorasAtivas() {
   const [name, setName] = useState("");
   const [analista, setAnalista] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [cc, setCc] = useState("");
+  const [celular, setCelular] = useState("");
+  const [fixo, setFixo] = useState("");
   const [notes, setNotes] = useState("");
 
   async function load() {
@@ -99,7 +101,9 @@ export function OperadorasAtivas() {
           name: name.trim(),
           contactName: analista.trim() || undefined,
           email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
+          ccEmails: cc.trim() || undefined,
+          phone: celular.trim() || undefined,
+          phone2: fixo.trim() || undefined,
           isWhatsapp: false,
           notes: notes.trim() || undefined,
         }),
@@ -111,7 +115,9 @@ export function OperadorasAtivas() {
         setName("");
         setAnalista("");
         setEmail("");
-        setPhone("");
+        setCc("");
+        setCelular("");
+        setFixo("");
         setNotes("");
         await load();
       }
@@ -155,12 +161,20 @@ export function OperadorasAtivas() {
             <input value={analista} onChange={(e) => setAnalista(e.target.value)} placeholder="ex: Márcia Regina" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
           </label>
           <label className="text-sm">
-            <span className="text-gray-600">E-mail do analista</span>
+            <span className="text-gray-600">E-mail principal (destinatário)</span>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ex: marcia@amil.com.br" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
           </label>
+          <label className="text-sm sm:col-span-2">
+            <span className="text-gray-600">E-mails em cópia (CC) — pode colocar vários</span>
+            <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="separe por vírgula: ana@amil.com.br, joao@amil.com.br" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+          </label>
           <label className="text-sm">
-            <span className="text-gray-600">Telefone</span>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="ex: 11 99999-9999" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+            <span className="text-gray-600">Celular</span>
+            <input value={celular} onChange={(e) => setCelular(e.target.value)} placeholder="ex: 11 99999-9999" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+          </label>
+          <label className="text-sm">
+            <span className="text-gray-600">Telefone fixo</span>
+            <input value={fixo} onChange={(e) => setFixo(e.target.value)} placeholder="ex: 11 2382-4087" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
           </label>
           <label className="text-sm sm:col-span-2">
             <span className="text-gray-600">Observações internas (opcional)</span>
@@ -212,7 +226,9 @@ function OperadoraGrupo({ grupo, onChanged }: { grupo: Row[]; onChanged: () => v
   const [eName, setEName] = useState(ficha.name);
   const [eAnalista, setEAnalista] = useState(contato?.name ?? "");
   const [eEmail, setEEmail] = useState(contato?.email ?? "");
+  const [eCc, setECc] = useState(ficha.cc_emails ?? "");
   const [ePhone, setEPhone] = useState(contato?.phone ?? "");
+  const [ePhone2, setEPhone2] = useState(contato?.phone2 ?? "");
 
   async function criarAssunto() {
     if (copy.trim().length < 3) return setNote("Escreva o que quer tratar (a copy).");
@@ -253,7 +269,14 @@ function OperadoraGrupo({ grupo, onChanged }: { grupo: Row[]; onChanged: () => v
       const r = await fetch(`/api/operadoras/${ficha.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: eName, contactName: eAnalista, email: eEmail, phone: ePhone }),
+        body: JSON.stringify({
+          name: eName,
+          contactName: eAnalista,
+          email: eEmail,
+          ccEmails: eCc,
+          phone: ePhone,
+          phone2: ePhone2,
+        }),
       });
       const d = await r.json().catch(() => ({}));
       if (d.error) setNote(`Erro: ${d.error}`);
@@ -306,8 +329,14 @@ function OperadoraGrupo({ grupo, onChanged }: { grupo: Row[]; onChanged: () => v
           <p className="mt-1 text-xs text-brand-800/70">
             {contato?.name ? <b>{contato.name}</b> : "Sem analista"}
             {contato?.email ? ` · ${contato.email}` : " · sem e-mail"}
-            {contato?.phone ? ` · ${contato.phone}` : ""}
+            {contato?.phone ? ` · 📱 ${contato.phone}` : ""}
+            {contato?.phone2 ? ` · ☎ ${contato.phone2}` : ""}
           </p>
+          {ficha.cc_emails && (
+            <p className="mt-0.5 text-[11px] text-brand-800/50">
+              Em cópia: {ficha.cc_emails}
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2 text-xs">
           <button onClick={() => setShowEdit((v) => !v)} className="text-brand-600 hover:underline">Editar</button>
@@ -347,6 +376,7 @@ function OperadoraGrupo({ grupo, onChanged }: { grupo: Row[]; onChanged: () => v
           onClick={() => {
             setShowNovo((v) => !v);
             setNovoEmail(contato?.email ?? "");
+            setNovoCc(ficha.cc_emails ?? "");
           }}
           className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
         >
@@ -403,12 +433,20 @@ function OperadoraGrupo({ grupo, onChanged }: { grupo: Row[]; onChanged: () => v
             <input value={eAnalista} onChange={(e) => setEAnalista(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
           </label>
           <label className="text-xs text-gray-600">
-            E-mail
+            E-mail principal
             <input value={eEmail} onChange={(e) => setEEmail(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
           </label>
+          <label className="text-xs text-gray-600 sm:col-span-2">
+            E-mails em cópia (CC) — vários, separados por vírgula
+            <input value={eCc} onChange={(e) => setECc(e.target.value)} placeholder="ana@amil.com.br, joao@amil.com.br" className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+          </label>
           <label className="text-xs text-gray-600">
-            Telefone
+            Celular
             <input value={ePhone} onChange={(e) => setEPhone(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+          </label>
+          <label className="text-xs text-gray-600">
+            Telefone fixo
+            <input value={ePhone2} onChange={(e) => setEPhone2(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
           </label>
           <div className="sm:col-span-2">
             <button onClick={salvarFicha} disabled={busy} className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50">

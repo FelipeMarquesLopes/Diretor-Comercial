@@ -18,6 +18,7 @@ export async function PATCH(
     contactName?: string;
     email?: string;
     phone?: string;
+    phone2?: string;
     isWhatsapp?: boolean;
   };
   try {
@@ -58,6 +59,7 @@ export async function PATCH(
     body.contactName !== undefined ||
     body.email !== undefined ||
     body.phone !== undefined ||
+    body.phone2 !== undefined ||
     body.isWhatsapp !== undefined;
 
   if (touchesContact) {
@@ -76,15 +78,17 @@ export async function PATCH(
           name: body.contactName ?? current.name,
           email: body.email ?? current.email,
           phone: body.phone ?? current.phone,
+          phone2: body.phone2 ?? (current as { phone2?: string | null }).phone2 ?? null,
           is_whatsapp: hasWhatsapp,
         })
         .eq("id", current.id);
-    } else if (body.contactName || body.email || body.phone) {
+    } else if (body.contactName || body.email || body.phone || body.phone2) {
       await supabase.from("contacts").insert({
         company_id: id,
         name: body.contactName || body.name || "Contato",
         email: body.email ?? null,
         phone: body.phone ?? null,
+        phone2: body.phone2 ?? null,
         is_whatsapp: hasWhatsapp,
         is_decision_maker: true,
       });

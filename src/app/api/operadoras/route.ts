@@ -47,6 +47,7 @@ export async function POST(req: Request) {
     contactName?: string;
     email?: string;
     phone?: string;
+    phone2?: string;
     isWhatsapp?: boolean;
     notes?: string;
     operatorType?: string;
@@ -105,12 +106,13 @@ export async function POST(req: Request) {
 
   // 2. Cria o contato responsável, se informado.
   const hasWhatsapp = Boolean(body.isWhatsapp && body.phone);
-  if (body.contactName || body.email || body.phone) {
+  if (body.contactName || body.email || body.phone || body.phone2) {
     await supabase.from("contacts").insert({
       company_id: company.id,
       name: body.contactName || body.name,
       email: body.email ?? null,
       phone: body.phone ?? null,
+      phone2: body.phone2 ?? null,
       is_whatsapp: hasWhatsapp,
       is_decision_maker: true,
     });
