@@ -9,6 +9,7 @@ import {
 import {
   verifierConfigured,
   verifyEmail,
+  verifierCredits,
   isSendable,
 } from "@/lib/emailVerify";
 import { getSuppressedSet } from "@/lib/suppression";
@@ -327,15 +328,29 @@ export async function POST(
     const checados = naoVerificados.length;
 
     if (comEmail.length === 0) {
+      // Distingue a CAUSA, para não confundir "e-mail inválido" com falta de
+      // crédito (Apollo não liberou nada, ou o verificador está sem saldo).
+      let causa: string;
+      if (unicos.length === 0) {
+        causa =
+          "O Apollo não liberou o e-mail de ninguém desta lista — pode ser falta de crédito no Apollo, ou essas pessoas não têm e-mail no Apollo. Tente o botão de e-mails institucionais, ou use '+ já tenho o e-mail'.";
+      } else if (verifierOn) {
+        const cred = await verifierCredits();
+        if (cred !== null && cred <= 0) {
+          causa =
+            "⚠️ O verificador (ZeroBounce) está SEM CRÉDITOS — por isso nenhum e-mail pôde ser CONFIRMADO. Isso NÃO quer dizer que são inválidos! Recarregue o ZeroBounce e tente de novo, ou use '+ já tenho o e-mail' para um contato que você já conhece.";
+        } else if (catchAll > 0) {
+          causa =
+            "Esta entidade usa servidor 'catch-all' (aceita tudo mas não confirma) — enviar para esses gera retorno. Melhor um contato direto por telefone/LinkedIn.";
+        } else {
+          causa =
+            "Os e-mails checados não existem mais (caixas inativas). Tente o botão de e-mails institucionais, ou '+ já tenho o e-mail'.";
+        }
+      } else {
+        causa = "O Apollo não conseguiu revelar nenhum e-mail verificado desta lista.";
+      }
       return NextResponse.json(
-        {
-          error: verifierOn
-            ? `Nenhum e-mail VÁLIDO nesta lista (${checados} checado(s): ${catchAll} catch-all e o resto inválido/inativo). ` +
-              (catchAll > 0
-                ? "Esta operadora usa servidor 'catch-all' (aceita tudo mas não confirma) — enviar para esses gera retorno. Melhor conseguir um contato direto por telefone/LinkedIn."
-                : "Provavelmente essas pessoas não têm mais caixa ativa aqui.")
-            : "O Apollo não conseguiu revelar nenhum e-mail verificado desta lista.",
-        },
+        { error: `Nenhum e-mail entrou (${checados} checado(s)${catchAll ? `, ${catchAll} catch-all` : ""}). ${causa}` },
         { status: 422 },
       );
     }
@@ -468,12 +483,15 @@ export async function POST(
     }
 
     if (validos.length === 0) {
+      const cred = await verifierCredits();
+      const semCredito = cred !== null && cred <= 0;
       return NextResponse.json({
         ok: false,
         checados,
         catchAll,
-        message:
-          catchAll.length > 0
+        message: semCredito
+          ? `⚠️ O verificador (ZeroBounce) está SEM CRÉDITOS — não deu para confirmar as caixas institucionais de ${domain}. Recarregue o ZeroBounce, ou use "+ já tenho o e-mail" com contato@/secretaria@/juridico@ por sua conta.`
+          : catchAll.length > 0
             ? `O domínio ${domain} não confirma caixas (catch-all). Prováveis: ${catchAll
                 .slice(0, 4)
                 .join(", ")}. Se quiser tentar, use "+ já tenho o e-mail" com um desses.`

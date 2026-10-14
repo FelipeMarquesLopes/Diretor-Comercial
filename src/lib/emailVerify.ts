@@ -57,6 +57,33 @@ export async function verifyEmails(
   return new Map(pares);
 }
 
+// Saldo de créditos do verificador (ZeroBounce/MillionVerifier). Retorna o
+// número de créditos, ou null se não configurado / não der para consultar.
+// Útil para distinguir "e-mail inválido" de "verificador sem crédito".
+export async function verifierCredits(): Promise<number | null> {
+  const key = process.env.EMAIL_VERIFIER_API_KEY;
+  if (!key) return null;
+  try {
+    if (provider() === "millionverifier") {
+      const res = await fetch(
+        `https://api.millionverifier.com/api/v3/credits?api=${encodeURIComponent(key)}`,
+      );
+      if (!res.ok) return null;
+      const d = (await res.json()) as { credits?: number };
+      return typeof d.credits === "number" ? d.credits : null;
+    }
+    const res = await fetch(
+      `https://api.zerobounce.net/v2/getcredits?api_key=${encodeURIComponent(key)}`,
+    );
+    if (!res.ok) return null;
+    const d = (await res.json()) as { Credits?: string | number };
+    const n = Number(d.Credits); // ZeroBounce devolve "-1" em erro/chave inválida
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 // --- ZeroBounce ------------------------------------------------------------
 // GET /v2/validate -> { status: "valid"|"invalid"|"catch-all"|"unknown"|
 //   "spamtrap"|"abuse"|"do_not_mail" }
