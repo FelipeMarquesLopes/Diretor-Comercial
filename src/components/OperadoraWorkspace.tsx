@@ -544,7 +544,7 @@ function OperadoraCard({
     }
   }
 
-  async function usarTodos() {
+  async function usarTodos(forcar = false) {
     const lista = apolloPeople ?? [];
     // Com verificador: revela todos (a checagem filtra os inativos).
     // Sem verificador: só os já-verificados pelo Apollo.
@@ -557,15 +557,19 @@ function OperadoraCard({
       );
       return;
     }
-    const msg = verifierAtivo
-      ? `Revelar e VALIDAR os ${enviaveis.length} contatos? Consome até ${enviaveis.length} créditos do Apollo + verificações. Só os e-mails que EXISTEM entram (1º = Para, resto = CC), num disparo só. Os inativos são descartados antes — sem risco de retorno.`
-      : `Revelar o e-mail dos ${enviaveis.length} contatos VERIFICADOS (de ${lista.length})? Consome até ${enviaveis.length} créditos do Apollo. O 1º vira o destinatário (Para) e os demais entram em cópia (CC). Os não verificados ficam de fora para não gerar retorno (bounce).`;
-    if (!confirm(msg)) return;
+    if (!forcar) {
+      const msg = verifierAtivo
+        ? `Revelar e VALIDAR os ${enviaveis.length} contatos? Consome até ${enviaveis.length} créditos do Apollo + verificações. Só os e-mails que EXISTEM entram (1º = Para, resto = CC), num disparo só. Os inativos são descartados antes — sem risco de retorno.`
+        : `Revelar o e-mail dos ${enviaveis.length} contatos VERIFICADOS (de ${lista.length})? Consome até ${enviaveis.length} créditos do Apollo. O 1º vira o destinatário (Para) e os demais entram em cópia (CC). Os não verificados ficam de fora para não gerar retorno (bounce).`;
+      if (!confirm(msg)) return;
+    }
     setApolloBusy(true);
     setApolloNote(
-      verifierAtivo
-        ? "Revelando e validando os e-mails… pode levar alguns segundos."
-        : "Revelando os e-mails verificados… pode levar alguns segundos.",
+      forcar
+        ? "Seguindo sem validar — revelando os e-mails…"
+        : verifierAtivo
+          ? "Revelando e validando os e-mails… pode levar alguns segundos."
+          : "Revelando os e-mails verificados… pode levar alguns segundos.",
     );
     try {
       const r = await fetch(`/api/operadoras/${op.id}/apollo`, {
@@ -574,6 +578,7 @@ function OperadoraCard({
         body: JSON.stringify({
           action: "usar_todos",
           onlyVerified: !verifierAtivo,
+          forcarSemVerificar: forcar,
           people: lista.map((p) => ({
             apolloId: p.apolloId,
             name: p.name,
@@ -585,6 +590,7 @@ function OperadoraCard({
       const txt = await r.text();
       let d: {
         error?: string;
+        semCredito?: boolean;
         principal?: { name?: string; email?: string };
         ccCount?: number;
         enviaveis?: number;
@@ -602,6 +608,20 @@ function OperadoraCard({
         return;
       }
       if (!r.ok || d.error) {
+        // Verificador sem crédito: oferece seguir sem validar (gera o rascunho).
+        if (d.semCredito && !forcar) {
+          setApolloBusy(false);
+          if (
+            confirm(
+              "O verificador (ZeroBounce) está SEM CRÉDITO, então não deu para confirmar os e-mails.\n\nQuer SEGUIR ASSIM MESMO? Vou usar os e-mails revelados sem validar e gerar o rascunho (alguns podem voltar/bounce — risco seu).",
+            )
+          ) {
+            await usarTodos(true);
+          } else {
+            setApolloNote(`${d.error} (recarregue o ZeroBounce para validar).`);
+          }
+          return;
+        }
         setApolloNote(`Erro: ${d.error ?? `resposta ${r.status}`}`);
         return;
       }
@@ -609,9 +629,11 @@ function OperadoraCard({
         `${d.enviaveis} e-mail(s) aprovado(s) para envio. Gerando rascunho…`,
       );
       const draftMsg = await gerarRascunho();
-      const detalhe = verifierAtivo
-        ? `${d.enviaveis} VÁLIDO(s) de ${d.pedidos} entraram (${d.invalidos ?? 0} descartado(s)${d.catchAll ? `, sendo ${d.catchAll} catch-all que dão retorno` : ""}).`
-        : `${d.enviaveis} verificado(s) de ${d.pedidos}.`;
+      const detalhe = forcar
+        ? `${d.enviaveis} e-mail(s) usados SEM validar (risco assumido — alguns podem voltar).`
+        : verifierAtivo
+          ? `${d.enviaveis} VÁLIDO(s) de ${d.pedidos} entraram (${d.invalidos ?? 0} descartado(s)${d.catchAll ? `, sendo ${d.catchAll} catch-all que dão retorno` : ""}).`
+          : `${d.enviaveis} verificado(s) de ${d.pedidos}.`;
       setApolloNote(
         `Pronto: ${d.principal?.name} (${d.principal?.email}) como destinatário e ${d.ccCount} em cópia (CC). ${detalhe}` +
           draftMsg,
@@ -1008,7 +1030,7 @@ function OperadoraCard({
               return (
                 <>
                   <button
-                    onClick={usarTodos}
+                    onClick={() => usarTodos()}
                     disabled={
                       apolloBusy || (!verifierAtivo && verif.length === 0)
                     }

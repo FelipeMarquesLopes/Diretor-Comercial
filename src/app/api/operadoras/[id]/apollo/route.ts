@@ -106,6 +106,9 @@ export async function POST(
     // Se true (padrão), só revela/usa e-mails VERIFICADOS pelo Apollo — evita
     // bounces que ameaçam a reputação e a conta de envio.
     onlyVerified?: boolean;
+    // "Seguir assim mesmo": usa os e-mails revelados SEM validar (quando o
+    // verificador está sem crédito). O CEO assume o risco de alguns voltarem.
+    forcarSemVerificar?: boolean;
   };
   try {
     body = await req.json();
@@ -231,6 +234,7 @@ export async function POST(
   // --- Ação: USAR TODOS — revela todos de uma vez, 1º = Para, resto = CC ------
   if (body.action === "usar_todos") {
     const onlyVerified = body.onlyVerified !== false;
+    const forcar = Boolean(body.forcarSemVerificar); // seguir sem validar
     let alvo = (body.people ?? []).filter((p) => p.apolloId);
     const pediram = alvo.length;
     const verifierOn = verifierConfigured();
@@ -296,7 +300,9 @@ export async function POST(
 
     // Verifica (em paralelo) os que o Apollo NÃO garantiu, quando há
     // verificador. Só entram os VÁLIDOS (catch-all e desconhecido ficam fora).
-    const naoVerificados = verifierOn
+    // No modo "forçar" (CEO assume o risco), NÃO validamos — mas ainda pulamos
+    // os endereços já SUPRIMIDOS (que já voltaram antes).
+    const naoVerificados = verifierOn && !forcar
       ? unicos.filter((r) => !r.apolloVerified)
       : [];
     const verifMap = new Map<string, string>();
@@ -308,6 +314,9 @@ export async function POST(
         }),
       );
     }
+    const suprimidosForce = forcar
+      ? await getSuppressedSet(supabase, unicos.map((r) => r.email.toLowerCase()))
+      : new Set<string>();
 
     const comEmail: { name?: string; title?: string; email: string; phone: string | null }[] =
       [];
@@ -316,7 +325,11 @@ export async function POST(
     for (const r of unicos) {
       const vr = r.apolloVerified
         ? "valid"
-        : (verifMap.get(r.email.toLowerCase()) ?? (verifierOn ? "unknown" : "invalid"));
+        : forcar
+          ? suprimidosForce.has(r.email.toLowerCase())
+            ? "invalid"
+            : "valid" // seguir sem validar (risco assumido)
+          : (verifMap.get(r.email.toLowerCase()) ?? (verifierOn ? "unknown" : "invalid"));
       const enviavel = vr === "valid";
       if (vr === "catch_all") catchAll++;
       if (enviavel) {
@@ -331,14 +344,16 @@ export async function POST(
       // Distingue a CAUSA, para não confundir "e-mail inválido" com falta de
       // crédito (Apollo não liberou nada, ou o verificador está sem saldo).
       let causa: string;
+      let semCredito = false;
       if (unicos.length === 0) {
         causa =
           "O Apollo não liberou o e-mail de ninguém desta lista — pode ser falta de crédito no Apollo, ou essas pessoas não têm e-mail no Apollo. Tente o botão de e-mails institucionais, ou use '+ já tenho o e-mail'.";
-      } else if (verifierOn) {
+      } else if (verifierOn && !forcar) {
         const cred = await verifierCredits();
         if (cred !== null && cred <= 0) {
+          semCredito = true; // há e-mails revelados; dá para seguir sem validar
           causa =
-            "⚠️ O verificador (ZeroBounce) está SEM CRÉDITOS — por isso nenhum e-mail pôde ser CONFIRMADO. Isso NÃO quer dizer que são inválidos! Recarregue o ZeroBounce e tente de novo, ou use '+ já tenho o e-mail' para um contato que você já conhece.";
+            "⚠️ O verificador (ZeroBounce) está SEM CRÉDITOS — por isso nenhum e-mail pôde ser CONFIRMADO. Isso NÃO quer dizer que são inválidos!";
         } else if (catchAll > 0) {
           causa =
             "Esta entidade usa servidor 'catch-all' (aceita tudo mas não confirma) — enviar para esses gera retorno. Melhor um contato direto por telefone/LinkedIn.";
@@ -347,10 +362,14 @@ export async function POST(
             "Os e-mails checados não existem mais (caixas inativas). Tente o botão de e-mails institucionais, ou '+ já tenho o e-mail'.";
         }
       } else {
-        causa = "O Apollo não conseguiu revelar nenhum e-mail verificado desta lista.";
+        causa = "Não há e-mail para enviar nesta lista.";
       }
       return NextResponse.json(
-        { error: `Nenhum e-mail entrou (${checados} checado(s)${catchAll ? `, ${catchAll} catch-all` : ""}). ${causa}` },
+        {
+          error: `Nenhum e-mail entrou (${checados} checado(s)${catchAll ? `, ${catchAll} catch-all` : ""}). ${causa}`,
+          semCredito,
+          revelados: unicos.length,
+        },
         { status: 422 },
       );
     }
