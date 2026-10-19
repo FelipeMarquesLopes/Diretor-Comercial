@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runLara, type LaraTurn, type LaraAnexo } from "@/lib/lara";
+import { mensagemErroIA } from "@/lib/anthropic";
 import {
   carregarHistorico,
   historicoParaTurnos,
@@ -71,9 +72,6 @@ export async function POST(req: Request) {
     const result = await runLara({ origin, auth, brand }, turns);
     return NextResponse.json(result);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Erro na Lara" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: mensagemErroIA(err) }, { status: 500 });
   }
 }

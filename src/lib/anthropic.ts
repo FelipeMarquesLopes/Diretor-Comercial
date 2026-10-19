@@ -30,6 +30,28 @@ function brandizar(texto: string, brand: Brand): string {
     .replaceAll("3.000", brand.volume.replace(/\+$/, ""));
 }
 
+// Traduz erros da IA (Anthropic) para mensagens claras — em vez do JSON cru.
+export function mensagemErroIA(err: unknown): string {
+  const e = err as { status?: number; message?: string };
+  const m = (e?.message ?? "").toLowerCase();
+  if (e?.status === 401 || m.includes("invalid x-api-key") || m.includes("authentication_error")) {
+    return (
+      "A chave da IA (ANTHROPIC_API_KEY) está inválida ou expirada. " +
+      "Gere uma nova em console.anthropic.com (API Keys), atualize ANTHROPIC_API_KEY na Vercel e faça Redeploy."
+    );
+  }
+  if (m.includes("credit balance") || m.includes("insufficient") || m.includes("billing") || e?.status === 402) {
+    return (
+      "A IA (Anthropic) está sem créditos. Adicione créditos em console.anthropic.com (Plans & Billing) — " +
+      "na MESMA organização da chave usada na Vercel."
+    );
+  }
+  if (e?.status === 429 || m.includes("rate limit") || m.includes("overloaded")) {
+    return "A IA está sobrecarregada no momento. Tente de novo em alguns segundos.";
+  }
+  return e?.message ? e.message.slice(0, 300) : "Erro na IA.";
+}
+
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
