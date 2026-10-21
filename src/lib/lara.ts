@@ -208,6 +208,18 @@ CATEGORIA certa (ex: category="agenda_aberta" para achar a Amil do trabalho de \
 antes de agir. Para incluir e-mails em cópia nesse fluxo, use 'gerenciar_cc' no \
 registro da frente correta.
 
+OPERADORAS: há DUAS abas distintas. "Operadoras Captação" (operadora em \
+prospecção, que queremos credenciar) e "Operadoras Ativas" (operadoras em que \
+JÁ somos credenciados — banco de cadastro para relacionamento). REGRA: quando o \
+Felipe pedir para cadastrar uma operadora em "OPERADORAS ATIVAS" (ou disser que \
+já somos credenciados), use SEMPRE 'cadastrar_operadora_ativa' — NUNCA \
+'cadastrar_parceiro' (que cria na frente errada). Nesse tool, 'email' é o \
+principal e 'cc' são os e-mails em cópia (pode ser vários, separados por \
+vírgula). Se um cadastro foi parar na categoria errada (ex: empresa) e deveria \
+ser operadora ativa, ache o id com 'listar_empresas' e use \
+'mover_para_operadora_ativa' (não exclui nem perde os contatos — só corrige a \
+categoria).
+
 CONTRATOS E REAJUSTE: o sistema tem um BANCO DE CONTRATOS (aba Contratos). A IA \
 lê o PDF e extrai a DATA DE INÍCIO do vínculo e a cláusula de reajuste. Um \
 contrato com 12+ meses fica ELEGÍVEL a reajuste. Use 'listar_contratos' para ver \
@@ -622,7 +634,7 @@ const TOOLS: Tool[] = [
   {
     name: "cadastrar_parceiro",
     description:
-      "Cadastra manualmente um parceiro (quando o CEO já tem o contato). Entra qualificado, pronto para abordar.",
+      "Cadastra manualmente um parceiro de PROSPECÇÃO (empresa, médico, escola, igreja, sindicato) — quando o CEO já tem o contato. Entra qualificado, pronto para abordar. NÃO use para operadora ativa: para operadora em que JÁ somos credenciados, use 'cadastrar_operadora_ativa'.",
     input_schema: {
       type: "object",
       properties: {
@@ -636,6 +648,34 @@ const TOOLS: Tool[] = [
         notes: { type: "string" },
       },
       required: ["name", "category"],
+    },
+  },
+  {
+    name: "cadastrar_operadora_ativa",
+    description:
+      "Cadastra uma OPERADORA ATIVA (em que JÁ somos credenciados) na aba Operadoras Ativas — banco de cadastro, SEM disparar nada. Use SEMPRE que o CEO pedir para cadastrar uma operadora em 'operadoras ativas'. Guarda o analista + e-mail principal + e-mails em cópia (ilimitados) + telefones. Depois o CEO abre um assunto quando quiser tratar algo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "nome da operadora (ex: Hapvida, Amil)" },
+        contactName: { type: "string", description: "nome do analista/responsável" },
+        email: { type: "string", description: "e-mail PRINCIPAL (destinatário)" },
+        cc: { type: "string", description: "e-mails em cópia (ilimitados), separados por vírgula" },
+        celular: { type: "string" },
+        fixo: { type: "string" },
+        notes: { type: "string", description: "ex: código de prestador, unidades" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "mover_para_operadora_ativa",
+    description:
+      "CORREÇÃO: move um parceiro já cadastrado (pelo companyId) para a aba Operadoras Ativas (muda a categoria para operadora/ativa), SEM perder os contatos e e-mails em cópia já cadastrados. Use quando um cadastro caiu na categoria errada (ex: foi parar em 'empresa' quando era pra ser operadora ativa). Pegue o companyId com 'listar_empresas'.",
+    input_schema: {
+      type: "object",
+      properties: { companyId: { type: "string" } },
+      required: ["companyId"],
     },
   },
   {
@@ -1071,6 +1111,22 @@ async function executar(
         city: input.city,
         notes: input.notes,
       });
+    case "cadastrar_operadora_ativa":
+      return api(ctx, "POST", "/api/operadoras", {
+        categoria: "operadora",
+        operatorType: "ativa",
+        cadastroApenas: true,
+        name: input.name,
+        contactName: input.contactName,
+        email: input.email,
+        ccEmails: input.cc,
+        phone: input.celular,
+        phone2: input.fixo,
+        isWhatsapp: false,
+        notes: input.notes,
+      });
+    case "mover_para_operadora_ativa":
+      return api(ctx, "POST", `/api/operadoras/${input.companyId}/mover-ativa`);
     case "excluir_parceiros":
       return api(ctx, "POST", "/api/companies/bulk-delete", { ids: input.ids });
     case "abordar":
