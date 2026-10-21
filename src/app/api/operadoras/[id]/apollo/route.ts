@@ -586,12 +586,14 @@ export async function POST(
       );
     }
 
-    // Se há verificador, confirma que a caixa existe antes de aceitar.
+    // Você está INFORMANDO o e-mail (achou no Google/LinkedIn) — confiamos nele.
+    // Só recusamos se o verificador CONFIRMAR que é inválido (caixa não existe).
+    // "unknown"/"catch_all" (ou verificador SEM CRÉDITO) NÃO travam o cadastro.
     if (verifierConfigured()) {
       const vr = await verifyEmail(email);
-      if (!isSendable(vr)) {
+      if (vr === "invalid") {
         return NextResponse.json(
-          { error: `O e-mail não passou na verificação (${vr}) — provável caixa inativa. Confira o endereço.` },
+          { error: "O verificador CONFIRMOU que este e-mail é inválido (a caixa não existe). Confira o endereço." },
           { status: 422 },
         );
       }
