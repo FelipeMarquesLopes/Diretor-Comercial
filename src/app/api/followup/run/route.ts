@@ -156,17 +156,17 @@ async function run() {
     }
   }
 
-  // 5. REVISÃO MENSAL DA BASE: reverifica os e-mails dos parceiros de
-  //    prospecção e, quando um morre, acha um substituto no Apollo e troca
-  //    sozinha. A varredura é fatiada (um lote por dia, só os "vencidos" há
-  //    28+ dias), então cada contato é revisto ~1x/mês sem pesar no custo nem
-  //    estourar o tempo do cron. NÃO usa a IA (Anthropic) — só verificador +
-  //    Apollo, e o Apollo só nos e-mails que falharam.
+  // 5. REVISÃO DA BASE (automática, diária): reverifica e-mails e capta bounces.
+  //    IMPORTANTE (custo): por padrão a rodada AUTOMÁTICA NÃO gasta Apollo
+  //    (maxApollo=0) — para não consumir créditos de lead em silêncio. O Apollo
+  //    só é usado quando o CEO clica em "Revisar e-mails da base agora". Para
+  //    reativar o gasto automático, defina REVISAO_APOLLO_DIARIO (ex: 12).
+  const apolloDiario = Number(process.env.REVISAO_APOLLO_DIARIO ?? "0") || 0;
   let emailsRevisados = 0;
   let emailsTrocados = 0;
   let emailsMortos = 0;
   try {
-    const r = await revisarBaseEmails(supabase, { max: 40, maxApollo: 12 });
+    const r = await revisarBaseEmails(supabase, { max: 40, maxApollo: apolloDiario });
     emailsRevisados = r.verificados;
     emailsTrocados = r.trocados;
     emailsMortos = r.mortos;
